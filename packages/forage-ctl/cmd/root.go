@@ -43,5 +43,5 @@ var (
 	logInfo    = logging.UserInfo
 	logSuccess = logging.UserSuccess
 	logWarning = logging.UserWarning
-	logError   = logging.UserError
+	_          = logging.UserError // reserved for future use
 )

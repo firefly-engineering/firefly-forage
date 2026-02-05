@@ -311,7 +311,7 @@ func newAuditLogger(path string) (*auditLogger, error) {
 func (al *auditLogger) log(entry auditEntry) {
 	al.mu.Lock()
 	defer al.mu.Unlock()
-	al.enc.Encode(entry)
+	_ = al.enc.Encode(entry) // Best-effort audit logging
 }
 
 func (al *auditLogger) close() error {

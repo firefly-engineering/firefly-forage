@@ -149,7 +149,7 @@ func (r *AppleRuntime) Destroy(ctx context.Context, name string) error {
 	logging.Debug("destroying container", "container", containerName)
 
 	// Stop first (ignore errors if already stopped)
-	r.runCmd(ctx, "stop", containerName)
+	_, _ = r.runCmd(ctx, "stop", containerName)
 
 	// Remove container
 	_, err := r.runCmd(ctx, "rm", "-f", containerName)

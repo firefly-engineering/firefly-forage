@@ -97,7 +97,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 
 	// Set up cleanup on failure
 	cleanup := func() {
-		c.cleanup(metadata, ws.backend)
+		c.cleanup(metadata)
 	}
 
 	// Set up secrets
@@ -303,7 +303,7 @@ func (c *Creator) injectSkills(name, workspacePath string, metadata *config.Sand
 }
 
 // cleanup removes resources created during a failed sandbox creation.
-func (c *Creator) cleanup(metadata *config.SandboxMetadata, backend workspace.Backend) {
+func (c *Creator) cleanup(metadata *config.SandboxMetadata) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
 	// Use unified cleanup function with all options enabled

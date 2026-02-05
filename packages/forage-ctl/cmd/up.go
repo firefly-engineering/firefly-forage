@@ -31,7 +31,9 @@ func init() {
 	upCmd.Flags().StringVarP(&upWorkspace, "workspace", "w", "", "Workspace directory to mount")
 	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "JJ repository (creates isolated workspace)")
 	upCmd.Flags().StringVarP(&upGitWorktree, "git-worktree", "g", "", "Git repository (creates isolated worktree)")
-	upCmd.MarkFlagRequired("template")
+	if err := upCmd.MarkFlagRequired("template"); err != nil {
+		panic(err)
+	}
 	rootCmd.AddCommand(upCmd)
 }
 

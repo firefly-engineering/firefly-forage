@@ -222,7 +222,11 @@ func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) (Picker
 		return PickerResult{}, err
 	}
 
-	return finalModel.(Model).Result(), nil
+	model, ok := finalModel.(Model)
+	if !ok {
+		return PickerResult{}, fmt.Errorf("unexpected model type")
+	}
+	return model.Result(), nil
 }
 
 // SimplePicker is a non-interactive picker that just lists sandboxes

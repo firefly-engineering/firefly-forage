@@ -413,7 +413,7 @@ func TestJJRepo_Detection(t *testing.T) {
 	// Create fake JJ repo
 	repo := filepath.Join(env.tmpDir, "real-repo")
 	repoJJPath := filepath.Join(repo, ".jj", "repo")
-	if err := os.MkdirAll(repoJJPath, 0755); err != nil {
+	if err = os.MkdirAll(repoJJPath, 0755); err != nil {
 		t.Fatalf("Failed to create .jj/repo: %v", err)
 	}
 

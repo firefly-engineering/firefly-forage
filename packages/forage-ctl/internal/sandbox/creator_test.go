@@ -199,7 +199,7 @@ func TestCreator_setupSecrets(t *testing.T) {
 	}
 
 	// Verify secrets directory was created
-	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(secretsPath); os.IsNotExist(statErr) {
 		t.Error("Secrets directory was not created")
 	}
 
@@ -287,7 +287,7 @@ func TestCreator_cleanup(t *testing.T) {
 	env.Runtime.AddContainer("cleanup-test", runtime.StatusRunning)
 
 	// Run cleanup
-	creator.cleanup(metadata, nil)
+	creator.cleanup(metadata)
 
 	// Verify resources were cleaned up
 	if env.SandboxExists("cleanup-test") {

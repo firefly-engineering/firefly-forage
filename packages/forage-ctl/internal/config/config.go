@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // sandboxNameRegex validates sandbox names.
@@ -61,7 +62,7 @@ func safePath(baseDir, name, suffix string) (string, error) {
 
 	// Ensure the resolved path is within the base directory
 	// Add separator to prevent prefix matching (e.g., /var/lib/forage vs /var/lib/forage-evil)
-	if !filepath.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
 		return "", fmt.Errorf("path escapes base directory")
 	}
 

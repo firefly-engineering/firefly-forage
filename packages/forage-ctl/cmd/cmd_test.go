@@ -83,15 +83,6 @@ func (e *testEnv) addTemplate(t *testing.T, name string, tmpl *config.Template) 
 	}
 }
 
-func (e *testEnv) addSandbox(t *testing.T, meta *config.SandboxMetadata) {
-	t.Helper()
-
-	sandboxesDir := filepath.Join(e.stateDir, "sandboxes")
-	if err := config.SaveSandboxMetadata(sandboxesDir, meta); err != nil {
-		t.Fatalf("Failed to save sandbox: %v", err)
-	}
-}
-
 func (e *testEnv) createWorkspace(t *testing.T, name string) string {
 	t.Helper()
 

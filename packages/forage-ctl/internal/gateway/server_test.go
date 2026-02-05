@@ -151,7 +151,7 @@ func TestNewServer(t *testing.T) {
 	server := NewServer(env.Paths)
 
 	if server == nil {
-		t.Error("NewServer() returned nil")
+		t.Fatal("NewServer() returned nil")
 	}
 
 	if server.Paths != env.Paths {

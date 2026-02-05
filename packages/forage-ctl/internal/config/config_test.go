@@ -74,7 +74,7 @@ func TestLoadHostConfig(t *testing.T) {
 	}
 
 	configPath := filepath.Join(tmpDir, "config.json")
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err = os.WriteFile(configPath, data, 0644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestLoadTemplate(t *testing.T) {
 	}
 
 	templatePath := filepath.Join(tmpDir, "claude.json")
-	if err := os.WriteFile(templatePath, data, 0644); err != nil {
+	if err = os.WriteFile(templatePath, data, 0644); err != nil {
 		t.Fatalf("Failed to write template: %v", err)
 	}
 

@@ -80,7 +80,7 @@ func runProxy(cmd *cobra.Command, args []string) error {
 	go func() {
 		<-sigCh
 		logging.Info("shutting down proxy server")
-		server.Stop()
+		_ = server.Stop() // Best-effort shutdown
 	}()
 
 	// Handle SIGHUP for config reload
