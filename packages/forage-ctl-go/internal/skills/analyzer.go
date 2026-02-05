@@ -342,12 +342,23 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 	sb.WriteString("## Network\n\n")
 	switch template.Network {
 	case "none":
-		sb.WriteString("**No network access** - This sandbox has no external network connectivity.\n")
+		sb.WriteString("**No network access** - This sandbox has no external network connectivity.\n\n")
+		sb.WriteString("You cannot:\n")
+		sb.WriteString("- Make HTTP/HTTPS requests\n")
+		sb.WriteString("- Clone git repositories\n")
+		sb.WriteString("- Install packages from the internet\n\n")
+		sb.WriteString("All tools and dependencies must be pre-installed in the container.\n")
 	case "restricted":
-		sb.WriteString("**Restricted network** - Only specific hosts are accessible:\n")
+		sb.WriteString("**Restricted network** - Network access is filtered by hostname.\n\n")
+		sb.WriteString("Allowed hosts:\n")
 		for _, host := range template.AllowedHosts {
 			sb.WriteString("- " + host + "\n")
 		}
+		sb.WriteString("\n")
+		sb.WriteString("**Important:**\n")
+		sb.WriteString("- DNS queries for non-allowed hosts will fail\n")
+		sb.WriteString("- Connections to IP addresses not in the allowed list are blocked\n")
+		sb.WriteString("- Use allowed API endpoints for external services\n")
 	default:
 		sb.WriteString("Full network access is available.\n")
 	}

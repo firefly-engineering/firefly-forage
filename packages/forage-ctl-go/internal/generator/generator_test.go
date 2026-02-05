@@ -120,12 +120,12 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 		},
 		{
 			network:    "none",
-			shouldHave: []string{"nameservers = []", "defaultGateway = null"},
+			shouldHave: []string{"nameservers = []", "defaultGateway = null", "OUTPUT -j DROP"},
 		},
 		{
 			network:      "restricted",
 			allowedHosts: []string{"api.anthropic.com"},
-			shouldHave:   []string{"iptables", "api.anthropic.com"},
+			shouldHave:   []string{"nftables", "dnsmasq", "api.anthropic.com", "allowed_ipv4"},
 		},
 	}
 

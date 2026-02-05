@@ -676,9 +676,9 @@ Features deferred from Phase 3 that benefit from Go rewrite:
 
 ### Phase 6: Network Isolation
 
-- [ ] nftables rules for restricted mode
-- [ ] DNS filtering
-- [ ] Network mode switching
+- [x] nftables rules for restricted mode
+- [x] DNS filtering
+- [x] Network mode switching
 
 ### Phase 7: API Bridge (Future)
 

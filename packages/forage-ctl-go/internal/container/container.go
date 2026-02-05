@@ -55,6 +55,29 @@ func GetUptime(sandboxName string) (string, error) {
 	return since, nil
 }
 
+// Stop stops a running container using machinectl
+func Stop(extraContainerPath, sandboxName string) error {
+	containerName := config.ContainerName(sandboxName)
+	cmd := exec.Command("sudo", "machinectl", "stop", containerName)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+	return nil
+}
+
+// Start starts a stopped container using extra-container
+func Start(extraContainerPath, sandboxName string, configPath string) error {
+	cmd := exec.Command("sudo", extraContainerPath, "create", "--start", configPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to start container: %w", err)
+	}
+	return nil
+}
+
 // Destroy destroys a container using extra-container
 func Destroy(extraContainerPath, sandboxName string) error {
 	containerName := config.ContainerName(sandboxName)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/network"
 )
 
 // ContainerConfig holds the configuration for generating a container
@@ -180,28 +181,17 @@ func buildAgentConfig(agents map[string]config.AgentConfig) agentConfigResult {
 	}
 }
 
-func buildNetworkConfig(network string, allowedHosts []string, slot int) string {
-	switch network {
-	case "none":
-		return `networking.nameservers = [];
-      networking.defaultGateway = null;`
-	case "restricted":
-		if len(allowedHosts) > 0 {
-			hosts := make([]string, len(allowedHosts))
-			for i, h := range allowedHosts {
-				hosts[i] = fmt.Sprintf("%q", h)
-			}
-			return fmt.Sprintf(`networking.firewall.extraCommands = ''
-        # Only allow connections to specific hosts
-        iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-        iptables -A OUTPUT -d 10.100.%d.1 -j ACCEPT
-        %s
-        iptables -A OUTPUT -j REJECT
-      '';`, slot, strings.Join(hosts, "\n        "))
-		}
-		return ""
-	default: // "full" or empty
-		return fmt.Sprintf(`networking.defaultGateway = "10.100.%d.1";
-      networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];`, slot)
+func buildNetworkConfig(networkMode string, allowedHosts []string, slot int) string {
+	cfg := &network.Config{
+		Mode:         network.Mode(networkMode),
+		AllowedHosts: allowedHosts,
+		NetworkSlot:  slot,
 	}
+
+	// Default to full if not specified
+	if cfg.Mode == "" {
+		cfg.Mode = network.ModeFull
+	}
+
+	return network.GenerateNixNetworkConfig(cfg)
 }
