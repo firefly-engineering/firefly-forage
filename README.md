@@ -75,11 +75,21 @@ forage-ctl down myproject
 
 ## Documentation
 
-See [DESIGN.md](DESIGN.md) for detailed architecture and design decisions.
+- **[User Guide](docs/src/SUMMARY.md)** - Getting started, configuration, and usage
+- **[DESIGN.md](DESIGN.md)** - Architecture and design decisions
+
+Build the docs locally:
+```bash
+nix build .#docs
+# Or with mdbook directly
+mdbook serve docs
+```
 
 ## Status
 
-🚧 **Work in Progress** - Phase 1 implementation
+✅ **Phase 1** - Basic sandboxing (complete)
+✅ **Phase 2** - JJ workspace integration (complete)
+🚧 **Phase 3** - Robustness & UX (in progress)
 
 ## License
 

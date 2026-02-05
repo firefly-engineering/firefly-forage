@@ -613,7 +613,7 @@ forage-ctl down --all
 - [x] Port allocation (find free ports)
 - [x] Tmux session management
 - [x] Basic skill injection (.claude/forage-skills.md)
-- [ ] Documentation
+- [x] Documentation (mdbook)
 
 ### Phase 2: JJ Workspace Integration
 

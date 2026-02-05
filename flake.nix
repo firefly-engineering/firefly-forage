@@ -40,6 +40,18 @@
           forage-ctl = pkgs.callPackage ./packages/forage-ctl {
             extra-container = extra-container.packages.${system}.default;
           };
+          docs = pkgs.stdenvNoCC.mkDerivation {
+            pname = "firefly-forage-docs";
+            version = "0.1.0";
+            src = ./docs;
+            nativeBuildInputs = [ pkgs.mdbook ];
+            buildPhase = ''
+              mdbook build
+            '';
+            installPhase = ''
+              mv book $out
+            '';
+          };
           default = self.packages.${system}.forage-ctl;
         }
       );
@@ -54,6 +66,7 @@
             packages = with pkgs; [
               nixfmt-rfc-style
               nil
+              mdbook
             ];
           };
         }
