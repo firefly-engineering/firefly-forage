@@ -45,6 +45,11 @@ func NewCreator() (*Creator, error) {
 func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult, error) {
 	logging.Debug("starting sandbox creation", "name", opts.Name, "template", opts.Template)
 
+	// Validate sandbox name
+	if err := config.ValidateSandboxName(opts.Name); err != nil {
+		return nil, fmt.Errorf("invalid sandbox name: %w", err)
+	}
+
 	// Check if sandbox already exists
 	if config.SandboxExists(c.paths.SandboxesDir, opts.Name) {
 		return nil, fmt.Errorf("sandbox %s already exists", opts.Name)

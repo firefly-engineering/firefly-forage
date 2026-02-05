@@ -5,7 +5,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 )
+
+// sandboxNameRegex validates sandbox names.
+// Names must start with a lowercase letter or digit, followed by lowercase letters, digits, underscores, or hyphens.
+// Maximum length is 63 characters (common container name limit).
+var sandboxNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+
+// ValidateSandboxName checks if a sandbox name is valid.
+// Valid names:
+//   - Start with a lowercase letter or digit
+//   - Contain only lowercase letters, digits, underscores, or hyphens
+//   - Are between 1 and 63 characters long
+//   - Do not contain path separators or special characters
+func ValidateSandboxName(name string) error {
+	if name == "" {
+		return fmt.Errorf("sandbox name cannot be empty")
+	}
+
+	if !sandboxNameRegex.MatchString(name) {
+		return fmt.Errorf("invalid sandbox name %q: must start with a lowercase letter or digit, contain only lowercase letters, digits, underscores, or hyphens, and be at most 63 characters", name)
+	}
+
+	return nil
+}
 
 const (
 	DefaultConfigDir    = "/etc/firefly-forage"

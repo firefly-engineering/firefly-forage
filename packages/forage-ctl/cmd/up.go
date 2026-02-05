@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
@@ -36,6 +37,11 @@ func init() {
 func runUp(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	ctx := context.Background()
+
+	// Validate sandbox name early
+	if err := config.ValidateSandboxName(name); err != nil {
+		return errors.New(errors.ExitGeneralError, err.Error())
+	}
 
 	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
 

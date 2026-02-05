@@ -98,6 +98,11 @@ func (s *Server) ShowPicker() error {
 
 // ConnectToSandbox connects to a specific sandbox
 func (s *Server) ConnectToSandbox(name string) error {
+	// Validate name to prevent path traversal or injection
+	if err := config.ValidateSandboxName(name); err != nil {
+		return fmt.Errorf("invalid sandbox name: %w", err)
+	}
+
 	metadata, err := config.LoadSandboxMetadata(s.Paths.SandboxesDir, name)
 	if err != nil {
 		return fmt.Errorf("sandbox not found: %s", name)

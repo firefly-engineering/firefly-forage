@@ -346,3 +346,43 @@ func TestListSandboxes_NonexistentDir(t *testing.T) {
 		t.Errorf("loaded = %v, want nil", loaded)
 	}
 }
+
+func TestValidateSandboxName(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		// Valid names
+		{"myproject", false},
+		{"my-project", false},
+		{"my_project", false},
+		{"project123", false},
+		{"123project", false},
+		{"a", false},
+		{"a-b-c", false},
+		{"test_sandbox_1", false},
+
+		// Invalid names
+		{"", true},                              // empty
+		{"My-Project", true},                    // uppercase
+		{"my project", true},                    // space
+		{"../../../etc/passwd", true},           // path traversal
+		{"/absolute/path", true},                // absolute path
+		{"my.project", true},                    // dots
+		{"-starts-with-dash", true},             // starts with dash
+		{"_starts_with_underscore", true},       // starts with underscore
+		{"has@special", true},                   // special characters
+		{"has$dollar", true},                    // special characters
+		{"has;semicolon", true},                 // injection attempt
+		{"a" + string(make([]byte, 64)), true},  // too long (64+ chars)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSandboxName(tt.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSandboxName(%q) error = %v, wantErr %v", tt.name, err, tt.wantErr)
+			}
+		})
+	}
+}
