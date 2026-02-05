@@ -96,6 +96,36 @@ The nix store is bind-mounted read-only. All nix operations go through the host'
 
 **Verified:** Tested with `unshare --mount` and confirmed nix builds work.
 
+### Nix Registry Pinning (Future)
+
+To ensure consistency across all `nix run nixpkgs#foo` and `nix shell` invocations, sandboxes should inject a pinned nix registry:
+
+```nix
+# In container config
+environment.etc."nix/registry.json".text = builtins.toJSON {
+  version = 2;
+  flakes = [
+    {
+      from = { type = "indirect"; id = "nixpkgs"; };
+      to = {
+        type = "github";
+        owner = "NixOS";
+        repo = "nixpkgs";
+        rev = "abc123...";  # Pinned to host's nixpkgs
+      };
+    }
+  ];
+};
+```
+
+**Benefits:**
+- All agents use the same nixpkgs version
+- Reproducible tool installations across sandboxes
+- No accumulation of different nixpkgs versions in store
+- Can pin to the same nixpkgs used to build the sandbox
+
+**Implementation:** The host module could expose its nixpkgs input revision, and the container config generator would inject this into each sandbox's registry.
+
 ### Instance Tracking: Stateless
 
 Instead of maintaining state files, we derive instance information from:
@@ -604,6 +634,7 @@ forage-ctl down --all
 - [ ] Advanced skill injection (project analysis)
 - [ ] Gateway service with sandbox selector (single port access)
 - [ ] TUI picker for sandbox selection
+- [ ] Nix registry pinning (pin nixpkgs to host version)
 
 ### Phase 4: Network Isolation
 
