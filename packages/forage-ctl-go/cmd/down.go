@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -48,18 +48,22 @@ func runDown(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Clean up jj workspace if applicable
-	if metadata.WorkspaceMode == "jj" && metadata.SourceRepo != "" {
-		logInfo("Cleaning up jj workspace...")
-		logging.Debug("cleaning up jj workspace", "repo", metadata.SourceRepo, "workspace", metadata.JJWorkspaceName)
-		if err := cleanupJJWorkspace(metadata.SourceRepo, metadata.JJWorkspaceName); err != nil {
-			logging.Warn("failed to cleanup jj workspace", "error", err)
+	// Clean up workspace if using a VCS backend
+	if metadata.WorkspaceMode != "" && metadata.WorkspaceMode != "direct" && metadata.SourceRepo != "" {
+		var backend workspace.Backend
+		switch metadata.WorkspaceMode {
+		case "jj":
+			backend = workspace.JJ()
+		case "git-worktree":
+			backend = workspace.Git()
 		}
 
-		// Remove workspace directory
-		if metadata.Workspace != "" {
-			logging.Debug("removing workspace directory", "path", metadata.Workspace)
-			os.RemoveAll(metadata.Workspace)
+		if backend != nil {
+			logInfo("Cleaning up %s workspace...", backend.Name())
+			logging.Debug("cleaning up workspace", "backend", backend.Name(), "repo", metadata.SourceRepo, "name", name)
+			if err := backend.Remove(metadata.SourceRepo, name, metadata.Workspace); err != nil {
+				logging.Warn("failed to cleanup workspace", "error", err)
+			}
 		}
 	}
 
@@ -84,13 +88,4 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	logSuccess("Removed sandbox %s", name)
 	return nil
-}
-
-func cleanupJJWorkspace(repoPath, workspaceName string) error {
-	if workspaceName == "" {
-		return nil
-	}
-
-	cmd := exec.Command("jj", "workspace", "forget", workspaceName, "-R", repoPath)
-	return cmd.Run()
 }

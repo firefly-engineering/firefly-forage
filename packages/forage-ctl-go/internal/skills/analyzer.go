@@ -276,6 +276,10 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 	if metadata.WorkspaceMode == "jj" {
 		sb.WriteString("- **Mode**: jj workspace (isolated from source)\n")
 		sb.WriteString("- **Source Repo**: " + metadata.SourceRepo + "\n")
+	} else if metadata.WorkspaceMode == "git-worktree" {
+		sb.WriteString("- **Mode**: git worktree (isolated from source)\n")
+		sb.WriteString("- **Source Repo**: " + metadata.SourceRepo + "\n")
+		sb.WriteString("- **Branch**: " + metadata.GitBranch + "\n")
 	}
 
 	sb.WriteString("\n")
@@ -321,6 +325,19 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 		sb.WriteString("jj bookmark set   # Update bookmark\n")
 		sb.WriteString("```\n\n")
 		sb.WriteString("This is an isolated jj workspace - changes don't affect other workspaces.\n\n")
+	} else if metadata.WorkspaceMode == "git-worktree" {
+		sb.WriteString("## Version Control: Git (Worktree)\n\n")
+		sb.WriteString("This workspace is a git worktree with its own working directory and branch.\n\n")
+		sb.WriteString("**Branch**: `" + metadata.GitBranch + "`\n\n")
+		sb.WriteString("```bash\n")
+		sb.WriteString("git status        # Show working tree status\n")
+		sb.WriteString("git diff          # Show changes\n")
+		sb.WriteString("git add -p        # Stage changes interactively\n")
+		sb.WriteString("git commit -m \"\" # Create commit on this branch\n")
+		sb.WriteString("git push -u origin " + metadata.GitBranch + "  # Push branch\n")
+		sb.WriteString("```\n\n")
+		sb.WriteString("This is an isolated git worktree - commits on this branch don't affect other worktrees.\n")
+		sb.WriteString("When done, merge your branch or create a pull request.\n\n")
 	} else if info != nil && info.HasGit {
 		sb.WriteString("## Version Control: Git\n\n")
 		sb.WriteString("Standard git workflow is available.\n\n")

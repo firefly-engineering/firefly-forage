@@ -12,10 +12,10 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/health"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/jj"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/skills"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -27,15 +27,17 @@ var upCmd = &cobra.Command{
 }
 
 var (
-	upTemplate  string
-	upWorkspace string
-	upRepo      string
+	upTemplate    string
+	upWorkspace   string
+	upRepo        string
+	upGitWorktree string
 )
 
 func init() {
 	upCmd.Flags().StringVarP(&upTemplate, "template", "t", "", "Template to use (required)")
 	upCmd.Flags().StringVarP(&upWorkspace, "workspace", "w", "", "Workspace directory to mount")
 	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "JJ repository (creates isolated workspace)")
+	upCmd.Flags().StringVarP(&upGitWorktree, "git-worktree", "g", "", "Git repository (creates isolated worktree)")
 	upCmd.MarkFlagRequired("template")
 	rootCmd.AddCommand(upCmd)
 }
@@ -46,12 +48,22 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
 
-	// Validate flags
-	if upWorkspace != "" && upRepo != "" {
-		return errors.New(errors.ExitGeneralError, "--workspace and --repo are mutually exclusive")
+	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified
+	flagCount := 0
+	if upWorkspace != "" {
+		flagCount++
 	}
-	if upWorkspace == "" && upRepo == "" {
-		return errors.New(errors.ExitGeneralError, "either --workspace or --repo is required")
+	if upRepo != "" {
+		flagCount++
+	}
+	if upGitWorktree != "" {
+		flagCount++
+	}
+	if flagCount == 0 {
+		return errors.New(errors.ExitGeneralError, "one of --workspace, --repo, or --git-worktree is required")
+	}
+	if flagCount > 1 {
+		return errors.New(errors.ExitGeneralError, "--workspace, --repo, and --git-worktree are mutually exclusive")
 	}
 
 	// Check if sandbox already exists
@@ -91,39 +103,53 @@ func runUp(cmd *cobra.Command, args []string) error {
 	var workspaceMode string
 	var effectiveWorkspace string
 	var sourceRepo string
-	var jjWorkspaceName string
+	var gitBranch string
+	var backend workspace.Backend
 
-	if upRepo != "" {
-		// JJ mode
-		absRepo, err := filepath.Abs(upRepo)
+	if upRepo != "" || upGitWorktree != "" {
+		// VCS workspace mode (jj or git-worktree)
+		var repoPath string
+		if upRepo != "" {
+			repoPath = upRepo
+			backend = workspace.JJ()
+		} else {
+			repoPath = upGitWorktree
+			backend = workspace.Git()
+		}
+
+		absRepo, err := filepath.Abs(repoPath)
 		if err != nil {
-			return errors.JJError("invalid repo path", err)
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("invalid repo path: %s", err))
 		}
 
-		logging.Debug("checking jj repo", "path", absRepo)
-		if !jj.IsRepo(absRepo) {
-			return errors.JJError(fmt.Sprintf("not a jj repository: %s", absRepo), nil)
+		logging.Debug("checking repository", "backend", backend.Name(), "path", absRepo)
+		if !backend.IsRepo(absRepo) {
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("not a %s repository: %s", backend.Name(), absRepo))
 		}
 
-		if jj.WorkspaceExists(absRepo, name) {
-			return errors.JJError(fmt.Sprintf("jj workspace %s already exists in repo", name), nil)
+		if backend.Exists(absRepo, name) {
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("%s workspace %s already exists in repo", backend.Name(), name))
 		}
 
-		workspaceMode = "jj"
+		workspaceMode = backend.Name()
 		sourceRepo = absRepo
-		jjWorkspaceName = name
 		effectiveWorkspace = filepath.Join(paths.WorkspacesDir, name)
 
-		// Create jj workspace
-		logInfo("Creating jj workspace...")
-		logging.Debug("creating workspaces directory", "path", paths.WorkspacesDir)
-		if err := os.MkdirAll(paths.WorkspacesDir, 0755); err != nil {
-			return errors.JJError("failed to create workspaces directory", err)
+		// For git backend, store the branch name
+		if gitBackend, ok := backend.(*workspace.GitBackend); ok {
+			gitBranch = gitBackend.BranchName(name)
 		}
 
-		logging.Debug("creating jj workspace", "repo", absRepo, "name", name, "path", effectiveWorkspace)
-		if err := jj.CreateWorkspace(absRepo, name, effectiveWorkspace); err != nil {
-			return errors.JJError("failed to create jj workspace", err)
+		// Create workspace
+		logInfo("Creating %s workspace...", backend.Name())
+		logging.Debug("creating workspaces directory", "path", paths.WorkspacesDir)
+		if err := os.MkdirAll(paths.WorkspacesDir, 0755); err != nil {
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("failed to create workspaces directory: %s", err))
+		}
+
+		logging.Debug("creating workspace", "backend", backend.Name(), "repo", absRepo, "name", name, "path", effectiveWorkspace)
+		if err := backend.Create(absRepo, name, effectiveWorkspace); err != nil {
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("failed to create %s workspace: %s", backend.Name(), err))
 		}
 	} else {
 		// Direct workspace mode
@@ -152,14 +178,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 		CreatedAt:       time.Now().Format(time.RFC3339),
 		WorkspaceMode:   workspaceMode,
 		SourceRepo:      sourceRepo,
-		JJWorkspaceName: jjWorkspaceName,
+		JJWorkspaceName: name, // For jj mode, workspace name equals sandbox name
+		GitBranch:       gitBranch,
 	}
 
 	// Set up secrets
 	secretsPath := filepath.Join(paths.SecretsDir, name)
 	logging.Debug("setting up secrets", "path", secretsPath)
 	if err := setupSecrets(secretsPath, template, hostConfig); err != nil {
-		cleanup(metadata, paths, hostConfig)
+		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ConfigError("failed to setup secrets", err)
 	}
 
@@ -192,11 +219,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
 	logging.Debug("writing container config", "path", configPath)
 	if err := os.MkdirAll(paths.SandboxesDir, 0755); err != nil {
-		cleanup(metadata, paths, hostConfig)
+		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ContainerFailed("create sandboxes directory", err)
 	}
 	if err := os.WriteFile(configPath, []byte(nixConfig), 0644); err != nil {
-		cleanup(metadata, paths, hostConfig)
+		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ContainerFailed("write config", err)
 	}
 
@@ -207,14 +234,14 @@ func runUp(cmd *cobra.Command, args []string) error {
 	createCmd.Stdout = os.Stdout
 	createCmd.Stderr = os.Stderr
 	if err := createCmd.Run(); err != nil {
-		cleanup(metadata, paths, hostConfig)
+		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ContainerFailed("create", err)
 	}
 
 	// Save metadata
 	logging.Debug("saving metadata")
 	if err := config.SaveSandboxMetadata(paths.SandboxesDir, metadata); err != nil {
-		cleanup(metadata, paths, hostConfig)
+		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ConfigError("failed to save metadata", err)
 	}
 
@@ -298,16 +325,13 @@ func copySkillsToContainer(port int, content string) error {
 	return err
 }
 
-func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *config.HostConfig) {
+func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *config.HostConfig, backend workspace.Backend) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
-	// Clean up jj workspace if created
-	if metadata.WorkspaceMode == "jj" && metadata.SourceRepo != "" && metadata.JJWorkspaceName != "" {
-		logging.Debug("forgetting jj workspace", "name", metadata.JJWorkspaceName)
-		jj.ForgetWorkspace(metadata.SourceRepo, metadata.JJWorkspaceName)
-		if metadata.Workspace != "" {
-			os.RemoveAll(metadata.Workspace)
-		}
+	// Clean up workspace if created via backend
+	if backend != nil && metadata.SourceRepo != "" && metadata.Workspace != "" {
+		logging.Debug("removing workspace", "backend", backend.Name(), "name", metadata.Name)
+		backend.Remove(metadata.SourceRepo, metadata.Name, metadata.Workspace)
 	}
 
 	// Clean up secrets

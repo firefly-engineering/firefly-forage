@@ -719,19 +719,21 @@ for official gateway configuration options.
 
 Alternative to JJ workspaces for projects using plain git.
 
-- [ ] `--git-worktree` flag as alternative to `--repo`
-- [ ] `git worktree add` on sandbox creation
-- [ ] `git worktree remove` on sandbox cleanup
-- [ ] Skill injection with git-specific instructions
-- [ ] Handle worktree conflicts and naming
+- [x] `--git-worktree` flag as alternative to `--repo`
+- [x] `git worktree add` on sandbox creation
+- [x] `git worktree remove` on sandbox cleanup
+- [x] Skill injection with git-specific instructions
+- [x] Handle worktree conflicts and naming
 
 ```bash
 # Usage
 forage-ctl up agent-a --template claude --git-worktree ~/projects/myrepo
 forage-ctl up agent-b --template claude --git-worktree ~/projects/myrepo
 
-# Internally:
-# git worktree add /var/lib/forage/workspaces/agent-a -b agent-a
+# Internally creates:
+# - Branch: forage-agent-a
+# - Worktree at: /var/lib/forage/workspaces/agent-a
+# git worktree add /var/lib/forage/workspaces/agent-a -b forage-agent-a HEAD
 ```
 
 ### Phase 9: Container Runtime Abstraction

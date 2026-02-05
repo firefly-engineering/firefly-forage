@@ -56,9 +56,10 @@ type SandboxMetadata struct {
 	Workspace       string `json:"workspace"`
 	NetworkSlot     int    `json:"networkSlot"`
 	CreatedAt       string `json:"createdAt"`
-	WorkspaceMode   string `json:"workspaceMode,omitempty"`
-	SourceRepo      string `json:"sourceRepo,omitempty"`
-	JJWorkspaceName string `json:"jjWorkspaceName,omitempty"`
+	WorkspaceMode   string `json:"workspaceMode,omitempty"`   // "direct", "jj", or "git-worktree"
+	SourceRepo      string `json:"sourceRepo,omitempty"`      // Source repo path for jj/git-worktree
+	JJWorkspaceName string `json:"jjWorkspaceName,omitempty"` // JJ workspace name
+	GitBranch       string `json:"gitBranch,omitempty"`       // Git branch name for worktree
 }
 
 // Paths holds the configured paths
