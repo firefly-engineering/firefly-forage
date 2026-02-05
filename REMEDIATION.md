@@ -34,7 +34,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| TEST-001 | Create `sandbox/creator_test.go` | [ ] | Test full creation workflow with mocks |
+| TEST-001 | Create `sandbox/creator_test.go` | [x] | Test full creation workflow with mocks |
 | TEST-002 | Create `gateway/server_test.go` | [ ] | Test SSH handling and picker logic |
 | TEST-003 | Add runtime implementation tests | [ ] | Docker and nspawn basic tests |
 
@@ -101,4 +101,8 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | Created remediation tracking document | - |
 | 2026-02-05 | SEC-001: Fixed shell injection in copySkillsToContainer | - |
 | 2026-02-05 | SEC-002: Added sandbox name validation | - |
+| 2026-02-05 | SEC-003: Validated gateway SSH input | - |
+| 2026-02-05 | SEC-004: Added path traversal protection | - |
+| 2026-02-05 | SEC-005: Added ADR for SSH host key verification | - |
+| 2026-02-05 | TEST-001: Added sandbox creator tests | - |
 
