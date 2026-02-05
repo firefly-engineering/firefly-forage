@@ -78,6 +78,9 @@
               # Testing dependencies
               git
               jujutsu
+
+              # Task runner
+              just
             ];
           };
         }
