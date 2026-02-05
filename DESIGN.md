@@ -660,6 +660,67 @@ forage-ctl down --all
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
+### Phase 6: Git Worktree Backend
+
+Alternative to JJ workspaces for projects using plain git.
+
+- [ ] `--git-worktree` flag as alternative to `--repo`
+- [ ] `git worktree add` on sandbox creation
+- [ ] `git worktree remove` on sandbox cleanup
+- [ ] Skill injection with git-specific instructions
+- [ ] Handle worktree conflicts and naming
+
+```bash
+# Usage
+forage-ctl up agent-a --template claude --git-worktree ~/projects/myrepo
+forage-ctl up agent-b --template claude --git-worktree ~/projects/myrepo
+
+# Internally:
+# git worktree add /var/lib/forage/workspaces/agent-a -b agent-a
+```
+
+### Phase 7: Container Runtime Abstraction
+
+Abstract the container backend to support multiple platforms.
+
+- [ ] Define container runtime interface (create, destroy, exec, status)
+- [ ] systemd-nspawn backend (NixOS, current implementation)
+- [ ] Apple Container backend (macOS via github.com/apple/container)
+- [ ] Docker/Podman backend (universal fallback)
+- [ ] Runtime auto-detection based on platform
+- [ ] Consistent bind mount semantics across runtimes
+- [ ] Platform-specific nix store sharing strategies
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ forage-ctl                                                      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ Container Runtime Interface                              │    │
+│  │  - create(name, config) -> Container                     │    │
+│  │  - destroy(name)                                         │    │
+│  │  - exec(name, command) -> Output                         │    │
+│  │  - status(name) -> Status                                │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│         │                    │                    │              │
+│         ▼                    ▼                    ▼              │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
+│  │ nspawn      │     │ apple/      │     │ docker/     │        │
+│  │ (NixOS)     │     │ container   │     │ podman      │        │
+│  │             │     │ (macOS)     │     │ (fallback)  │        │
+│  └─────────────┘     └─────────────┘     └─────────────┘        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Platform considerations:**
+
+| Platform | Runtime | Nix Store Strategy |
+|----------|---------|-------------------|
+| NixOS | systemd-nspawn | Direct bind mount (current) |
+| macOS | apple/container | nix-darwin store or Determinate Nix |
+| Linux (other) | Docker/Podman | Volume mount or bind mount |
+
 ## Security Considerations
 
 ### Threat Model
