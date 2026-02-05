@@ -644,10 +644,10 @@ The bash implementation is reaching its limits (~1500 lines). Rewrite in Go for:
 - [x] Project structure with cobra CLI framework
 - [x] Port existing commands (up, down, ps, status, ssh, logs, start, shell, templates)
 - [x] exec and reset commands
-- [ ] Container runtime abstraction (prep for Phase 9)
-- [ ] Structured logging with slog
-- [ ] Unit tests for core logic
-- [ ] Integration tests
+- [x] Structured logging with slog
+- [x] Container runtime abstraction (prep for Phase 9)
+- [x] Unit tests for core logic
+- [x] Integration tests
 
 ```
 forage-ctl/
