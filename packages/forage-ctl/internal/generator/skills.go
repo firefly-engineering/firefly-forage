@@ -76,7 +76,7 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template)
 	sb.WriteString("## Guidelines\n\n")
 	sb.WriteString("- Work within the `/workspace` directory\n")
 	sb.WriteString("- The container filesystem (except /workspace) is ephemeral\n")
-	sb.WriteString("- Use tmux for persistent sessions (`tmux attach -t forage`)\n")
+	sb.WriteString(fmt.Sprintf("- Use tmux for persistent sessions (`tmux attach -t %s`)\n", config.TmuxSessionName))
 
 	return sb.String()
 }

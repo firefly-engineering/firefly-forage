@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
+		return errors.SandboxNotFound(name)
 	}
 
 	result := health.Check(name, metadata.Port, paths.SandboxesDir)

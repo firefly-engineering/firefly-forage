@@ -95,6 +95,21 @@ func SSHError(message string, cause error) *ForageError {
 	return Wrap(ExitSSHError, message, cause)
 }
 
+// SandboxNotRunning returns an error when a sandbox exists but is not running
+func SandboxNotRunning(name string) *ForageError {
+	return New(ExitGeneralError, fmt.Sprintf("sandbox %s is not running", name))
+}
+
+// WorkspaceError returns an error for workspace operations
+func WorkspaceError(op string, cause error) *ForageError {
+	return Wrap(ExitGeneralError, fmt.Sprintf("workspace %s failed", op), cause)
+}
+
+// ValidationError returns an error for input validation failures
+func ValidationError(message string) *ForageError {
+	return New(ExitGeneralError, message)
+}
+
 // GetExitCode extracts the exit code from an error
 func GetExitCode(err error) int {
 	var forageErr *ForageError

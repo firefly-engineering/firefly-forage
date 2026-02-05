@@ -318,11 +318,18 @@ func (r *NspawnRuntime) SSHPort(ctx context.Context, name string) (int, error) {
 
 ## Phase 3: Code Quality
 
-### 3.1 Define Constants for Magic Values
+### 3.1 Define Constants for Magic Values ✅
 
-**Priority:** Medium | **Effort:** Small | **Risk:** Low
+**Priority:** Medium | **Effort:** Small | **Risk:** Low | **Status:** Complete
 
-**Create `internal/constants/constants.go`:**
+Constants are defined in their respective domain packages rather than a central file:
+- `config.TmuxSessionName` - tmux session name
+- `health.SSHReadyTimeoutSeconds` - SSH ready timeout
+- `port.NetworkSlotMin/NetworkSlotMax` - network slot range
+- `generator.NixOSStateVersion` - NixOS state version
+- `ssh.DefaultUser/DefaultHost/DefaultConnectTimeout` - SSH defaults
+
+**Original proposal (not followed - constants in domain packages instead):**
 
 ```go
 package constants
@@ -346,11 +353,18 @@ const (
 )
 ```
 
-### 3.2 Standardize Error Handling
+### 3.2 Standardize Error Handling ✅
 
-**Priority:** Medium | **Effort:** Medium | **Risk:** Low
+**Priority:** Medium | **Effort:** Medium | **Risk:** Low | **Status:** Complete
 
-**Adopt consistent error wrapping:**
+Added error constructors to `internal/errors/errors.go`:
+- `SandboxNotRunning(name)` - for sandbox exists but not running
+- `WorkspaceError(op, cause)` - for workspace operations
+- `ValidationError(message)` - for input validation
+
+Updated cmd files to use typed errors consistently for better exit codes.
+
+**Original proposal (partial implementation - structured ConfigError not added):**
 
 ```go
 // internal/errors/errors.go
@@ -379,11 +393,14 @@ func ParseConfig(path string, err error) error {
 }
 ```
 
-### 3.3 Consolidate Logging
+### 3.3 Consolidate Logging ✅
 
-**Priority:** Low | **Effort:** Small | **Risk:** Low
+**Priority:** Low | **Effort:** Small | **Risk:** Low | **Status:** Complete
 
-**Unify user-facing and debug logging:**
+Created `internal/logging/user.go` with UserInfo, UserSuccess, UserWarning, UserError.
+Updated `cmd/root.go` to use aliases pointing to the logging package.
+
+**Implementation:**
 
 ```go
 // internal/logging/user.go

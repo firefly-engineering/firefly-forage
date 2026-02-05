@@ -1,9 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +24,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	_, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
+		return errors.SandboxNotFound(name)
 	}
 
 	if runtime.IsRunning(name) {
@@ -34,7 +33,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := runtime.Start(name); err != nil {
-		return fmt.Errorf("failed to start sandbox: %w", err)
+		return errors.ContainerFailed("start", err)
 	}
 
 	logSuccess("Started sandbox %s", name)

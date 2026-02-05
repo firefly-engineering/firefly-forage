@@ -107,7 +107,8 @@ func connectToSandbox(name string, paths *config.Paths) error {
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-t", "agent@localhost",
-		"tmux attach-session -t forage || tmux new-session -s forage",
+		fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s",
+			config.TmuxSessionName, config.TmuxSessionName),
 	}
 
 	return syscall.Exec(sshPath, sshArgs, os.Environ())

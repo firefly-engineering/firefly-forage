@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/spf13/cobra"
@@ -29,11 +29,11 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
+		return errors.SandboxNotFound(name)
 	}
 
 	if !runtime.IsRunning(name) {
-		return fmt.Errorf("sandbox %s is not running", name)
+		return errors.SandboxNotRunning(name)
 	}
 
 	// Find the command to execute (everything after --)
@@ -48,13 +48,13 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if !foundSeparator || len(execArgs) == 0 {
-		return fmt.Errorf("usage: forage-ctl exec <name> -- <command>")
+		return errors.ValidationError("usage: forage-ctl exec <name> -- <command>")
 	}
 
 	// Build SSH command using the builder
 	sshPath, err := exec.LookPath("ssh")
 	if err != nil {
-		return fmt.Errorf("ssh not found: %w", err)
+		return errors.SSHError("ssh not found", err)
 	}
 
 	// Construct the command string

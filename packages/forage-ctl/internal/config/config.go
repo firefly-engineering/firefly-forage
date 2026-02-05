@@ -12,6 +12,7 @@ const (
 	DefaultStateDir     = "/var/lib/firefly-forage"
 	DefaultSecretsDir   = "/run/forage-secrets"
 	ContainerPrefix     = "forage-"
+	TmuxSessionName     = "forage"
 )
 
 // HostConfig represents the host configuration from config.json

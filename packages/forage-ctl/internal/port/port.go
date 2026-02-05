@@ -6,6 +6,12 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
+// Network slot range for container IP allocation (10.100.X.0/24).
+const (
+	NetworkSlotMin = 1
+	NetworkSlotMax = 254 // 255 is broadcast, 0 is network address
+)
+
 // Allocate finds the next available port and network slot
 func Allocate(hostConfig *config.HostConfig, sandboxes []*config.SandboxMetadata) (port int, slot int, err error) {
 	usedPorts := make(map[int]bool)
@@ -29,8 +35,8 @@ func Allocate(hostConfig *config.HostConfig, sandboxes []*config.SandboxMetadata
 			hostConfig.PortRange.From, hostConfig.PortRange.To)
 	}
 
-	// Find available network slot (1-254 for 10.100.X.0/24)
-	for s := 1; s <= 254; s++ {
+	// Find available network slot
+	for s := NetworkSlotMin; s <= NetworkSlotMax; s++ {
 		if !usedSlots[s] {
 			slot = s
 			break

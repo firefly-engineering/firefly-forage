@@ -19,6 +19,9 @@ const (
 	StatusUnhealthy Status = "unhealthy"
 	StatusNoTmux    Status = "no-tmux"
 	StatusStopped   Status = "stopped"
+
+	// SSHReadyTimeoutSeconds is the default timeout waiting for SSH to become ready.
+	SSHReadyTimeoutSeconds = 30
 )
 
 // CheckResult contains the results of health checks
@@ -37,13 +40,13 @@ func CheckSSH(port int) bool {
 
 // CheckTmux checks if the tmux session exists
 func CheckTmux(port int) bool {
-	_, err := ssh.ExecWithOutput(port, "tmux", "has-session", "-t", "forage")
+	_, err := ssh.ExecWithOutput(port, "tmux", "has-session", "-t", config.TmuxSessionName)
 	return err == nil
 }
 
 // GetTmuxWindows returns the list of tmux windows
 func GetTmuxWindows(port int) []string {
-	output, err := ssh.ExecWithOutput(port, "tmux", "list-windows", "-t", "forage", "-F", "#{window_index}:#{window_name}")
+	output, err := ssh.ExecWithOutput(port, "tmux", "list-windows", "-t", config.TmuxSessionName, "-F", "#{window_index}:#{window_name}")
 	if err != nil {
 		return nil
 	}

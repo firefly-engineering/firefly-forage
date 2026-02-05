@@ -157,8 +157,8 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Wait for SSH to be ready
-	logging.Debug("waiting for SSH", "port", allocatedPort, "timeout", 30)
-	c.waitForSSH(allocatedPort, 30)
+	logging.Debug("waiting for SSH", "port", allocatedPort, "timeout", health.SSHReadyTimeoutSeconds)
+	c.waitForSSH(allocatedPort, health.SSHReadyTimeoutSeconds)
 
 	// Inject skills
 	c.injectSkills(opts.Name, ws.effectivePath, metadata, template)

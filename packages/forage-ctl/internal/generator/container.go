@@ -9,6 +9,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 )
 
+// NixOSStateVersion is the NixOS state version used in generated container configs.
+const NixOSStateVersion = "24.05"
+
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
 	Name            string
@@ -82,7 +85,7 @@ func GenerateNixConfig(cfg *ContainerConfig) string {
     };
 
     config = { pkgs, ... }: {
-      system.stateVersion = "24.05";
+      system.stateVersion = "%s";
       %s
       users.users.agent = {
         isNormalUser = true;
@@ -126,7 +129,7 @@ func GenerateNixConfig(cfg *ContainerConfig) string {
           Type = "oneshot";
           User = "agent";
           WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage || true'";
+          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s %s || true'";
         };
       };
     };
@@ -140,11 +143,13 @@ func GenerateNixConfig(cfg *ContainerConfig) string {
 		containerName,
 		cfg.NetworkSlot, cfg.NetworkSlot,
 		bindMounts,
+		NixOSStateVersion,
 		networkConfig,
 		authKeys,
 		agentConfig.packages,
 		agentConfig.environment,
 		registryConfig,
+		config.TmuxSessionName,
 		cfg.Port,
 	)
 }

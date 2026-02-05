@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
@@ -38,20 +37,10 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }
 
-// Helper functions for consistent output (user-facing messages)
-
-func logInfo(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stdout, "ℹ "+format+"\n", args...)
-}
-
-func logSuccess(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stdout, "✓ "+format+"\n", args...)
-}
-
-func logWarning(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "⚠ "+format+"\n", args...)
-}
-
-func logError(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "✗ "+format+"\n", args...)
-}
+// Helper aliases for user-facing output (delegates to logging package)
+var (
+	logInfo    = logging.UserInfo
+	logSuccess = logging.UserSuccess
+	logWarning = logging.UserWarning
+	logError   = logging.UserError
+)

@@ -57,7 +57,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 	// Wait for SSH to be ready
 	logInfo("Waiting for sandbox to be ready...")
 	ready := false
-	for i := 0; i < 30; i++ {
+	for i := 0; i < health.SSHReadyTimeoutSeconds; i++ {
 		if health.CheckSSH(metadata.Port) {
 			ready = true
 			break
@@ -66,7 +66,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 	}
 
 	if !ready {
-		logWarning("SSH not ready after 30 seconds")
+		logWarning("SSH not ready after %d seconds", health.SSHReadyTimeoutSeconds)
 	}
 
 	logSuccess("Reset sandbox %s", name)

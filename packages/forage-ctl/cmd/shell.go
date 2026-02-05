@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
 )
@@ -26,16 +26,16 @@ func runShell(cmd *cobra.Command, args []string) error {
 
 	_, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
+		return errors.SandboxNotFound(name)
 	}
 
 	if !runtime.IsRunning(name) {
-		return fmt.Errorf("sandbox %s is not running", name)
+		return errors.SandboxNotRunning(name)
 	}
 
 	rt := runtime.Global()
 	if rt == nil {
-		return fmt.Errorf("no container runtime available")
+		return errors.New(errors.ExitGeneralError, "no container runtime available")
 	}
 
 	// Use runtime's interactive exec to get a shell
