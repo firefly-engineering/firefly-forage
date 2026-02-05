@@ -272,9 +272,9 @@ config = mkIf cfg.enable {
 };
 ```
 
-### 2.3 Unify Runtime Interface for SSH
+### 2.3 Unify Runtime Interface for SSH ✅
 
-**Priority:** Medium | **Effort:** Medium | **Risk:** Medium
+**Priority:** Medium | **Effort:** Medium | **Risk:** Medium | **Status:** Complete
 
 The `SSHRuntime` interface is implemented inconsistently. Nspawn returns errors for `SSHPort()`.
 

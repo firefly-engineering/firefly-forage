@@ -41,6 +41,7 @@ type CreateOptions struct {
 	BindMounts     map[string]string // host path -> container path
 	ForwardPorts   map[int]int       // host port -> container port
 	NetworkSlot    int               // For private networking
+	SSHPort        int               // SSH port for this container (if applicable)
 	ExtraArgs      []string          // Backend-specific arguments
 }
 
