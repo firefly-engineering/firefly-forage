@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -228,13 +227,14 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return errors.ContainerFailed("write config", err)
 	}
 
-	// Create container with extra-container
+	// Create container via runtime
 	logInfo("Creating container...")
-	logging.Debug("running extra-container", "path", hostConfig.ExtraContainerPath, "config", configPath)
-	createCmd := exec.Command("sudo", hostConfig.ExtraContainerPath, "create", "--start", configPath)
-	createCmd.Stdout = os.Stdout
-	createCmd.Stderr = os.Stderr
-	if err := createCmd.Run(); err != nil {
+	logging.Debug("creating container via runtime", "name", name, "config", configPath)
+	if err := runtime.Create(runtime.CreateOptions{
+		Name:       name,
+		ConfigPath: configPath,
+		Start:      true,
+	}); err != nil {
 		cleanup(metadata, paths, hostConfig, backend)
 		return errors.ContainerFailed("create", err)
 	}

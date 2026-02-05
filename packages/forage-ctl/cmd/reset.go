@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
@@ -27,11 +26,6 @@ func runReset(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	paths := config.DefaultPaths()
 
-	hostConfig, err := config.LoadHostConfig(paths.ConfigDir)
-	if err != nil {
-		return fmt.Errorf("failed to load host config: %w", err)
-	}
-
 	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
 		return fmt.Errorf("sandbox not found: %s", name)
@@ -48,12 +42,15 @@ func runReset(cmd *cobra.Command, args []string) error {
 
 	// Restart the container
 	logInfo("Starting container...")
-	containerName := config.ContainerName(name)
 
 	// The container config should still exist in the sandboxes directory
 	configPath := fmt.Sprintf("%s/%s.nix", paths.SandboxesDir, name)
-	createCmd := exec.Command("sudo", hostConfig.ExtraContainerPath, "create", "--start", configPath)
-	if err := createCmd.Run(); err != nil {
+	logging.Debug("creating container via runtime", "name", name, "config", configPath)
+	if err := runtime.Create(runtime.CreateOptions{
+		Name:       name,
+		ConfigPath: configPath,
+		Start:      true,
+	}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
@@ -72,6 +69,6 @@ func runReset(cmd *cobra.Command, args []string) error {
 		logWarning("SSH not ready after 30 seconds")
 	}
 
-	logSuccess("Reset sandbox %s (%s)", name, containerName)
+	logSuccess("Reset sandbox %s", name)
 	return nil
 }

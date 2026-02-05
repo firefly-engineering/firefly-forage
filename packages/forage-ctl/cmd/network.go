@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
@@ -138,18 +137,19 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 
 	// Recreate container with new configuration
 	logInfo("Recreating container with new network configuration...")
-	logging.Debug("running extra-container", "path", hostConfig.ExtraContainerPath, "config", configPath)
 
 	// Destroy old container
 	if err := runtime.Destroy(name); err != nil {
 		logging.Warn("failed to destroy old container", "error", err)
 	}
 
-	// Create new container
-	createCmd := exec.Command("sudo", hostConfig.ExtraContainerPath, "create", "--start", configPath)
-	createCmd.Stdout = os.Stdout
-	createCmd.Stderr = os.Stderr
-	if err := createCmd.Run(); err != nil {
+	// Create new container via runtime
+	logging.Debug("creating container via runtime", "name", name, "config", configPath)
+	if err := runtime.Create(runtime.CreateOptions{
+		Name:       name,
+		ConfigPath: configPath,
+		Start:      true,
+	}); err != nil {
 		return errors.ContainerFailed("recreate container", err)
 	}
 

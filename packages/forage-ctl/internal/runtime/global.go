@@ -93,3 +93,12 @@ func Stop(name string) error {
 	}
 	return rt.Stop(context.Background(), name)
 }
+
+// Create creates a container using the global runtime
+func Create(opts CreateOptions) error {
+	rt := Global()
+	if rt == nil {
+		return nil
+	}
+	return rt.Create(context.Background(), opts)
+}
