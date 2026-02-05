@@ -15,7 +15,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| SEC-001 | Fix shell injection in `copySkillsToContainer` | [ ] | Use stdin pipe instead of heredoc to prevent content breakout |
+| SEC-001 | Fix shell injection in `copySkillsToContainer` | [x] | Use stdin pipe instead of heredoc to prevent content breakout |
 | SEC-002 | Add sandbox name validation with allowlist | [ ] | Validate names match `^[a-z0-9][a-z0-9_-]*$` pattern |
 
 ### P1 - High Priority Security
@@ -99,4 +99,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | Date | Change | Commit |
 |------|--------|--------|
 | 2026-02-05 | Created remediation tracking document | - |
+| 2026-02-05 | SEC-001: Fixed shell injection in copySkillsToContainer | - |
 

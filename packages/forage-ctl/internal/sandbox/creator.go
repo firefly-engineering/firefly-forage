@@ -332,8 +332,10 @@ func (c *Creator) cleanup(metadata *config.SandboxMetadata, backend workspace.Ba
 }
 
 // copySkillsToContainer copies skills content into the container.
+// Uses stdin piping to safely transfer content without shell injection risks.
+// The content is passed via stdin to avoid any shell interpolation or heredoc escaping issues.
 func copySkillsToContainer(port int, content string) error {
-	_, err := ssh.ExecWithOutput(port, "bash", "-c",
-		fmt.Sprintf("cat > /workspace/CLAUDE.md << 'SKILLS_EOF'\n%s\nSKILLS_EOF", content))
-	return err
+	// Pass content via stdin to sh, which writes it to the file.
+	// This is safe because content never appears in the command string.
+	return ssh.ExecWithStdin(port, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
 }
