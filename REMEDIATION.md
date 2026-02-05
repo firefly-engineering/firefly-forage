@@ -44,14 +44,14 @@ This document tracks the implementation of security fixes, test coverage improve
 |----|------|--------|-------|
 | TEST-004 | Create `app/app_test.go` | [x] | Test dependency injection container |
 | TEST-005 | Create `logging/logging_test.go` | [x] | Test logger configuration |
-| TEST-006 | Create `tui/picker_test.go` | [ ] | Test with mocked terminal |
+| TEST-006 | Create `tui/picker_test.go` | [x] | Test with mocked terminal |
 
 ### P3 - Integration & CI
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | TEST-007 | Add end-to-end integration tests | [ ] | Full sandbox lifecycle |
-| TEST-008 | Configure GitHub Actions CI | [ ] | Run tests on PR |
+| TEST-008 | Configure GitHub Actions CI | [x] | Run tests on PR |
 
 ---
 
@@ -68,7 +68,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| ARCH-003 | Persist port registry in metadata | [ ] | Remove in-memory sandboxPorts map |
+| ARCH-003 | Persist port registry in metadata | [x] | Remove in-memory sandboxPorts map |
 | ARCH-004 | Add Nix config validation | [ ] | Validate before writing |
 | ARCH-005 | Replace global runtime in commands | [ ] | Use injected dependencies |
 
@@ -83,14 +83,14 @@ This document tracks the implementation of security fixes, test coverage improve
 | MAINT-001 | Extract command helpers | [x] | `loadSandbox()` and `loadRunningSandbox()` helpers |
 | MAINT-002 | Unify cleanup logic | [x] | Single `sandbox.Cleanup()` function |
 | MAINT-003 | Add example config files | [x] | docs/examples/ with config.json and template |
-| MAINT-004 | Standardize logging across commands | [ ] | Consistent log levels |
+| MAINT-004 | Standardize logging across commands | [x] | Already consistent: logInfo/logSuccess for status, fmt for data |
 
 ### P3 - Polish
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | MAINT-005 | Add golangci-lint config | [x] | .golangci.yml with standard linters |
-| MAINT-006 | Document config file formats | [ ] | Full schema documentation |
+| MAINT-006 | Document config file formats | [x] | docs/examples/README.md has full schema |
 
 ---
 
@@ -115,4 +115,9 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | MAINT-003: Added example config files | - |
 | 2026-02-05 | MAINT-005: Added golangci-lint config | - |
 | 2026-02-05 | Fixed all golangci-lint issues (0 remaining) | - |
+| 2026-02-05 | TEST-006: Added TUI picker tests | - |
+| 2026-02-05 | ARCH-003: Persisted port registry in metadata | - |
+| 2026-02-05 | MAINT-004: Verified logging already standardized | - |
+| 2026-02-05 | MAINT-006: Verified config formats already documented | - |
+| 2026-02-05 | TEST-008: Added GitHub Actions CI workflow | - |
 
