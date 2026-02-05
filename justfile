@@ -25,9 +25,13 @@ fmt:
     nix fmt
     cd packages/forage-ctl && go fmt ./...
 
-# Run Go linter
+# Run Go linter (golangci-lint)
 lint:
-    cd packages/forage-ctl && staticcheck ./...
+    cd packages/forage-ctl && golangci-lint run
+
+# Run Go linter with auto-fix
+lint-fix:
+    cd packages/forage-ctl && golangci-lint run --fix
 
 # Build documentation
 docs:
