@@ -7,12 +7,6 @@ run:
 linters:
   default: standard
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
     - misspell
     - unconvert
     - unparam
