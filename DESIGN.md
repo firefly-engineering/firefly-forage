@@ -658,7 +658,8 @@ forage-ctl/
 │   ├── ps.go
 │   └── ...
 ├── internal/
-│   ├── container/    # nspawn backend
+│   ├── runtime/      # container runtime abstraction
+│   ├── ssh/          # SSH connection utilities
 │   ├── workspace/    # jj/git workspace management
 │   ├── config/       # host config, templates
 │   └── health/       # health checks
@@ -744,7 +745,9 @@ Abstract the container backend to support multiple platforms.
 - [x] systemd-nspawn backend (NixOS, current implementation)
 - [x] Docker/Podman backend (universal fallback)
 - [x] Runtime auto-detection based on platform
-- [ ] Migrate commands to use runtime interface
+- [x] Migrate commands to use runtime interface
+- [x] Extract SSH functions to dedicated package (runtime-agnostic)
+- [x] Remove legacy container package
 - [ ] Apple Container backend (macOS via github.com/apple/container)
 - [ ] Consistent bind mount semantics across runtimes
 - [ ] Platform-specific nix store sharing strategies
