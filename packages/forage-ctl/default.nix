@@ -9,6 +9,7 @@
   findutils,
   nix,
   extra-container,
+  jujutsu,
 }:
 writeShellApplication {
   name = "forage-ctl";
@@ -23,6 +24,7 @@ writeShellApplication {
     findutils
     nix
     extra-container
+    jujutsu
   ];
 
   text = builtins.readFile ./forage-ctl.sh;
