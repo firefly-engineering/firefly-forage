@@ -1,4 +1,4 @@
-{ self }:
+{ self, extra-container }:
 {
   config,
   lib,
@@ -135,11 +135,15 @@ in
     };
   };
 
+  # Import extra-container module at the module level
+  imports = [ extra-container.nixosModules.default ];
+
   config = mkIf cfg.enable {
     # Ensure state directory exists
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDir} 0750 root root -"
-      "d ${cfg.stateDir}/templates 0750 root root -"
+      "d ${cfg.stateDir}/sandboxes 0750 root root -"
+      "d /run/forage-secrets 0700 root root -"
     ];
 
     # Install forage-ctl
@@ -147,37 +151,50 @@ in
       self.packages.${pkgs.system}.forage-ctl
     ];
 
-    # Generate template configurations
-    environment.etc = mapAttrs (
-      name: template:
+    # Enable NAT for container networking
+    networking.nat = {
+      enable = true;
+      internalInterfaces = [ "ve-+" ];
+      externalInterface = "eth0"; # May need configuration per-host
+    };
+
+    # Generate host configuration file and template configurations
+    environment.etc =
       {
-        target = "firefly-forage/templates/${name}.json";
-        text = builtins.toJSON {
-          inherit name;
-          inherit (template)
-            description
-            network
-            allowedHosts
-            ;
-          agents = mapAttrs (
-            agentName: agent: {
-              inherit (agent) secretName authEnvVar;
-              packagePath = agent.package;
-              wrapperPath = self.lib.mkAgentWrapper {
-                inherit pkgs;
-                name = agentName;
-                package = agent.package;
-                authEnvVar = agent.authEnvVar;
-                secretPath = "/run/secrets/${agent.secretName}";
-              };
-            }
-          ) template.agents;
-          extraPackages = map (p: p.outPath) template.extraPackages;
+        "firefly-forage/config.json" = {
+          text = builtins.toJSON {
+            user = cfg.user;
+            portRange = {
+              from = cfg.portRange.from;
+              to = cfg.portRange.to;
+            };
+            authorizedKeys = cfg.authorizedKeys;
+            secrets = cfg.secrets;
+            stateDir = cfg.stateDir;
+            # Path to extra-container command
+            extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
+          };
         };
       }
-    ) cfg.templates;
-
-    # Base packages needed in all sandboxes
-    # These are made available via the shared nix store
+      // mapAttrs (
+        name: template: {
+          target = "firefly-forage/templates/${name}.json";
+          text = builtins.toJSON {
+            inherit name;
+            inherit (template)
+              description
+              network
+              allowedHosts
+              ;
+            agents = mapAttrs (
+              agentName: agent: {
+                inherit (agent) secretName authEnvVar;
+                packagePath = agent.package.outPath;
+              }
+            ) template.agents;
+            extraPackages = map (p: p.outPath) template.extraPackages;
+          };
+        }
+      ) cfg.templates;
   };
 }
