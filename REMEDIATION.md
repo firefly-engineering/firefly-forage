@@ -24,7 +24,7 @@ This document tracks the implementation of security fixes, test coverage improve
 |----|------|--------|-------|
 | SEC-003 | Validate gateway SSH_ORIGINAL_COMMAND input | [x] | Sanitize before passing to ConnectToSandbox |
 | SEC-004 | Add path traversal protection in config loading | [x] | Validate name doesn't contain path separators |
-| SEC-005 | Document SSH host key verification decision | [ ] | Add ADR explaining the localhost-only trust model |
+| SEC-005 | Document SSH host key verification decision | [x] | Add ADR explaining the localhost-only trust model |
 
 ---
 
