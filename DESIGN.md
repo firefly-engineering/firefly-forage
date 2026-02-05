@@ -141,6 +141,161 @@ The wrapper:
 - Agent cannot easily discover where auth came from
 - Provides minimal protection against credential exfiltration
 
+### JJ Workspace Integration
+
+Each sandbox uses a separate jj workspace, enabling parallel agent work on the same repository without conflicts.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Host                                                                │
+│                                                                     │
+│  ~/projects/myrepo/                                                 │
+│  ├── .jj/              ◄─────────────────────────┐                  │
+│  ├── src/                                        │ shared           │
+│  └── ...                                         │ (read-only)      │
+│                                                  │                  │
+│  /var/lib/forage/workspaces/                     │                  │
+│  ├── sandbox-a/        ◄── jj workspace ─────────┤                  │
+│  │   ├── src/          (separate working copy)   │                  │
+│  │   └── ...                                     │                  │
+│  └── sandbox-b/        ◄── jj workspace ─────────┘                  │
+│      ├── src/          (separate working copy)                      │
+│      └── ...                                                        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**How it works:**
+1. `forage-ctl up` creates a jj workspace at a persistent location
+2. The workspace shares the repo's `.jj` directory (operation log, etc.)
+3. Each sandbox gets its own working copy of the files
+4. Changes in one sandbox don't affect others until committed
+5. Agents can work in parallel on different changes
+
+**CLI integration:**
+```bash
+# Create sandbox with jj workspace
+forage-ctl up agent-a --template claude --repo ~/projects/myrepo
+
+# This internally runs:
+# jj workspace add /var/lib/forage/workspaces/agent-a --name agent-a
+
+# Multiple agents on same repo
+forage-ctl up agent-b --template claude --repo ~/projects/myrepo
+forage-ctl up agent-c --template opencode --repo ~/projects/myrepo
+```
+
+**Cleanup:**
+```bash
+# Remove sandbox and its workspace
+forage-ctl down agent-a
+# Internally: jj workspace forget agent-a && rm -rf workspace
+```
+
+### Skill Injection
+
+Sandboxes automatically include "skills" - configuration that teaches agents about available tools and project conventions.
+
+**Injected via CLAUDE.md (for Claude Code):**
+```markdown
+# Sandbox Environment
+
+This is a Firefly Forage sandbox. Follow these conventions:
+
+## Version Control
+- Use `jj` (Jujutsu) instead of `git` for all version control operations
+- Common commands: `jj status`, `jj diff`, `jj commit`, `jj new`
+- This workspace is isolated - commits won't affect other workspaces
+
+## Available Tools
+- ripgrep (rg) - fast search
+- fd - fast file finder
+- jq - JSON processing
+- nix - package management (via daemon)
+
+## Project Structure
+[Auto-generated from repo analysis or user config]
+```
+
+**Skill sources:**
+1. **Built-in skills**: jj usage, nix conventions, sandbox awareness
+2. **Template skills**: Defined in sandbox template configuration
+3. **Project skills**: From repo's existing CLAUDE.md (merged)
+4. **User skills**: Custom per-sandbox configuration
+
+**Configuration:**
+```nix
+templates.claude = {
+  skills = {
+    jj = true;           # Include jj skill (default: true)
+    nix = true;          # Include nix skill (default: true)
+
+    custom = ''
+      ## Custom Instructions
+      Always write tests before implementation.
+    '';
+  };
+};
+```
+
+### Tmux Session Management
+
+Each sandbox runs the agent inside a tmux session for better terminal handling and attach/detach capability.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Sandbox Container                                           │
+│                                                             │
+│  tmux session: "forage"                                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Window 0: agent                                     │    │
+│  │ ┌─────────────────────────────────────────────────┐ │    │
+│  │ │ $ claude                                        │ │    │
+│  │ │ Claude Code ready...                            │ │    │
+│  │ │ >                                               │ │    │
+│  │ └─────────────────────────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+│  sshd                                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- **Attach/detach**: Connect to running agent, disconnect without stopping it
+- **Session persistence**: Agent keeps running if SSH disconnects
+- **Multiple windows**: Agent in one window, shell in another
+- **Scrollback**: Review agent's previous output
+- **Resilience**: Survives network interruptions
+
+**CLI integration:**
+```bash
+# Connect to sandbox (attaches to tmux session)
+forage-ctl ssh myproject
+# → ssh ... -t 'tmux attach -t forage'
+
+# Start agent in sandbox (creates tmux session)
+forage-ctl start myproject
+# → Creates tmux session, starts claude in it
+
+# Detach: Ctrl-b d (standard tmux)
+# Reattach: forage-ctl ssh myproject
+
+# Run shell alongside agent
+forage-ctl shell myproject
+# → Attaches to tmux, creates new window with shell
+```
+
+**Tmux configuration:**
+```bash
+# /etc/tmux.conf in sandbox
+set -g prefix C-b
+set -g mouse on
+set -g history-limit 50000
+set -g status-style 'bg=colour235 fg=colour136'
+set -g status-left '[forage] '
+```
+
 ### Network Isolation Modes
 
 | Mode | Description | Use Case |
@@ -273,32 +428,44 @@ claude      claude          full       Claude Code agent sandbox
 multi       claude,opencode full       Multi-agent sandbox
 isolated    claude          none       Network-isolated sandbox
 
-# Create and start a sandbox
+# Create and start a sandbox (with workspace directory)
 forage-ctl up <name> --template <template> --workspace <path>
 forage-ctl up myproject --template claude --workspace ~/projects/myproject
 
+# Create and start a sandbox (with jj repo - creates workspace automatically)
+forage-ctl up <name> --template <template> --repo <path>
+forage-ctl up agent-a --template claude --repo ~/projects/myrepo
+forage-ctl up agent-b --template claude --repo ~/projects/myrepo  # parallel work!
+
 # List running sandboxes
 forage-ctl ps
-NAME        TEMPLATE    PORT    WORKSPACE                      STATUS
-myproject   claude      2200    /home/user/projects/myproject  running
-other       multi       2201    /home/user/projects/other      running
+NAME        TEMPLATE    PORT    WORKSPACE                      STATUS    TMUX
+myproject   claude      2200    /home/user/projects/myproject  running   attached
+agent-a     claude      2201    /var/lib/forage/ws/agent-a     running   detached
+agent-b     claude      2202    /var/lib/forage/ws/agent-b     running   detached
 
-# Connect to sandbox via SSH
+# Connect to sandbox (attaches to tmux session)
 forage-ctl ssh <name>
 forage-ctl ssh myproject
 
 # Get SSH command (for use from remote machines)
 forage-ctl ssh-cmd <name>
-# Output: ssh -p 2200 -o StrictHostKeyChecking=no agent@hostname
+# Output: ssh -p 2200 -t agent@hostname 'tmux attach -t forage'
+
+# Start the agent in sandbox (if not already running)
+forage-ctl start <name>
+
+# Open a shell window alongside the agent
+forage-ctl shell <name>
 
 # Execute command in sandbox
 forage-ctl exec <name> -- <command>
 forage-ctl exec myproject -- claude --version
 
-# Reset sandbox (restart with fresh ephemeral state)
+# Reset sandbox (restart with fresh ephemeral state, keeps workspace)
 forage-ctl reset <name>
 
-# Stop and remove sandbox
+# Stop and remove sandbox (and jj workspace if created)
 forage-ctl down <name>
 
 # Stop and remove all sandboxes
@@ -320,29 +487,40 @@ forage-ctl down --all
 
 ### Phase 1: Basic Sandbox
 
-- [ ] Flake structure and module skeleton
+- [x] Flake structure and module skeleton
 - [ ] Basic host module with template definitions
 - [ ] Container configuration generator
 - [ ] Agent wrapper generator
 - [ ] forage-ctl: up, down, ps, ssh
 - [ ] Port allocation (simple sequential)
+- [ ] Tmux session management
+- [ ] Basic skill injection (CLAUDE.md)
 - [ ] Documentation
 
-### Phase 2: Robustness
+### Phase 2: JJ Workspace Integration
+
+- [ ] Workspace creation on sandbox up
+- [ ] Workspace cleanup on sandbox down
+- [ ] Mount configuration for shared .jj
+- [ ] Handle workspace conflicts
+- [ ] forage-ctl: --repo flag for jj integration
+
+### Phase 3: Robustness & UX
 
 - [ ] Better port allocation (find free ports)
 - [ ] Health checks
 - [ ] Logging integration
-- [ ] forage-ctl: exec, reset, logs
+- [ ] forage-ctl: exec, reset, logs, start, shell
 - [ ] Error handling improvements
+- [ ] Advanced skill injection (project analysis)
 
-### Phase 3: Network Isolation
+### Phase 4: Network Isolation
 
 - [ ] nftables rules for restricted mode
 - [ ] DNS filtering
 - [ ] Network mode switching
 
-### Phase 4: API Bridge (Future)
+### Phase 5: API Bridge (Future)
 
 - [ ] Proxy service running on host
 - [ ] Auth injection at proxy level
