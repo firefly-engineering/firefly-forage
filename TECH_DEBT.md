@@ -507,9 +507,15 @@ func TestMyIntegrationTest(t *testing.T) {
 
 ## Phase 5: Documentation & Polish
 
-### 5.1 Add Package Documentation
+### 5.1 Add Package Documentation ✅
 
-**Priority:** Low | **Effort:** Small | **Risk:** None
+**Priority:** Low | **Effort:** Small | **Risk:** None | **Status:** Complete
+
+Added doc.go files to all internal packages with godoc-compatible documentation.
+Packages documented: app, config, errors, gateway, generator, health, integration,
+logging, network, port, proxy, runtime, sandbox, skills, testutil, tui, workspace.
+
+**Original proposal:**
 
 Add `doc.go` to each package:
 
@@ -530,9 +536,21 @@ Add `doc.go` to each package:
 package runtime
 ```
 
-### 5.2 Add Architecture Decision Records
+### 5.2 Add Architecture Decision Records ✅
 
-**Priority:** Low | **Effort:** Small | **Risk:** None
+**Priority:** Low | **Effort:** Small | **Risk:** None | **Status:** Complete
+
+Created docs/adr/ with:
+- README.md (index and format documentation)
+- 001-container-runtime-abstraction.md
+- 002-ssh-based-sandbox-access.md
+- 003-skill-injection-strategy.md
+- 004-workspace-modes.md
+
+ADRs complement DESIGN.md by documenting the "why" behind decisions,
+alternatives considered, and tradeoffs.
+
+**Original proposal:**
 
 Create `docs/adr/` directory with key decisions:
 - `001-container-runtime-abstraction.md`
