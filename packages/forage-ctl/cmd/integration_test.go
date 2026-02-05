@@ -15,13 +15,17 @@ import (
 func TestTemplatesCommand_ListsTemplates(t *testing.T) {
 	env := setupTestEnv(t)
 
-	// Add some templates
+	// Add some templates with all required fields
 	env.addTemplate(t, "claude", &config.Template{
 		Name:        "claude",
 		Description: "Claude Code sandbox",
 		Network:     "full",
 		Agents: map[string]config.AgentConfig{
-			"claude": {AuthEnvVar: "ANTHROPIC_API_KEY"},
+			"claude": {
+				PackagePath: "/nix/store/test-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
 		},
 	})
 
@@ -30,8 +34,16 @@ func TestTemplatesCommand_ListsTemplates(t *testing.T) {
 		Description: "Multi-agent sandbox",
 		Network:     "full",
 		Agents: map[string]config.AgentConfig{
-			"claude":   {AuthEnvVar: "ANTHROPIC_API_KEY"},
-			"opencode": {AuthEnvVar: "OPENAI_API_KEY"},
+			"claude": {
+				PackagePath: "/nix/store/test-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+			"opencode": {
+				PackagePath: "/nix/store/test-opencode",
+				SecretName:  "openai",
+				AuthEnvVar:  "OPENAI_API_KEY",
+			},
 		},
 	})
 
@@ -431,6 +443,13 @@ func TestMultipleTemplates_DifferentNetworkModes(t *testing.T) {
 		env.addTemplate(t, tt.name, &config.Template{
 			Name:    tt.name,
 			Network: tt.network,
+			Agents: map[string]config.AgentConfig{
+				"test": {
+					PackagePath: "/nix/store/test-agent",
+					SecretName:  "test-secret",
+					AuthEnvVar:  "TEST_API_KEY",
+				},
+			},
 		})
 	}
 

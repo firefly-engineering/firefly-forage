@@ -31,6 +31,36 @@ type PortRange struct {
 	To   int `json:"to"`
 }
 
+// Validate checks that the HostConfig is valid.
+func (c *HostConfig) Validate() error {
+	if c.User == "" {
+		return fmt.Errorf("user is required")
+	}
+
+	if err := c.PortRange.Validate(); err != nil {
+		return fmt.Errorf("portRange: %w", err)
+	}
+
+	return nil
+}
+
+// Validate checks that the PortRange is valid.
+func (p *PortRange) Validate() error {
+	if p.From <= 0 {
+		return fmt.Errorf("from must be positive (got %d)", p.From)
+	}
+	if p.To <= 0 {
+		return fmt.Errorf("to must be positive (got %d)", p.To)
+	}
+	if p.From > p.To {
+		return fmt.Errorf("from (%d) must be <= to (%d)", p.From, p.To)
+	}
+	if p.From > 65535 || p.To > 65535 {
+		return fmt.Errorf("ports must be <= 65535")
+	}
+	return nil
+}
+
 // Template represents a sandbox template configuration
 type Template struct {
 	Name          string                 `json:"name"`
@@ -48,6 +78,44 @@ type AgentConfig struct {
 	AuthEnvVar  string `json:"authEnvVar"`
 }
 
+// Validate checks that the Template is valid.
+func (t *Template) Validate() error {
+	if t.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+
+	if len(t.Agents) == 0 {
+		return fmt.Errorf("at least one agent is required")
+	}
+
+	for name, agent := range t.Agents {
+		if err := agent.Validate(); err != nil {
+			return fmt.Errorf("agent %s: %w", name, err)
+		}
+	}
+
+	validNetworks := map[string]bool{"full": true, "restricted": true, "none": true, "": true}
+	if !validNetworks[t.Network] {
+		return fmt.Errorf("invalid network mode: %s (must be full, restricted, or none)", t.Network)
+	}
+
+	return nil
+}
+
+// Validate checks that the AgentConfig is valid.
+func (a *AgentConfig) Validate() error {
+	if a.PackagePath == "" {
+		return fmt.Errorf("packagePath is required")
+	}
+	if a.SecretName == "" {
+		return fmt.Errorf("secretName is required")
+	}
+	if a.AuthEnvVar == "" {
+		return fmt.Errorf("authEnvVar is required")
+	}
+	return nil
+}
+
 // SandboxMetadata represents the metadata for a running sandbox
 type SandboxMetadata struct {
 	Name            string `json:"name"`
@@ -60,6 +128,29 @@ type SandboxMetadata struct {
 	SourceRepo      string `json:"sourceRepo,omitempty"`      // Source repo path for jj/git-worktree
 	JJWorkspaceName string `json:"jjWorkspaceName,omitempty"` // JJ workspace name
 	GitBranch       string `json:"gitBranch,omitempty"`       // Git branch name for worktree
+}
+
+// Validate checks that the SandboxMetadata is valid.
+func (m *SandboxMetadata) Validate() error {
+	if m.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if m.Template == "" {
+		return fmt.Errorf("template is required")
+	}
+	if m.Port <= 0 || m.Port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535 (got %d)", m.Port)
+	}
+	if m.Workspace == "" {
+		return fmt.Errorf("workspace is required")
+	}
+
+	validModes := map[string]bool{"direct": true, "jj": true, "git-worktree": true, "": true}
+	if !validModes[m.WorkspaceMode] {
+		return fmt.Errorf("invalid workspaceMode: %s", m.WorkspaceMode)
+	}
+
+	return nil
 }
 
 // Paths holds the configured paths
@@ -98,6 +189,10 @@ func LoadHostConfig(configDir string) (*HostConfig, error) {
 		return nil, fmt.Errorf("failed to parse host config: %w", err)
 	}
 
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid host config: %w", err)
+	}
+
 	return &config, nil
 }
 
@@ -112,6 +207,15 @@ func LoadTemplate(templatesDir, name string) (*Template, error) {
 	var template Template
 	if err := json.Unmarshal(data, &template); err != nil {
 		return nil, fmt.Errorf("failed to parse template %s: %w", name, err)
+	}
+
+	// Set name from filename if not specified in JSON
+	if template.Name == "" {
+		template.Name = name
+	}
+
+	if err := template.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid template %s: %w", name, err)
 	}
 
 	return &template, nil

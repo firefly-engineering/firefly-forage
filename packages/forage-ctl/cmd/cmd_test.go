@@ -190,6 +190,13 @@ func TestUpCommand_MutuallyExclusiveFlags(t *testing.T) {
 	env.addTemplate(t, "test", &config.Template{
 		Name:    "test",
 		Network: "full",
+		Agents: map[string]config.AgentConfig{
+			"test": {
+				PackagePath: "/nix/store/test-agent",
+				SecretName:  "test-secret",
+				AuthEnvVar:  "TEST_API_KEY",
+			},
+		},
 	})
 
 	// Create workspace for potential future tests

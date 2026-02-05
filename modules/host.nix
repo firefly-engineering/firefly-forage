@@ -68,7 +68,7 @@ let
         description = ''
           Network access mode:
           - full: Unrestricted internet access
-          - restricted: Only allowed hosts (not yet implemented)
+          - restricted: Only allowed hosts can be accessed
           - none: No network access
         '';
       };
@@ -139,6 +139,30 @@ in
   imports = [ extra-container.nixosModules.default ];
 
   config = mkIf cfg.enable {
+    # Validate configuration
+    assertions = [
+      {
+        assertion = cfg.user != "";
+        message = "services.firefly-forage.user must be specified";
+      }
+      {
+        assertion = cfg.portRange.from <= cfg.portRange.to;
+        message = "services.firefly-forage.portRange.from (${toString cfg.portRange.from}) must be <= portRange.to (${toString cfg.portRange.to})";
+      }
+      {
+        assertion = cfg.portRange.to - cfg.portRange.from >= 9;
+        message = "services.firefly-forage.portRange must allow at least 10 ports";
+      }
+    ] ++ lib.flatten (lib.mapAttrsToList (
+      templateName: template:
+        lib.mapAttrsToList (
+          agentName: agent: {
+            assertion = cfg.secrets ? ${agent.secretName};
+            message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
+          }
+        ) template.agents
+    ) cfg.templates);
+
     # Ensure state directory exists
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDir} 0750 root root -"
