@@ -61,7 +61,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| ARCH-001 | Make health checks runtime-agnostic | [ ] | Move machinectl out of health package |
+| ARCH-001 | Make health checks runtime-agnostic | [x] | Use runtime.Status() instead of machinectl |
 | ARCH-002 | Decompose `sandbox.Creator.Create()` | [ ] | Extract sub-orchestrators |
 
 ### P2 - Moderate Architecture

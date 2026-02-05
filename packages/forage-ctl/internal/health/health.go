@@ -1,8 +1,8 @@
 package health
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -60,28 +60,42 @@ func GetTmuxWindows(port int) []string {
 	return windows
 }
 
-// GetUptime returns the container uptime in human-readable format
+// GetUptime returns the container uptime in human-readable format.
+// Uses the runtime-agnostic Status method to get container start time.
 func GetUptime(sandboxName string) string {
-	containerName := config.ContainerName(sandboxName)
-	cmd := exec.Command("machinectl", "show", containerName, "-p", "Since", "--value")
-	output, err := cmd.Output()
-	if err != nil {
+	rt := runtime.Global()
+	if rt == nil {
 		return "unknown"
 	}
 
-	since := strings.TrimSpace(string(output))
+	info, err := rt.Status(context.Background(), sandboxName)
+	if err != nil || info == nil {
+		return "unknown"
+	}
+
+	since := info.StartedAt
 	if since == "" || since == "n/a" {
 		return "unknown"
 	}
 
-	// Try to parse the timestamp
-	t, err := time.Parse("Mon 2006-01-02 15:04:05 MST", since)
-	if err != nil {
-		// Try alternate format
-		t, err = time.Parse(time.RFC3339, since)
-		if err != nil {
-			return since // Return raw value if can't parse
+	// Try common timestamp formats
+	var t time.Time
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"Mon 2006-01-02 15:04:05 MST",
+		"2006-01-02T15:04:05.000000000Z",
+	}
+
+	for _, format := range formats {
+		if parsed, err := time.Parse(format, since); err == nil {
+			t = parsed
+			break
 		}
+	}
+
+	if t.IsZero() {
+		return since // Return raw value if can't parse
 	}
 
 	duration := time.Since(t)
