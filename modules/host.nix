@@ -143,6 +143,7 @@ in
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDir} 0750 root root -"
       "d ${cfg.stateDir}/sandboxes 0750 root root -"
+      "d ${cfg.stateDir}/workspaces 0750 root root -"
       "d /run/forage-secrets 0700 root root -"
     ];
 
