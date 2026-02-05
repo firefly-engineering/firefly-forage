@@ -11,15 +11,113 @@ import (
 	"syscall"
 )
 
-// Exec executes a command in a sandbox via SSH
-func Exec(port int, args ...string) error {
-	sshArgs := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"agent@localhost",
+// Default SSH configuration values.
+const (
+	DefaultUser           = "agent"
+	DefaultHost           = "localhost"
+	DefaultConnectTimeout = 2
+)
+
+// Options configures SSH connection parameters.
+type Options struct {
+	Port              int
+	User              string
+	Host              string
+	StrictHostKeyCheck bool
+	KnownHostsFile    string
+	ConnectTimeout    int
+	BatchMode         bool
+	RequestTTY        bool
+}
+
+// DefaultOptions returns Options with sensible defaults for sandbox connections.
+func DefaultOptions(port int) Options {
+	return Options{
+		Port:              port,
+		User:              DefaultUser,
+		Host:              DefaultHost,
+		StrictHostKeyCheck: false,
+		KnownHostsFile:    "/dev/null",
+		ConnectTimeout:    DefaultConnectTimeout,
+		BatchMode:         false,
+		RequestTTY:        false,
 	}
-	sshArgs = append(sshArgs, args...)
+}
+
+// WithBatchMode returns a copy with batch mode enabled.
+func (o Options) WithBatchMode() Options {
+	o.BatchMode = true
+	return o
+}
+
+// WithTTY returns a copy with TTY requested.
+func (o Options) WithTTY() Options {
+	o.RequestTTY = true
+	return o
+}
+
+// WithTimeout returns a copy with the specified connect timeout.
+func (o Options) WithTimeout(seconds int) Options {
+	o.ConnectTimeout = seconds
+	return o
+}
+
+// BaseArgs returns the common SSH arguments (options only, no user@host).
+func (o Options) BaseArgs() []string {
+	args := []string{
+		"-p", fmt.Sprintf("%d", o.Port),
+	}
+
+	if !o.StrictHostKeyCheck {
+		args = append(args, "-o", "StrictHostKeyChecking=no")
+	}
+
+	if o.KnownHostsFile != "" {
+		args = append(args, "-o", fmt.Sprintf("UserKnownHostsFile=%s", o.KnownHostsFile))
+	}
+
+	if o.BatchMode {
+		args = append(args, "-o", "BatchMode=yes")
+	}
+
+	if o.ConnectTimeout > 0 {
+		args = append(args, "-o", fmt.Sprintf("ConnectTimeout=%d", o.ConnectTimeout))
+	}
+
+	if o.RequestTTY {
+		args = append(args, "-t")
+	}
+
+	return args
+}
+
+// Destination returns the user@host string.
+func (o Options) Destination() string {
+	return fmt.Sprintf("%s@%s", o.User, o.Host)
+}
+
+// BuildArgs returns complete SSH arguments for executing a command.
+func (o Options) BuildArgs(command ...string) []string {
+	args := o.BaseArgs()
+	args = append(args, o.Destination())
+	args = append(args, command...)
+	return args
+}
+
+// BuildArgsWithArgv returns complete SSH arguments including "ssh" as argv[0].
+// Used for syscall.Exec which requires the program name in argv.
+func (o Options) BuildArgsWithArgv(command ...string) []string {
+	args := []string{"ssh"}
+	args = append(args, o.BuildArgs(command...)...)
+	return args
+}
+
+// --- Convenience functions using the builder ---
+
+// Exec executes a command in a sandbox via SSH.
+func Exec(port int, args ...string) error {
+	opts := DefaultOptions(port)
+	sshArgs := opts.BuildArgs(args...)
 
 	cmd := exec.Command("ssh", sshArgs...)
 	cmd.Stdin = nil
@@ -28,53 +126,35 @@ func Exec(port int, args ...string) error {
 	return cmd.Run()
 }
 
-// ExecWithOutput executes a command and returns output
+// ExecWithOutput executes a command and returns output.
 func ExecWithOutput(port int, args ...string) (string, error) {
-	sshArgs := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"-o", "ConnectTimeout=2",
-		"agent@localhost",
-	}
-	sshArgs = append(sshArgs, args...)
+	opts := DefaultOptions(port).WithBatchMode()
+	sshArgs := opts.BuildArgs(args...)
 
 	cmd := exec.Command("ssh", sshArgs...)
 	output, err := cmd.Output()
 	return string(output), err
 }
 
-// ExecWithStdin executes a command with stdin input
+// ExecWithStdin executes a command with stdin input.
 func ExecWithStdin(port int, stdin string, args ...string) error {
-	sshArgs := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"agent@localhost",
-	}
-	sshArgs = append(sshArgs, args...)
+	opts := DefaultOptions(port).WithBatchMode()
+	sshArgs := opts.BuildArgs(args...)
 
 	cmd := exec.Command("ssh", sshArgs...)
 	cmd.Stdin = bytes.NewReader([]byte(stdin))
 	return cmd.Run()
 }
 
-// Interactive starts an interactive SSH session
+// Interactive starts an interactive SSH session.
 func Interactive(port int, command string) error {
-	sshArgs := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-t", "agent@localhost",
-		command,
-	}
+	opts := DefaultOptions(port).WithTTY()
+	sshArgs := opts.BuildArgs(command)
 
 	cmd := exec.Command("ssh", sshArgs...)
-	cmd.Stdin = nil // Will inherit from parent
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
@@ -86,28 +166,17 @@ func ReplaceWithSession(port int, command string) error {
 		return fmt.Errorf("ssh not found: %w", err)
 	}
 
-	sshArgs := []string{
-		"ssh",
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-t", "agent@localhost",
-		command,
-	}
+	opts := DefaultOptions(port).WithTTY()
+	sshArgs := opts.BuildArgsWithArgv(command)
 
 	return syscall.Exec(sshPath, sshArgs, os.Environ())
 }
 
-// CheckConnection checks if SSH is reachable
+// CheckConnection checks if SSH is reachable.
 func CheckConnection(port int) bool {
-	args := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "ConnectTimeout=2",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"agent@localhost", "true",
-	}
-	cmd := exec.Command("ssh", args...)
+	opts := DefaultOptions(port).WithBatchMode()
+	sshArgs := opts.BuildArgs("true")
+
+	cmd := exec.Command("ssh", sshArgs...)
 	return cmd.Run() == nil
 }

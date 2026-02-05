@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/spf13/cobra"
 )
 
@@ -35,20 +33,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("sandbox %s is not running", name)
 	}
 
-	// Use exec to replace the current process with ssh
-	sshPath, err := exec.LookPath("ssh")
-	if err != nil {
-		return fmt.Errorf("ssh not found: %w", err)
-	}
-
-	sshArgs := []string{
-		"ssh",
-		"-p", fmt.Sprintf("%d", metadata.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-t", "agent@localhost",
-		"tmux attach-session -t forage || tmux new-session -s forage",
-	}
-
-	return syscall.Exec(sshPath, sshArgs, os.Environ())
+	// Replace current process with ssh session attached to tmux
+	tmuxCmd := "tmux attach-session -t forage || tmux new-session -s forage"
+	return ssh.ReplaceWithSession(metadata.Port, tmuxCmd)
 }

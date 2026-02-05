@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
 
 // NspawnRuntime implements the Runtime interface using systemd-nspawn
@@ -279,21 +280,15 @@ func (r *NspawnRuntime) SSHExec(ctx context.Context, name string, command []stri
 
 // SSHExecWithPort executes a command via SSH with a specific port
 func (r *NspawnRuntime) SSHExecWithPort(ctx context.Context, port int, command []string, opts ExecOptions) (*ExecResult, error) {
-	sshArgs := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"-o", "ConnectTimeout=2",
+	// Build SSH options using the builder
+	sshOpts := ssh.DefaultOptions(port).WithBatchMode()
+
+	// Override user if specified
+	if opts.User != "" {
+		sshOpts.User = opts.User
 	}
 
-	user := opts.User
-	if user == "" {
-		user = "agent"
-	}
-	sshArgs = append(sshArgs, fmt.Sprintf("%s@localhost", user))
-	sshArgs = append(sshArgs, command...)
-
+	sshArgs := sshOpts.BuildArgs(command...)
 	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
 
 	var stdout, stderr bytes.Buffer
@@ -329,21 +324,7 @@ func (r *NspawnRuntime) SSHInteractive(ctx context.Context, name string, command
 
 // SSHInteractiveWithPort starts an interactive SSH session with a specific port
 func (r *NspawnRuntime) SSHInteractiveWithPort(port int, command string) error {
-	sshPath, err := exec.LookPath("ssh")
-	if err != nil {
-		return fmt.Errorf("ssh not found: %w", err)
-	}
-
-	sshArgs := []string{
-		"ssh",
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-t", "agent@localhost",
-		command,
-	}
-
-	return syscall.Exec(sshPath, sshArgs, os.Environ())
+	return ssh.ReplaceWithSession(port, command)
 }
 
 // Ensure NspawnRuntime implements Runtime

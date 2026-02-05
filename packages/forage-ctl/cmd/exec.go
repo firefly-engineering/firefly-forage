@@ -8,6 +8,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +51,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("usage: forage-ctl exec <name> -- <command>")
 	}
 
-	// Build SSH command
+	// Build SSH command using the builder
 	sshPath, err := exec.LookPath("ssh")
 	if err != nil {
 		return fmt.Errorf("ssh not found: %w", err)
@@ -62,14 +63,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 		cmdStr += " " + shellQuote(arg)
 	}
 
-	sshArgs := []string{
-		"ssh",
-		"-p", fmt.Sprintf("%d", metadata.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"agent@localhost",
-		cmdStr,
-	}
+	// Use SSH options builder
+	opts := ssh.DefaultOptions(metadata.Port)
+	sshArgs := opts.BuildArgsWithArgv(cmdStr)
 
 	return syscall.Exec(sshPath, sshArgs, os.Environ())
 }
