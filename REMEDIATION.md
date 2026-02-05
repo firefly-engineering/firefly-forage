@@ -62,7 +62,7 @@ This document tracks the implementation of security fixes, test coverage improve
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | ARCH-001 | Make health checks runtime-agnostic | [x] | Use runtime.Status() instead of machinectl |
-| ARCH-002 | Decompose `sandbox.Creator.Create()` | [ ] | Extract sub-orchestrators |
+| ARCH-002 | Decompose `sandbox.Creator.Create()` | [x] | Extract sub-orchestrators |
 
 ### P2 - Moderate Architecture
 
@@ -121,4 +121,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | MAINT-006: Verified config formats already documented | - |
 | 2026-02-05 | TEST-008: Added GitHub Actions CI workflow | - |
 | 2026-02-05 | ARCH-004: Added Nix config validation | - |
+| 2026-02-05 | ARCH-002: Decomposed sandbox.Creator.Create() | - |
 

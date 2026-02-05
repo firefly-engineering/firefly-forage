@@ -45,84 +45,146 @@ func NewCreator() (*Creator, error) {
 func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult, error) {
 	logging.Debug("starting sandbox creation", "name", opts.Name, "template", opts.Template)
 
-	// Validate sandbox name
-	if err := config.ValidateSandboxName(opts.Name); err != nil {
-		return nil, fmt.Errorf("invalid sandbox name: %w", err)
+	// Phase 1: Validate inputs
+	if err := c.validateInputs(opts); err != nil {
+		return nil, err
 	}
 
-	// Check if sandbox already exists
-	if config.SandboxExists(c.paths.SandboxesDir, opts.Name) {
-		return nil, fmt.Errorf("sandbox %s already exists", opts.Name)
-	}
-
-	// Load template
-	template, err := config.LoadTemplate(c.paths.TemplatesDir, opts.Template)
+	// Phase 2: Load resources and allocate ports
+	resources, err := c.loadResources(opts)
 	if err != nil {
-		return nil, fmt.Errorf("template not found: %s", opts.Template)
+		return nil, err
 	}
 
-	// List existing sandboxes for port allocation
-	sandboxes, err := config.ListSandboxes(c.paths.SandboxesDir)
-	if err != nil {
-		logging.Debug("no existing sandboxes found", "error", err)
-		sandboxes = []*config.SandboxMetadata{}
-	}
-
-	// Allocate port and network slot
-	allocatedPort, networkSlot, err := port.Allocate(c.hostConfig, sandboxes)
-	if err != nil {
-		return nil, fmt.Errorf("port allocation failed: %w", err)
-	}
-	logging.Debug("port allocated", "port", allocatedPort, "slot", networkSlot)
-
-	// Set up workspace
+	// Phase 3: Set up workspace
 	ws, err := c.setupWorkspace(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create metadata
-	metadata := &config.SandboxMetadata{
-		Name:            opts.Name,
-		Template:        opts.Template,
-		Port:            allocatedPort,
-		Workspace:       ws.effectivePath,
-		NetworkSlot:     networkSlot,
-		CreatedAt:       time.Now().Format(time.RFC3339),
-		WorkspaceMode:   string(opts.WorkspaceMode),
-		SourceRepo:      ws.sourceRepo,
-		JJWorkspaceName: opts.Name,
-		GitBranch:       ws.gitBranch,
-	}
+	// Phase 4: Create metadata
+	metadata := c.createMetadata(opts, resources, ws)
 
 	// Set up cleanup on failure
 	cleanup := func() {
 		c.cleanup(metadata)
 	}
 
-	// Set up secrets
+	// Phase 5: Set up secrets
 	secretsPath := filepath.Join(c.paths.SecretsDir, opts.Name)
-	if err = c.setupSecrets(secretsPath, template); err != nil {
+	if err = c.setupSecrets(secretsPath, resources.template); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to setup secrets: %w", err)
 	}
 
-	// Determine proxy URL
+	// Phase 6: Generate and write container config
+	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+
+	// Phase 7: Create and start container
+	if err := c.startContainer(opts.Name, configPath, resources.port); err != nil {
+		cleanup()
+		return nil, err
+	}
+
+	// Phase 8: Save metadata
+	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Phase 9: Post-creation setup
+	c.postCreationSetup(metadata, resources.template, ws.effectivePath)
+
+	return &CreateResult{
+		Name:      opts.Name,
+		Port:      resources.port,
+		Workspace: ws.effectivePath,
+		Metadata:  metadata,
+	}, nil
+}
+
+// resourceAllocation holds loaded resources and allocated ports.
+type resourceAllocation struct {
+	template    *config.Template
+	port        int
+	networkSlot int
+}
+
+// validateInputs validates the sandbox creation inputs.
+func (c *Creator) validateInputs(opts CreateOptions) error {
+	if err := config.ValidateSandboxName(opts.Name); err != nil {
+		return fmt.Errorf("invalid sandbox name: %w", err)
+	}
+
+	if config.SandboxExists(c.paths.SandboxesDir, opts.Name) {
+		return fmt.Errorf("sandbox %s already exists", opts.Name)
+	}
+
+	return nil
+}
+
+// loadResources loads the template and allocates ports.
+func (c *Creator) loadResources(opts CreateOptions) (*resourceAllocation, error) {
+	template, err := config.LoadTemplate(c.paths.TemplatesDir, opts.Template)
+	if err != nil {
+		return nil, fmt.Errorf("template not found: %s", opts.Template)
+	}
+
+	sandboxes, err := config.ListSandboxes(c.paths.SandboxesDir)
+	if err != nil {
+		logging.Debug("no existing sandboxes found", "error", err)
+		sandboxes = []*config.SandboxMetadata{}
+	}
+
+	allocatedPort, networkSlot, err := port.Allocate(c.hostConfig, sandboxes)
+	if err != nil {
+		return nil, fmt.Errorf("port allocation failed: %w", err)
+	}
+	logging.Debug("port allocated", "port", allocatedPort, "slot", networkSlot)
+
+	return &resourceAllocation{
+		template:    template,
+		port:        allocatedPort,
+		networkSlot: networkSlot,
+	}, nil
+}
+
+// createMetadata creates the sandbox metadata struct.
+func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup) *config.SandboxMetadata {
+	return &config.SandboxMetadata{
+		Name:            opts.Name,
+		Template:        opts.Template,
+		Port:            resources.port,
+		Workspace:       ws.effectivePath,
+		NetworkSlot:     resources.networkSlot,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+		WorkspaceMode:   string(opts.WorkspaceMode),
+		SourceRepo:      ws.sourceRepo,
+		JJWorkspaceName: opts.Name,
+		GitBranch:       ws.gitBranch,
+	}
+}
+
+// writeContainerConfig generates and writes the Nix container configuration.
+func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string) (string, error) {
 	proxyURL := ""
-	if template.UseProxy && c.hostConfig.ProxyURL != "" {
+	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
 		proxyURL = c.hostConfig.ProxyURL
 		logging.Debug("using API proxy", "url", proxyURL)
 	}
 
-	// Generate container configuration
 	containerCfg := &generator.ContainerConfig{
 		Name:           opts.Name,
-		Port:           allocatedPort,
-		NetworkSlot:    networkSlot,
+		Port:           resources.port,
+		NetworkSlot:    resources.networkSlot,
 		Workspace:      ws.effectivePath,
 		SecretsPath:    secretsPath,
 		AuthorizedKeys: c.hostConfig.AuthorizedKeys,
-		Template:       template,
+		Template:       resources.template,
 		HostConfig:     c.hostConfig,
 		WorkspaceMode:  string(opts.WorkspaceMode),
 		SourceRepo:     ws.sourceRepo,
@@ -132,52 +194,40 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to generate container config: %w", err)
+		return "", fmt.Errorf("failed to generate container config: %w", err)
 	}
 
-	// Write container config
 	configPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".nix")
 	if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to create sandboxes directory: %w", err)
+		return "", fmt.Errorf("failed to create sandboxes directory: %w", err)
 	}
 	if err := os.WriteFile(configPath, []byte(nixConfig), 0644); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to write config: %w", err)
+		return "", fmt.Errorf("failed to write config: %w", err)
 	}
 
-	// Create container via runtime
-	logging.Debug("creating container via runtime", "name", opts.Name, "config", configPath)
+	return configPath, nil
+}
+
+// startContainer creates and starts the container via the runtime.
+func (c *Creator) startContainer(name, configPath string, sshPort int) error {
+	logging.Debug("creating container via runtime", "name", name, "config", configPath)
 	if err := runtime.Create(runtime.CreateOptions{
-		Name:       opts.Name,
+		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,
-		SSHPort:    allocatedPort,
+		SSHPort:    sshPort,
 	}); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("container creation failed: %w", err)
+		return fmt.Errorf("container creation failed: %w", err)
 	}
+	return nil
+}
 
-	// Save metadata
-	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to save metadata: %w", err)
-	}
+// postCreationSetup performs post-creation setup (SSH wait, skills injection).
+func (c *Creator) postCreationSetup(metadata *config.SandboxMetadata, template *config.Template, workspacePath string) {
+	logging.Debug("waiting for SSH", "port", metadata.Port, "timeout", health.SSHReadyTimeoutSeconds)
+	c.waitForSSH(metadata.Port, health.SSHReadyTimeoutSeconds)
 
-	// Wait for SSH to be ready
-	logging.Debug("waiting for SSH", "port", allocatedPort, "timeout", health.SSHReadyTimeoutSeconds)
-	c.waitForSSH(allocatedPort, health.SSHReadyTimeoutSeconds)
-
-	// Inject skills
-	c.injectSkills(opts.Name, ws.effectivePath, metadata, template)
-
-	return &CreateResult{
-		Name:      opts.Name,
-		Port:      allocatedPort,
-		Workspace: ws.effectivePath,
-		Metadata:  metadata,
-	}, nil
+	c.injectSkills(metadata.Name, workspacePath, metadata, template)
 }
 
 // workspaceSetup holds workspace setup results.
