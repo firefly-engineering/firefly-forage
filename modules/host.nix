@@ -133,6 +133,17 @@ in
       default = "/var/lib/firefly-forage";
       description = "Directory for forage state and generated configs";
     };
+
+    externalInterface = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        External network interface for NAT. If null, NAT configuration
+        is skipped (useful when using an existing NAT setup or when
+        the interface name differs from the default).
+      '';
+      example = "eth0";
+    };
   };
 
   # Import extra-container module at the module level
@@ -176,11 +187,11 @@ in
       self.packages.${pkgs.system}.forage-ctl
     ];
 
-    # Enable NAT for container networking
-    networking.nat = {
+    # Enable NAT for container networking (only if externalInterface is set)
+    networking.nat = mkIf (cfg.externalInterface != null) {
       enable = true;
       internalInterfaces = [ "ve-+" ];
-      externalInterface = "eth0"; # May need configuration per-host
+      externalInterface = cfg.externalInterface;
     };
 
     # Generate host configuration file and template configurations
