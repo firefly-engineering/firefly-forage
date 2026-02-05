@@ -1,13 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
 )
 
@@ -31,22 +29,15 @@ func runShell(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("sandbox not found: %s", name)
 	}
 
-	if !container.IsRunning(name) {
+	if !runtime.IsRunning(name) {
 		return fmt.Errorf("sandbox %s is not running", name)
 	}
 
-	containerName := config.ContainerName(name)
-
-	machinectlPath, err := exec.LookPath("machinectl")
-	if err != nil {
-		return fmt.Errorf("machinectl not found: %w", err)
+	rt := runtime.Global()
+	if rt == nil {
+		return fmt.Errorf("no container runtime available")
 	}
 
-	shellArgs := []string{
-		"machinectl",
-		"shell",
-		containerName,
-	}
-
-	return syscall.Exec(machinectlPath, shellArgs, os.Environ())
+	// Use runtime's interactive exec to get a shell
+	return rt.ExecInteractive(context.Background(), name, []string{"/bin/bash"}, runtime.ExecOptions{})
 }

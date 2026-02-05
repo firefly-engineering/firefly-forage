@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -82,7 +82,7 @@ func runPick(cmd *cobra.Command, args []string) error {
 }
 
 func attachToSandbox(metadata *config.SandboxMetadata, paths *config.Paths) error {
-	if !container.IsRunning(metadata.Name) {
+	if !runtime.IsRunning(metadata.Name) {
 		return fmt.Errorf("sandbox %s is not running. Start it with: forage-ctl start %s",
 			metadata.Name, metadata.Name)
 	}

@@ -7,8 +7,8 @@ import (
 	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -89,7 +89,7 @@ func connectToSandbox(name string, paths *config.Paths) error {
 		return fmt.Errorf("sandbox not found: %s", name)
 	}
 
-	if !container.IsRunning(name) {
+	if !runtime.IsRunning(name) {
 		return fmt.Errorf("sandbox %s is not running", name)
 	}
 

@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
 )
 
@@ -37,9 +38,10 @@ func runReset(cmd *cobra.Command, args []string) error {
 	}
 
 	// Stop the container if running
-	if container.IsRunning(name) {
+	if runtime.IsRunning(name) {
 		logInfo("Stopping container...")
-		if err := container.Destroy(hostConfig.ExtraContainerPath, name); err != nil {
+		logging.Debug("destroying container", "name", name)
+		if err := runtime.Destroy(name); err != nil {
 			logWarning("Failed to stop container: %v", err)
 		}
 	}

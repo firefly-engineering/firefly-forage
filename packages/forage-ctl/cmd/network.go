@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
 )
 
@@ -95,11 +95,11 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if sandbox is running
-	wasRunning := container.IsRunning(name)
+	wasRunning := runtime.IsRunning(name)
 	if wasRunning && !networkNoRestart {
 		logInfo("Stopping sandbox for network reconfiguration...")
 		logging.Debug("stopping container", "name", name)
-		if err := container.Stop(hostConfig.ExtraContainerPath, name); err != nil {
+		if err := runtime.Stop(name); err != nil {
 			logging.Warn("failed to stop container", "error", err)
 		}
 	}
@@ -141,7 +141,7 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	logging.Debug("running extra-container", "path", hostConfig.ExtraContainerPath, "config", configPath)
 
 	// Destroy old container
-	if err := container.Destroy(hostConfig.ExtraContainerPath, name); err != nil {
+	if err := runtime.Destroy(name); err != nil {
 		logging.Warn("failed to destroy old container", "error", err)
 	}
 

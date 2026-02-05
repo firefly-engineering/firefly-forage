@@ -8,6 +8,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 // Status represents the health status of a sandbox
@@ -114,7 +115,7 @@ func Check(sandboxName string, port int, sandboxesDir string) *CheckResult {
 	result := &CheckResult{}
 
 	// Check container
-	result.ContainerRunning = container.IsRunning(sandboxName)
+	result.ContainerRunning = runtime.IsRunning(sandboxName)
 	if !result.ContainerRunning {
 		return result
 	}
@@ -139,7 +140,7 @@ func Check(sandboxName string, port int, sandboxesDir string) *CheckResult {
 
 // GetSummary returns a summary health status
 func GetSummary(sandboxName string, port int, sandboxesDir string) Status {
-	if !container.IsRunning(sandboxName) {
+	if !runtime.IsRunning(sandboxName) {
 		return StatusStopped
 	}
 	if !CheckSSH(port) {

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -29,21 +29,16 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	logging.Debug("removing sandbox", "name", name)
 
-	hostConfig, err := config.LoadHostConfig(paths.ConfigDir)
-	if err != nil {
-		return errors.ConfigError("failed to load host config", err)
-	}
-
 	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
 	if err != nil {
 		return errors.SandboxNotFound(name)
 	}
 
 	// Destroy container if running
-	if container.IsRunning(name) {
+	if runtime.IsRunning(name) {
 		logInfo("Stopping container...")
 		logging.Debug("destroying container", "name", name)
-		if err := container.Destroy(hostConfig.ExtraContainerPath, name); err != nil {
+		if err := runtime.Destroy(name); err != nil {
 			logging.Warn("failed to destroy container", "error", err)
 		}
 	}

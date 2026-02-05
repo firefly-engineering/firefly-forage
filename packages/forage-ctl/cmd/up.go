@@ -14,6 +14,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 	"github.com/spf13/cobra"
@@ -346,5 +347,5 @@ func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *
 	config.DeleteSandboxMetadata(paths.SandboxesDir, metadata.Name)
 
 	// Try to destroy container if it was created
-	container.Destroy(hostConfig.ExtraContainerPath, metadata.Name)
+	runtime.Destroy(metadata.Name)
 }
