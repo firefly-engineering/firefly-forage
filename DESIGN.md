@@ -330,6 +330,60 @@ set -g status-style 'bg=colour235 fg=colour136'
 set -g status-left '[forage] '
 ```
 
+### Gateway Access (Future)
+
+Instead of exposing one SSH port per sandbox, a single gateway service provides access to all sandboxes through a selection interface.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Host Machine                                                    │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ forage-gateway (port 2200)                              │    │
+│  │                                                         │    │
+│  │  ┌─────────────────────────────────────────────────┐    │    │
+│  │  │  Firefly Forage - Select Sandbox                │    │    │
+│  │  │                                                 │    │    │
+│  │  │  > myproject     claude    running  2h ago      │    │    │
+│  │  │    agent-a       claude    running  30m ago     │    │    │
+│  │  │    agent-b       multi     running  5m ago      │    │    │
+│  │  │                                                 │    │    │
+│  │  │  [Enter] Attach  [n] New  [d] Down  [q] Quit    │    │    │
+│  │  └─────────────────────────────────────────────────┘    │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ sandbox-myproj  │  │ sandbox-agent-a │  │ sandbox-agent-b │  │
+│  │ tmux: forage    │  │ tmux: forage    │  │ tmux: forage    │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- **Single port**: Only one port to expose/forward for remote access
+- **Discoverability**: See all sandboxes at a glance
+- **Simpler firewall**: No dynamic port range needed
+- **Better UX**: Interactive selection instead of remembering names
+
+**Implementation options:**
+1. **TUI selector**: fzf/gum-based picker that runs `machinectl shell` or SSH to selected sandbox
+2. **Custom shell**: Login shell that presents the picker, then `exec`s into chosen sandbox
+3. **SSH ForceCommand**: SSH config that runs the selector before allowing access
+
+**Access patterns:**
+```bash
+# Interactive: land in selector
+ssh -p 2200 forage@hostname
+
+# Direct: skip selector, go straight to sandbox
+ssh -p 2200 forage@hostname myproject
+
+# From selector, attach to sandbox's tmux session
+# → machinectl shell forage-myproject /bin/bash -c 'tmux attach -t forage'
+```
+
 ### Network Isolation Modes
 
 | Mode | Description | Use Case |
@@ -522,13 +576,13 @@ forage-ctl down --all
 ### Phase 1: Basic Sandbox
 
 - [x] Flake structure and module skeleton
-- [ ] Basic host module with template definitions
-- [ ] Container configuration generator
-- [ ] Agent wrapper generator
-- [ ] forage-ctl: up, down, ps, ssh
-- [ ] Port allocation (simple sequential)
-- [ ] Tmux session management
-- [ ] Basic skill injection (CLAUDE.md)
+- [x] Basic host module with template definitions
+- [x] Container configuration generator
+- [x] Agent wrapper generator
+- [x] forage-ctl: up, down, ps, ssh
+- [x] Port allocation (find free ports)
+- [x] Tmux session management
+- [x] Basic skill injection (.claude/forage-skills.md)
 - [ ] Documentation
 
 ### Phase 2: JJ Workspace Integration
@@ -541,12 +595,15 @@ forage-ctl down --all
 
 ### Phase 3: Robustness & UX
 
-- [ ] Better port allocation (find free ports)
+- [x] Better port allocation (find free ports)
 - [ ] Health checks
 - [ ] Logging integration
-- [ ] forage-ctl: exec, reset, logs, start, shell
+- [x] forage-ctl: exec, reset
+- [ ] forage-ctl: logs, start, shell
 - [ ] Error handling improvements
 - [ ] Advanced skill injection (project analysis)
+- [ ] Gateway service with sandbox selector (single port access)
+- [ ] TUI picker for sandbox selection
 
 ### Phase 4: Network Isolation
 
