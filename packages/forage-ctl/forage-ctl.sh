@@ -8,6 +8,7 @@ FORAGE_CONFIG_DIR="${FORAGE_CONFIG_DIR:-/etc/firefly-forage}"
 FORAGE_STATE_DIR="${FORAGE_STATE_DIR:-/var/lib/firefly-forage}"
 FORAGE_CONTAINER_PREFIX="forage-"
 FORAGE_SANDBOXES_DIR="${FORAGE_STATE_DIR}/sandboxes"
+FORAGE_WORKSPACES_DIR="${FORAGE_STATE_DIR}/workspaces"
 FORAGE_SECRETS_DIR="/run/forage-secrets"
 
 # Colors (disabled if not a terminal)
@@ -49,12 +50,15 @@ Commands:
 
 Options for 'up':
     --template, -t <name>    Template to use (required)
-    --workspace, -w <path>   Workspace directory to mount (required)
+    --workspace, -w <path>   Workspace directory to mount (mutually exclusive with --repo)
+    --repo, -r <path>        JJ repository to create workspace from (mutually exclusive with --workspace)
     --port, -p <port>        Specific port to use (optional)
 
 Examples:
     forage-ctl templates
     forage-ctl up myproject -t claude -w ~/projects/myproject
+    forage-ctl up agent-a -t claude --repo ~/projects/myrepo
+    forage-ctl up agent-b -t claude --repo ~/projects/myrepo  # Same repo, different workspace
     forage-ctl ssh myproject
     forage-ctl down myproject
 
@@ -281,11 +285,56 @@ cleanup_secrets() {
     rm -rf "${FORAGE_SECRETS_DIR:?}/${name:?}"
 }
 
+# Check if a path is a jj repository
+is_jj_repo() {
+    local path="$1"
+    [[ -d "${path}/.jj/repo" ]]
+}
+
+# Check if a jj workspace name already exists in a repo
+jj_workspace_exists() {
+    local repo_path="$1"
+    local workspace_name="$2"
+    jj workspace list -R "$repo_path" 2>/dev/null | grep -q "^${workspace_name}:"
+}
+
+# Create a jj workspace for a sandbox
+create_jj_workspace() {
+    local repo_path="$1"
+    local workspace_name="$2"
+    local workspace_dir="${FORAGE_WORKSPACES_DIR}/${workspace_name}"
+
+    # Create workspace directory
+    mkdir -p "$workspace_dir"
+
+    # Create jj workspace
+    if ! jj workspace add "$workspace_dir" --name "$workspace_name" -R "$repo_path"; then
+        rm -rf "$workspace_dir"
+        return 1
+    fi
+
+    echo "$workspace_dir"
+}
+
+# Clean up a jj workspace
+cleanup_jj_workspace() {
+    local repo_path="$1"
+    local workspace_name="$2"
+    local workspace_dir="${FORAGE_WORKSPACES_DIR}/${workspace_name}"
+
+    # Forget workspace in jj
+    jj workspace forget "$workspace_name" -R "$repo_path" 2>/dev/null || true
+
+    # Remove workspace directory
+    rm -rf "$workspace_dir"
+}
+
 # Inject skills into workspace
 inject_skills() {
     local name="$1"
     local workspace="$2"
     local template_file="$3"
+    local workspace_mode="${4:-direct}"
 
     local claude_dir="${workspace}/.claude"
     mkdir -p "$claude_dir"
@@ -305,6 +354,26 @@ inject_skills() {
         *) network_desc="Unknown" ;;
     esac
 
+    # JJ-specific section
+    local vcs_section=""
+    if [[ "$workspace_mode" == "jj" ]]; then
+        vcs_section="
+## Version Control: JJ (Jujutsu)
+
+This workspace uses \`jj\` for version control:
+
+\`\`\`bash
+jj status         # Show working copy status
+jj diff           # Show changes
+jj new            # Create new change
+jj describe -m \"\" # Set commit message
+jj bookmark set   # Update bookmark
+\`\`\`
+
+This is an isolated jj workspace - changes don't affect other workspaces.
+"
+    fi
+
     cat > "${claude_dir}/forage-skills.md" <<EOF
 # Forage Sandbox Skills
 
@@ -319,7 +388,7 @@ You are running inside a Firefly Forage sandbox named \`${name}\`.
 ## Available Agents
 
 ${agents_json:-No agents configured}
-
+${vcs_section}
 ## Sandbox Constraints
 
 - The root filesystem is ephemeral (tmpfs) - changes outside /workspace are lost on restart
@@ -407,6 +476,7 @@ create_container() {
     local workspace="$3"
     local port="$4"
     local network_slot="$5"
+    local source_repo="${6:-}"  # Optional: source repo for jj mode
 
     # Get host configuration
     local config_user authorized_keys_json
@@ -435,6 +505,16 @@ create_container() {
     # Container IP based on network slot
     local container_ip="192.168.100.$((network_slot + 10))"
     local host_ip="192.168.100.1"
+
+    # Extra bind mount for jj mode (allows symlink in workspace/.jj/repo to resolve)
+    local extra_bind_mount=""
+    if [[ -n "$source_repo" ]]; then
+        extra_bind_mount="
+      \"${source_repo}/.jj\" = {
+        hostPath = \"${source_repo}/.jj\";
+        isReadOnly = false;
+      };"
+    fi
 
     # Build agent packages list
     local agent_packages=""
@@ -495,7 +575,7 @@ create_container() {
       "/run/secrets" = {
         hostPath = "${FORAGE_SECRETS_DIR}/${name}";
         isReadOnly = true;
-      };
+      };${extra_bind_mount}
     };
 
     config = { config, pkgs, ... }: {
@@ -584,6 +664,7 @@ cmd_up() {
     local name=""
     local template=""
     local workspace=""
+    local repo=""
     local port=""
 
     # Parse arguments
@@ -595,6 +676,10 @@ cmd_up() {
                 ;;
             --workspace|-w)
                 workspace="$2"
+                shift 2
+                ;;
+            --repo|-r)
+                repo="$2"
                 shift 2
                 ;;
             --port|-p)
@@ -629,17 +714,62 @@ cmd_up() {
         exit 1
     fi
 
-    if [[ -z "$workspace" ]]; then
-        log_error "Workspace is required (--workspace)"
+    # Check for mutually exclusive options
+    if [[ -n "$workspace" && -n "$repo" ]]; then
+        log_error "--workspace and --repo are mutually exclusive"
         exit 1
     fi
 
-    # Resolve workspace to absolute path
-    workspace=$(realpath "$workspace")
-
-    if [[ ! -d "$workspace" ]]; then
-        log_error "Workspace directory does not exist: $workspace"
+    if [[ -z "$workspace" && -z "$repo" ]]; then
+        log_error "Either --workspace or --repo is required"
         exit 1
+    fi
+
+    # Variables for jj mode
+    local workspace_mode="direct"
+    local source_repo=""
+    local effective_workspace=""
+
+    if [[ -n "$repo" ]]; then
+        # JJ mode
+        repo=$(realpath "$repo")
+
+        if [[ ! -d "$repo" ]]; then
+            log_error "Repository directory does not exist: $repo"
+            exit 1
+        fi
+
+        if ! is_jj_repo "$repo"; then
+            log_error "Not a jj repository: $repo"
+            log_info "Initialize with: jj git init"
+            exit 1
+        fi
+
+        if jj_workspace_exists "$repo" "$name"; then
+            log_error "JJ workspace '$name' already exists in $repo"
+            log_info "Use a different sandbox name or remove the existing workspace"
+            exit 1
+        fi
+
+        workspace_mode="jj"
+        source_repo="$repo"
+
+        # Create jj workspace
+        log_info "Creating jj workspace '$name' at ${FORAGE_WORKSPACES_DIR}/${name}..."
+        effective_workspace=$(create_jj_workspace "$repo" "$name") || {
+            log_error "Failed to create jj workspace"
+            exit 1
+        }
+    else
+        # Direct workspace mode
+        workspace=$(realpath "$workspace")
+
+        if [[ ! -d "$workspace" ]]; then
+            log_error "Workspace directory does not exist: $workspace"
+            exit 1
+        fi
+
+        effective_workspace="$workspace"
     fi
 
     # Check template exists
@@ -679,7 +809,13 @@ cmd_up() {
     }
 
     log_info "Creating sandbox '$name' from template '$template'"
-    log_info "Workspace: $workspace → /workspace"
+    if [[ "$workspace_mode" == "jj" ]]; then
+        log_info "Mode: jj workspace"
+        log_info "Source repo: $source_repo"
+    else
+        log_info "Mode: direct workspace"
+    fi
+    log_info "Workspace: $effective_workspace → /workspace"
     log_info "SSH port: $port"
     log_info "Network slot: $network_slot (IP: 192.168.100.$((network_slot + 10)))"
 
@@ -687,29 +823,48 @@ cmd_up() {
     setup_secrets "$name" "$template_file"
 
     # Inject skills into workspace
-    inject_skills "$name" "$workspace" "$template_file"
+    inject_skills "$name" "$effective_workspace" "$template_file" "$workspace_mode"
 
     # Create metadata
     local created_at
     created_at=$(date -Iseconds)
     local metadata
-    metadata=$(jq -n \
-        --arg name "$name" \
-        --arg template "$template" \
-        --argjson port "$port" \
-        --arg workspace "$workspace" \
-        --argjson networkSlot "$network_slot" \
-        --arg createdAt "$created_at" \
-        '{name: $name, template: $template, port: $port, workspace: $workspace, networkSlot: $networkSlot, createdAt: $createdAt}')
+    if [[ "$workspace_mode" == "jj" ]]; then
+        metadata=$(jq -n \
+            --arg name "$name" \
+            --arg template "$template" \
+            --argjson port "$port" \
+            --arg workspace "$effective_workspace" \
+            --argjson networkSlot "$network_slot" \
+            --arg createdAt "$created_at" \
+            --arg workspaceMode "$workspace_mode" \
+            --arg sourceRepo "$source_repo" \
+            --arg jjWorkspaceName "$name" \
+            '{name: $name, template: $template, port: $port, workspace: $workspace, networkSlot: $networkSlot, createdAt: $createdAt, workspaceMode: $workspaceMode, sourceRepo: $sourceRepo, jjWorkspaceName: $jjWorkspaceName}')
+    else
+        metadata=$(jq -n \
+            --arg name "$name" \
+            --arg template "$template" \
+            --argjson port "$port" \
+            --arg workspace "$effective_workspace" \
+            --argjson networkSlot "$network_slot" \
+            --arg createdAt "$created_at" \
+            --arg workspaceMode "$workspace_mode" \
+            '{name: $name, template: $template, port: $port, workspace: $workspace, networkSlot: $networkSlot, createdAt: $createdAt, workspaceMode: $workspaceMode}')
+    fi
 
     write_metadata "$name" "$metadata"
 
     # Create and start container
-    if ! create_container "$name" "$template_file" "$workspace" "$port" "$network_slot"; then
+    if ! create_container "$name" "$template_file" "$effective_workspace" "$port" "$network_slot" "$source_repo"; then
         log_error "Failed to create container"
         delete_metadata "$name"
         cleanup_secrets "$name"
-        cleanup_skills "$workspace"
+        cleanup_skills "$effective_workspace"
+        # Clean up jj workspace if we created one
+        if [[ "$workspace_mode" == "jj" ]]; then
+            cleanup_jj_workspace "$source_repo" "$name"
+        fi
         exit 5
     fi
 
@@ -780,9 +935,13 @@ cmd_down() {
     local extra_container_cmd
     extra_container_cmd=$(get_config '.extraContainerPath')
 
-    # Read metadata for workspace path
-    local workspace
-    workspace=$(read_metadata "$name" | jq -r '.workspace')
+    # Read metadata
+    local metadata workspace workspace_mode source_repo jj_workspace_name
+    metadata=$(read_metadata "$name")
+    workspace=$(echo "$metadata" | jq -r '.workspace')
+    workspace_mode=$(echo "$metadata" | jq -r '.workspaceMode // "direct"')
+    source_repo=$(echo "$metadata" | jq -r '.sourceRepo // empty')
+    jj_workspace_name=$(echo "$metadata" | jq -r '.jjWorkspaceName // empty')
 
     log_info "Stopping sandbox '$name'..."
 
@@ -792,9 +951,18 @@ cmd_down() {
     # Clean up secrets
     cleanup_secrets "$name"
 
-    # Optionally clean up skills
-    if ! $keep_skills && [[ -n "$workspace" ]]; then
-        cleanup_skills "$workspace"
+    # Handle workspace cleanup based on mode
+    if [[ "$workspace_mode" == "jj" ]]; then
+        # Clean up jj workspace
+        if [[ -n "$source_repo" && -n "$jj_workspace_name" ]]; then
+            log_info "Removing jj workspace '$jj_workspace_name'..."
+            cleanup_jj_workspace "$source_repo" "$jj_workspace_name"
+        fi
+    else
+        # Direct mode: optionally clean up skills
+        if ! $keep_skills && [[ -n "$workspace" ]]; then
+            cleanup_skills "$workspace"
+        fi
     fi
 
     # Remove metadata
@@ -805,27 +973,33 @@ cmd_down() {
 
 # List running sandboxes
 cmd_ps() {
-    printf "%-15s %-12s %-6s %-35s %s\n" "NAME" "TEMPLATE" "PORT" "WORKSPACE" "STATUS"
-    printf "%s\n" "$(printf '%.0s-' {1..80})"
+    printf "%-15s %-12s %-6s %-5s %-30s %s\n" "NAME" "TEMPLATE" "PORT" "MODE" "WORKSPACE" "STATUS"
+    printf "%s\n" "$(printf '%.0s-' {1..85})"
 
     for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
         [[ -f "$meta_file" ]] || continue
 
-        local name template port workspace status
+        local name template port workspace workspace_mode status
         name=$(jq -r '.name' "$meta_file")
         template=$(jq -r '.template' "$meta_file")
         port=$(jq -r '.port' "$meta_file")
         workspace=$(jq -r '.workspace' "$meta_file")
+        workspace_mode=$(jq -r '.workspaceMode // "dir"' "$meta_file")
+
+        # Normalize mode display
+        if [[ "$workspace_mode" == "direct" ]]; then
+            workspace_mode="dir"
+        fi
 
         # Check actual container status
         status=$(sandbox_status "$name")
 
         # Truncate workspace if too long
-        if [[ ${#workspace} -gt 33 ]]; then
-            workspace="...${workspace: -30}"
+        if [[ ${#workspace} -gt 28 ]]; then
+            workspace="...${workspace: -25}"
         fi
 
-        printf "%-15s %-12s %-6s %-35s %s\n" "$name" "$template" "$port" "$workspace" "$status"
+        printf "%-15s %-12s %-6s %-5s %-30s %s\n" "$name" "$template" "$port" "$workspace_mode" "$workspace" "$status"
     done
 }
 
@@ -929,12 +1103,14 @@ cmd_reset() {
     log_info "Resetting sandbox '$name'..."
 
     # Read metadata to preserve settings
-    local metadata template workspace port network_slot
+    local metadata template workspace port network_slot workspace_mode source_repo
     metadata=$(read_metadata "$name")
     template=$(echo "$metadata" | jq -r '.template')
     workspace=$(echo "$metadata" | jq -r '.workspace')
     port=$(echo "$metadata" | jq -r '.port')
     network_slot=$(echo "$metadata" | jq -r '.networkSlot')
+    workspace_mode=$(echo "$metadata" | jq -r '.workspaceMode // "direct"')
+    source_repo=$(echo "$metadata" | jq -r '.sourceRepo // empty')
 
     local template_file="${FORAGE_CONFIG_DIR}/templates/${template}.json"
     local container
@@ -952,10 +1128,10 @@ cmd_reset() {
     setup_secrets "$name" "$template_file"
 
     # Re-inject skills
-    inject_skills "$name" "$workspace" "$template_file"
+    inject_skills "$name" "$workspace" "$template_file" "$workspace_mode"
 
     # Recreate container
-    if ! create_container "$name" "$template_file" "$workspace" "$port" "$network_slot"; then
+    if ! create_container "$name" "$template_file" "$workspace" "$port" "$network_slot" "$source_repo"; then
         log_error "Failed to recreate container"
         exit 5
     fi
