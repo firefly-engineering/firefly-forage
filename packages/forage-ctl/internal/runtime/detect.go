@@ -16,6 +16,7 @@ const (
 	RuntimeNspawn RuntimeType = "nspawn"
 	RuntimeDocker RuntimeType = "docker"
 	RuntimePodman RuntimeType = "podman"
+	RuntimeApple  RuntimeType = "apple"
 	RuntimeAuto   RuntimeType = "auto"
 )
 
@@ -93,8 +94,11 @@ func detectLinux() (RuntimeType, error) {
 
 // detectDarwin detects the best runtime for macOS
 func detectDarwin() (RuntimeType, error) {
-	// TODO: Add Apple Container support when available
-	// For now, fall back to Docker Desktop or Podman
+	// Prefer Apple Container if available (native macOS virtualization)
+	if _, err := exec.LookPath("container"); err == nil {
+		logging.Debug("detected Apple Container on macOS")
+		return RuntimeApple, nil
+	}
 
 	// Try podman
 	if _, err := exec.LookPath("podman"); err == nil {
@@ -108,7 +112,7 @@ func detectDarwin() (RuntimeType, error) {
 		return RuntimeDocker, nil
 	}
 
-	return "", fmt.Errorf("no supported container runtime found on macOS (tried: podman, docker)")
+	return "", fmt.Errorf("no supported container runtime found on macOS (tried: container, podman, docker)")
 }
 
 // isNixOS checks if we're running on NixOS
@@ -160,6 +164,9 @@ func New(cfg *Config) (Runtime, error) {
 	case RuntimeDocker, RuntimePodman:
 		return NewDockerRuntime(cfg.ContainerPrefix)
 
+	case RuntimeApple:
+		return NewAppleRuntime(cfg.ContainerPrefix)
+
 	default:
 		return nil, fmt.Errorf("unknown runtime type: %s", runtimeType)
 	}
@@ -202,6 +209,13 @@ func Available() []RuntimeType {
 			if !found {
 				available = append(available, RuntimeNspawn)
 			}
+		}
+	}
+
+	// Check for Apple Container on macOS
+	if goruntime.GOOS == "darwin" {
+		if _, err := exec.LookPath("container"); err == nil {
+			available = append(available, RuntimeApple)
 		}
 	}
 

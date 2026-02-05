@@ -748,9 +748,9 @@ Abstract the container backend to support multiple platforms.
 - [x] Migrate commands to use runtime interface
 - [x] Extract SSH functions to dedicated package (runtime-agnostic)
 - [x] Remove legacy container package
-- [ ] Apple Container backend (macOS via github.com/apple/container)
-- [ ] Consistent bind mount semantics across runtimes
-- [ ] Platform-specific nix store sharing strategies
+- [x] Apple Container backend (macOS via github.com/apple/containerization)
+- [x] Consistent bind mount semantics across runtimes (mounts.go)
+- [x] Platform-specific nix store sharing strategies (DetectNixStoreStrategy)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
