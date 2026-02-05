@@ -213,6 +213,97 @@ forage-ctl exec myproject -- ls -la /workspace
 
 ---
 
+### `start`
+
+Start an agent in the sandbox's tmux session.
+
+```bash
+forage-ctl start <name> [agent]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the sandbox |
+| `[agent]` | Agent to start (optional, defaults to first agent in template) |
+
+**Examples:**
+
+```bash
+# Start the default agent
+forage-ctl start myproject
+
+# Start a specific agent (in multi-agent templates)
+forage-ctl start myproject claude
+forage-ctl start myproject aider
+```
+
+This sends the agent command to the existing tmux session. Use `forage-ctl ssh` to attach and interact with the agent.
+
+---
+
+### `shell`
+
+Open a shell in a new tmux window.
+
+```bash
+forage-ctl shell <name>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the sandbox |
+
+This creates a new tmux window in the sandbox's session and attaches to it. Useful for running commands alongside a running agent.
+
+**Tmux window navigation:**
+- Switch windows: `Ctrl-b n` (next) / `Ctrl-b p` (previous)
+- List windows: `Ctrl-b w`
+- Close window: `exit` or `Ctrl-d`
+
+---
+
+### `logs`
+
+Show container logs.
+
+```bash
+forage-ctl logs <name> [-f] [-n <lines>]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the sandbox |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-f, --follow` | Follow log output (like `tail -f`) |
+| `-n, --lines <n>` | Number of lines to show (default: 100) |
+
+**Examples:**
+
+```bash
+# Show last 100 lines
+forage-ctl logs myproject
+
+# Follow logs in real-time
+forage-ctl logs myproject -f
+
+# Show last 500 lines
+forage-ctl logs myproject -n 500
+```
+
+This uses `journalctl` to show logs from the container's systemd services (sshd, tmux, etc.).
+
+---
+
 ### `reset`
 
 Reset a sandbox to fresh state.

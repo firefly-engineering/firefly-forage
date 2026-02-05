@@ -629,7 +629,7 @@ forage-ctl down --all
 - [ ] Health checks
 - [ ] Logging integration
 - [x] forage-ctl: exec, reset
-- [ ] forage-ctl: logs, start, shell
+- [x] forage-ctl: logs, start, shell
 - [ ] Error handling improvements
 - [ ] Advanced skill injection (project analysis)
 - [ ] Gateway service with sandbox selector (single port access)

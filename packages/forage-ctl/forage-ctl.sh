@@ -45,6 +45,9 @@ Commands:
     ssh <name>         Connect to a sandbox via SSH (attaches to tmux)
     ssh-cmd <name>     Print SSH command for a sandbox
     exec <name> -- <cmd>  Execute command in sandbox
+    start <name> [agent]  Start an agent in the sandbox tmux session
+    shell <name>       Open a shell in a new tmux window
+    logs <name>        Show container logs
     reset <name>       Reset sandbox (restart with fresh state)
     help               Show this help message
 
@@ -1086,6 +1089,140 @@ cmd_exec() {
         agent@localhost "$@"
 }
 
+# Show container logs
+cmd_logs() {
+    local name=""
+    local follow=false
+    local lines=100
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -f|--follow)
+                follow=true
+                shift
+                ;;
+            -n|--lines)
+                lines="$2"
+                shift 2
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                exit 1
+                ;;
+            *)
+                if [[ -z "$name" ]]; then
+                    name="$1"
+                else
+                    log_error "Unexpected argument: $1"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$name" ]]; then
+        log_error "Sandbox name is required"
+        exit 1
+    fi
+
+    if ! sandbox_exists "$name"; then
+        log_error "Sandbox not found: $name"
+        exit 2
+    fi
+
+    local container
+    container=$(container_name "$name")
+
+    local journal_args=("-M" "$container" "-n" "$lines")
+    if $follow; then
+        journal_args+=("-f")
+    fi
+
+    exec journalctl "${journal_args[@]}"
+}
+
+# Start an agent in the sandbox tmux session
+cmd_start() {
+    local name="$1"
+    local agent="${2:-}"
+
+    if [[ -z "$name" ]]; then
+        log_error "Sandbox name is required"
+        exit 1
+    fi
+
+    if ! sandbox_exists "$name"; then
+        log_error "Sandbox not found: $name"
+        exit 2
+    fi
+
+    if ! container_running "$name"; then
+        log_error "Sandbox is not running: $name"
+        exit 1
+    fi
+
+    # Get metadata
+    local metadata template
+    metadata=$(read_metadata "$name")
+    template=$(echo "$metadata" | jq -r '.template')
+
+    # If no agent specified, try to find the default one from template
+    if [[ -z "$agent" ]]; then
+        local template_file="${FORAGE_CONFIG_DIR}/templates/${template}.json"
+        agent=$(jq -r '.agents | keys | first' "$template_file")
+    fi
+
+    if [[ -z "$agent" || "$agent" == "null" ]]; then
+        log_error "No agent specified and no default agent found in template"
+        exit 1
+    fi
+
+    # Get port from metadata
+    local port
+    port=$(echo "$metadata" | jq -r '.port')
+
+    log_info "Starting agent '$agent' in sandbox '$name'..."
+
+    # Send the agent command to the tmux session
+    ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        agent@localhost "tmux send-keys -t forage '$agent' Enter"
+
+    log_success "Agent '$agent' started"
+    log_info "Connect with: forage-ctl ssh $name"
+}
+
+# Open a shell in a new tmux window
+cmd_shell() {
+    local name="$1"
+
+    if [[ -z "$name" ]]; then
+        log_error "Sandbox name is required"
+        exit 1
+    fi
+
+    if ! sandbox_exists "$name"; then
+        log_error "Sandbox not found: $name"
+        exit 2
+    fi
+
+    if ! container_running "$name"; then
+        log_error "Sandbox is not running: $name"
+        exit 1
+    fi
+
+    # Get port from metadata
+    local port
+    port=$(read_metadata "$name" | jq -r '.port')
+
+    log_info "Opening shell in sandbox '$name'..."
+
+    # Create a new tmux window and attach
+    exec ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -t agent@localhost 'tmux new-window -t forage -c /workspace && tmux attach -t forage'
+}
+
 # Reset sandbox
 cmd_reset() {
     local name="$1"
@@ -1175,6 +1312,15 @@ main() {
             ;;
         exec)
             cmd_exec "$@"
+            ;;
+        start)
+            cmd_start "$@"
+            ;;
+        shell)
+            cmd_shell "$@"
+            ;;
+        logs)
+            cmd_logs "$@"
             ;;
         reset)
             cmd_reset "$@"
