@@ -193,15 +193,15 @@ func TestGenerateNixNetworkConfig_Restricted(t *testing.T) {
 	config := GenerateNixNetworkConfig(cfg)
 
 	expectedStrings := []string{
-		"10.100.4.1",                      // Gateway
-		"127.0.0.1",                       // Local DNS
-		"services.dnsmasq",                // DNS filtering
-		"server=/api.anthropic.com/",     // DNS forward rule
-		"server=/github.com/",            // DNS forward rule
-		"address = \"/#/\"",               // Block other DNS
-		"networking.nftables",             // nftables
-		"set allowed_ipv4",                // IP set
-		"@allowed_ipv4 accept",            // Accept rule
+		"10.100.4.1",                 // Gateway
+		"127.0.0.1",                  // Local DNS
+		"services.dnsmasq",           // DNS filtering
+		"server=/api.anthropic.com/", // DNS forward rule
+		"server=/github.com/",        // DNS forward rule
+		"address = \"/#/\"",          // Block other DNS
+		"networking.nftables",        // nftables
+		"set allowed_ipv4",           // IP set
+		"@allowed_ipv4 accept",       // Accept rule
 		"reject with icmp type admin-prohibited",
 	}
 

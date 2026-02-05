@@ -401,18 +401,18 @@ func TestValidateSandboxName(t *testing.T) {
 		{"test_sandbox_1", false},
 
 		// Invalid names
-		{"", true},                              // empty
-		{"My-Project", true},                    // uppercase
-		{"my project", true},                    // space
-		{"../../../etc/passwd", true},           // path traversal
-		{"/absolute/path", true},                // absolute path
-		{"my.project", true},                    // dots
-		{"-starts-with-dash", true},             // starts with dash
-		{"_starts_with_underscore", true},       // starts with underscore
-		{"has@special", true},                   // special characters
-		{"has$dollar", true},                    // special characters
-		{"has;semicolon", true},                 // injection attempt
-		{"a" + string(make([]byte, 64)), true},  // too long (64+ chars)
+		{"", true},                             // empty
+		{"My-Project", true},                   // uppercase
+		{"my project", true},                   // space
+		{"../../../etc/passwd", true},          // path traversal
+		{"/absolute/path", true},               // absolute path
+		{"my.project", true},                   // dots
+		{"-starts-with-dash", true},            // starts with dash
+		{"_starts_with_underscore", true},      // starts with underscore
+		{"has@special", true},                  // special characters
+		{"has$dollar", true},                   // special characters
+		{"has;semicolon", true},                // injection attempt
+		{"a" + string(make([]byte, 64)), true}, // too long (64+ chars)
 	}
 
 	for _, tt := range tests {

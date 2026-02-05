@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 )
@@ -96,12 +97,12 @@ var (
 
 // Model is the bubbletea model for the sandbox picker
 type Model struct {
-	list       list.Model
-	result     PickerResult
-	quitting   bool
-	paths      *config.Paths
-	width      int
-	height     int
+	list     list.Model
+	result   PickerResult
+	quitting bool
+	paths    *config.Paths
+	width    int
+	height   int
 }
 
 // NewPicker creates a new sandbox picker

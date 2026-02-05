@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/spf13/cobra"
 )
 
 var resetCmd = &cobra.Command{

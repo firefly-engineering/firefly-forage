@@ -16,11 +16,11 @@ func TestServer_HandleConnection_InvalidName(t *testing.T) {
 
 	// Test invalid sandbox names - should fail validation
 	invalidNames := []string{
-		"../escape",             // path traversal
-		"My-Project",            // uppercase
-		"has spaces",            // spaces
-		"-starts-with-dash",     // starts with dash
-		"has;semicolon",         // special characters
+		"../escape",         // path traversal
+		"My-Project",        // uppercase
+		"has spaces",        // spaces
+		"-starts-with-dash", // starts with dash
+		"has;semicolon",     // special characters
 	}
 
 	for _, name := range invalidNames {

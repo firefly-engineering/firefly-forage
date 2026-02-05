@@ -310,9 +310,9 @@ func TestGenerateSkills_DirectMode(t *testing.T) {
 	}
 
 	projectInfo := &ProjectInfo{
-		Type:    ProjectTypeUnknown,
-		HasGit:  true,
-		HasJJ:   false,
+		Type:   ProjectTypeUnknown,
+		HasGit: true,
+		HasJJ:  false,
 	}
 
 	content := GenerateSkills(metadata, template, projectInfo)

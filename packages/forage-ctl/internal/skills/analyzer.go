@@ -274,10 +274,11 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 	sb.WriteString("- **Template**: " + metadata.Template + "\n")
 	sb.WriteString("- **Workspace**: /workspace\n")
 
-	if metadata.WorkspaceMode == "jj" {
+	switch metadata.WorkspaceMode {
+	case "jj":
 		sb.WriteString("- **Mode**: jj workspace (isolated from source)\n")
 		sb.WriteString("- **Source Repo**: " + metadata.SourceRepo + "\n")
-	} else if metadata.WorkspaceMode == "git-worktree" {
+	case "git-worktree":
 		sb.WriteString("- **Mode**: git worktree (isolated from source)\n")
 		sb.WriteString("- **Source Repo**: " + metadata.SourceRepo + "\n")
 		sb.WriteString("- **Branch**: " + metadata.GitBranch + "\n")

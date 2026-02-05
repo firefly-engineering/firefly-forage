@@ -25,12 +25,12 @@ func TestCreator_Create_InvalidName(t *testing.T) {
 
 	// Test invalid sandbox names
 	invalidNames := []string{
-		"",                      // empty
-		"../escape",             // path traversal
-		"My-Project",            // uppercase
-		"has spaces",            // spaces
-		"-starts-with-dash",     // starts with dash
-		"has;semicolon",         // special characters
+		"",                  // empty
+		"../escape",         // path traversal
+		"My-Project",        // uppercase
+		"has spaces",        // spaces
+		"-starts-with-dash", // starts with dash
+		"has;semicolon",     // special characters
 	}
 
 	for _, name := range invalidNames {

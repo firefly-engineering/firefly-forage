@@ -7,15 +7,15 @@ import (
 
 // Exit codes for forage-ctl
 const (
-	ExitSuccess           = 0
-	ExitGeneralError      = 1
-	ExitSandboxNotFound   = 2
-	ExitTemplateNotFound  = 3
-	ExitPortAllocation    = 4
-	ExitContainerFailed   = 5
-	ExitConfigError       = 6
-	ExitJJError           = 7
-	ExitSSHError          = 8
+	ExitSuccess          = 0
+	ExitGeneralError     = 1
+	ExitSandboxNotFound  = 2
+	ExitTemplateNotFound = 3
+	ExitPortAllocation   = 4
+	ExitContainerFailed  = 5
+	ExitConfigError      = 6
+	ExitJJError          = 7
+	ExitSSHError         = 8
 )
 
 // ForageError is the base error type for forage-ctl

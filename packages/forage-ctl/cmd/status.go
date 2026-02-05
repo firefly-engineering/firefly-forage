@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
-	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{

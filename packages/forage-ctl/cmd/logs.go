@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 var logsCmd = &cobra.Command{

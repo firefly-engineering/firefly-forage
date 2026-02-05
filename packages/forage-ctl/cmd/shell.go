@@ -3,9 +3,10 @@ package cmd
 import (
 	"context"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/spf13/cobra"
 )
 
 var shellCmd = &cobra.Command{

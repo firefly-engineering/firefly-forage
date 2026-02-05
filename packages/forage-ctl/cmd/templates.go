@@ -6,8 +6,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 var templatesCmd = &cobra.Command{

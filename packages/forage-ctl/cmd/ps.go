@@ -5,9 +5,10 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
-	"github.com/spf13/cobra"
 )
 
 var psCmd = &cobra.Command{

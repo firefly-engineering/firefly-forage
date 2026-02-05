@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
-	"github.com/spf13/cobra"
 )
 
 var upCmd = &cobra.Command{

@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/spf13/cobra"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 var runtimeCmd = &cobra.Command{

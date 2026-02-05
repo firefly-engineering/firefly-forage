@@ -5,11 +5,12 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
-	"github.com/spf13/cobra"
 )
 
 var execCmd = &cobra.Command{

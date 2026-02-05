@@ -17,10 +17,10 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template)
 	sb.WriteString("## Environment\n\n")
 	sb.WriteString(fmt.Sprintf("- **Sandbox**: %s\n", metadata.Name))
 	sb.WriteString(fmt.Sprintf("- **Template**: %s\n", metadata.Template))
-	sb.WriteString(fmt.Sprintf("- **Workspace**: /workspace\n"))
+	sb.WriteString("- **Workspace**: /workspace\n")
 
 	if metadata.WorkspaceMode == "jj" {
-		sb.WriteString(fmt.Sprintf("- **Mode**: jj workspace (isolated from source)\n"))
+		sb.WriteString("- **Mode**: jj workspace (isolated from source)\n")
 		sb.WriteString(fmt.Sprintf("- **Source Repo**: %s\n", metadata.SourceRepo))
 	}
 

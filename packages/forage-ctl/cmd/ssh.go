@@ -3,9 +3,10 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
-	"github.com/spf13/cobra"
 )
 
 var sshCmd = &cobra.Command{

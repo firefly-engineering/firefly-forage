@@ -6,11 +6,12 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
-	"github.com/spf13/cobra"
 )
 
 var gatewayCmd = &cobra.Command{

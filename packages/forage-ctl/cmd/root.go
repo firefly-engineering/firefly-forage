@@ -3,8 +3,9 @@ package cmd
 import (
 	"os"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/spf13/cobra"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 )
 
 var (

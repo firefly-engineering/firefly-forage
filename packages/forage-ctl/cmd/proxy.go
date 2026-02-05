@@ -6,10 +6,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/proxy"
-	"github.com/spf13/cobra"
 )
 
 var proxyCmd = &cobra.Command{
@@ -38,11 +39,11 @@ for Max plans, but cannot inject authentication.`,
 }
 
 var (
-	proxyListen    string
-	proxyTarget    string
-	proxyRateLimit int
+	proxyListen     string
+	proxyTarget     string
+	proxyRateLimit  int
 	proxyRateWindow time.Duration
-	proxyAuditLog  string
+	proxyAuditLog   string
 )
 
 func init() {

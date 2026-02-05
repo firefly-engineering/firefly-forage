@@ -20,27 +20,27 @@ const (
 
 // Options configures SSH connection parameters.
 type Options struct {
-	Port              int
-	User              string
-	Host              string
+	Port               int
+	User               string
+	Host               string
 	StrictHostKeyCheck bool
-	KnownHostsFile    string
-	ConnectTimeout    int
-	BatchMode         bool
-	RequestTTY        bool
+	KnownHostsFile     string
+	ConnectTimeout     int
+	BatchMode          bool
+	RequestTTY         bool
 }
 
 // DefaultOptions returns Options with sensible defaults for sandbox connections.
 func DefaultOptions(port int) Options {
 	return Options{
-		Port:              port,
-		User:              DefaultUser,
-		Host:              DefaultHost,
+		Port:               port,
+		User:               DefaultUser,
+		Host:               DefaultHost,
 		StrictHostKeyCheck: false,
-		KnownHostsFile:    "/dev/null",
-		ConnectTimeout:    DefaultConnectTimeout,
-		BatchMode:         false,
-		RequestTTY:        false,
+		KnownHostsFile:     "/dev/null",
+		ConnectTimeout:     DefaultConnectTimeout,
+		BatchMode:          false,
+		RequestTTY:         false,
 	}
 }
 

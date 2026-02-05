@@ -69,13 +69,13 @@ func setupJJRepo(t *testing.T) string {
 func TestGitBackend_Interface(t *testing.T) {
 	// Verify GitBackend implements Backend
 	var _ Backend = &GitBackend{}
-	var _ Backend = Git()
+	var _ = Git()
 }
 
 func TestJJBackend_Interface(t *testing.T) {
 	// Verify JJBackend implements Backend
 	var _ Backend = &JJBackend{}
-	var _ Backend = JJ()
+	var _ = JJ()
 }
 
 func TestGitBackend_Name(t *testing.T) {

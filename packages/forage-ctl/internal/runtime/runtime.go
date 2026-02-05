@@ -35,14 +35,14 @@ type ExecResult struct {
 
 // CreateOptions holds options for creating a container
 type CreateOptions struct {
-	Name           string
-	ConfigPath     string            // Path to container config (e.g., nix file)
-	Start          bool              // Start immediately after creation
-	BindMounts     map[string]string // host path -> container path
-	ForwardPorts   map[int]int       // host port -> container port
-	NetworkSlot    int               // For private networking
-	SSHPort        int               // SSH port for this container (if applicable)
-	ExtraArgs      []string          // Backend-specific arguments
+	Name         string
+	ConfigPath   string            // Path to container config (e.g., nix file)
+	Start        bool              // Start immediately after creation
+	BindMounts   map[string]string // host path -> container path
+	ForwardPorts map[int]int       // host port -> container port
+	NetworkSlot  int               // For private networking
+	SSHPort      int               // SSH port for this container (if applicable)
+	ExtraArgs    []string          // Backend-specific arguments
 }
 
 // ExecOptions holds options for executing a command in a container

@@ -89,9 +89,7 @@ func GenerateNftablesRules(cfg *Config) string {
 
 	// Also allow the hosts by hostname (nftables will resolve)
 	var hostnames []string
-	for _, h := range cfg.AllowedHosts {
-		hostnames = append(hostnames, h)
-	}
+	hostnames = append(hostnames, cfg.AllowedHosts...)
 
 	// Gateway IP for the container
 	gatewayIP := fmt.Sprintf("10.100.%d.1", cfg.NetworkSlot)

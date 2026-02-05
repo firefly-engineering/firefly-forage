@@ -16,14 +16,14 @@ type MockFS struct {
 	dirs  map[string]bool
 
 	// Error injection
-	ReadFileErr   error
-	WriteFileErr  error
-	RemoveErr     error
-	RemoveAllErr  error
-	StatErr       error
-	MkdirAllErr   error
-	ReadDirErr    error
-	CopyFileErr   error
+	ReadFileErr  error
+	WriteFileErr error
+	RemoveErr    error
+	RemoveAllErr error
+	StatErr      error
+	MkdirAllErr  error
+	ReadDirErr   error
+	CopyFileErr  error
 }
 
 type mockFile struct {
@@ -267,10 +267,12 @@ type mockDirEntry struct {
 	isDir bool
 }
 
-func (m *mockDirEntry) Name() string               { return m.name }
-func (m *mockDirEntry) IsDir() bool                { return m.isDir }
-func (m *mockDirEntry) Type() fs.FileMode          { return m.mode.Type() }
-func (m *mockDirEntry) Info() (fs.FileInfo, error) { return &mockFileInfo{name: m.name, mode: m.mode, isDir: m.isDir}, nil }
+func (m *mockDirEntry) Name() string      { return m.name }
+func (m *mockDirEntry) IsDir() bool       { return m.isDir }
+func (m *mockDirEntry) Type() fs.FileMode { return m.mode.Type() }
+func (m *mockDirEntry) Info() (fs.FileInfo, error) {
+	return &mockFileInfo{name: m.name, mode: m.mode, isDir: m.isDir}, nil
+}
 
 // MockExecutor implements CommandExecutor for testing.
 type MockExecutor struct {

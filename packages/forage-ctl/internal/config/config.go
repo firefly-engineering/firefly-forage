@@ -69,11 +69,11 @@ func safePath(baseDir, name, suffix string) (string, error) {
 }
 
 const (
-	DefaultConfigDir    = "/etc/firefly-forage"
-	DefaultStateDir     = "/var/lib/firefly-forage"
-	DefaultSecretsDir   = "/run/forage-secrets"
-	ContainerPrefix     = "forage-"
-	TmuxSessionName     = "forage"
+	DefaultConfigDir  = "/etc/firefly-forage"
+	DefaultStateDir   = "/var/lib/firefly-forage"
+	DefaultSecretsDir = "/run/forage-secrets"
+	ContainerPrefix   = "forage-"
+	TmuxSessionName   = "forage"
 )
 
 // HostConfig represents the host configuration from config.json

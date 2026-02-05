@@ -14,18 +14,18 @@ const NixOSStateVersion = "24.05"
 
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
-	Name            string
-	Port            int
-	NetworkSlot     int
-	Workspace       string
-	SecretsPath     string
-	AuthorizedKeys  []string
-	Template        *config.Template
-	HostConfig      *config.HostConfig
-	WorkspaceMode   string
-	SourceRepo      string
-	NixpkgsRev      string
-	ProxyURL        string // URL of the forage-proxy server (if using proxy mode)
+	Name           string
+	Port           int
+	NetworkSlot    int
+	Workspace      string
+	SecretsPath    string
+	AuthorizedKeys []string
+	Template       *config.Template
+	HostConfig     *config.HostConfig
+	WorkspaceMode  string
+	SourceRepo     string
+	NixpkgsRev     string
+	ProxyURL       string // URL of the forage-proxy server (if using proxy mode)
 }
 
 // GenerateNixConfig generates the nix configuration for the container
