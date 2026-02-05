@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/spf13/cobra"
 )
@@ -23,15 +21,10 @@ func init() {
 
 func runSSH(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
 
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	metadata, err := loadRunningSandbox(name)
 	if err != nil {
-		return errors.SandboxNotFound(name)
-	}
-
-	if !runtime.IsRunning(name) {
-		return errors.SandboxNotRunning(name)
+		return err
 	}
 
 	// Replace current process with ssh session attached to tmux

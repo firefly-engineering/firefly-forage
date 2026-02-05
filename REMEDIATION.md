@@ -80,7 +80,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| MAINT-001 | Extract command helpers | [ ] | `LoadSandboxOrFail()` utility |
+| MAINT-001 | Extract command helpers | [x] | `loadSandbox()` and `loadRunningSandbox()` helpers |
 | MAINT-002 | Unify cleanup logic | [ ] | Single `sandbox.Cleanup()` function |
 | MAINT-003 | Add example config files | [ ] | Document config.json format |
 | MAINT-004 | Standardize logging across commands | [ ] | Consistent log levels |
@@ -108,4 +108,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | TEST-002: Added gateway server tests | - |
 | 2026-02-05 | TEST-004: Added app package tests | - |
 | 2026-02-05 | TEST-005: Added logging package tests | - |
+| 2026-02-05 | MAINT-001: Extracted command helpers | - |
 
