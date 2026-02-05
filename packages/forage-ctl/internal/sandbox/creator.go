@@ -306,34 +306,8 @@ func (c *Creator) injectSkills(name, workspacePath string, metadata *config.Sand
 func (c *Creator) cleanup(metadata *config.SandboxMetadata, backend workspace.Backend) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
-	// Clean up workspace if created via backend
-	if backend != nil && metadata.SourceRepo != "" && metadata.Workspace != "" {
-		if err := backend.Remove(metadata.SourceRepo, metadata.Name, metadata.Workspace); err != nil {
-			logging.Warn("failed to remove workspace", "error", err)
-		}
-	}
-
-	// Clean up secrets
-	secretsPath := filepath.Join(c.paths.SecretsDir, metadata.Name)
-	if err := os.RemoveAll(secretsPath); err != nil {
-		logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
-	}
-
-	// Clean up config file
-	configPath := filepath.Join(c.paths.SandboxesDir, metadata.Name+".nix")
-	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-		logging.Warn("failed to remove config file", "path", configPath, "error", err)
-	}
-
-	// Clean up metadata
-	if err := config.DeleteSandboxMetadata(c.paths.SandboxesDir, metadata.Name); err != nil {
-		logging.Warn("failed to remove metadata", "name", metadata.Name, "error", err)
-	}
-
-	// Try to destroy container if it was created
-	if err := runtime.Destroy(metadata.Name); err != nil {
-		logging.Debug("container destroy during cleanup", "error", err)
-	}
+	// Use unified cleanup function with all options enabled
+	Cleanup(metadata, c.paths, DefaultCleanupOptions())
 }
 
 // copySkillsToContainer copies skills content into the container.

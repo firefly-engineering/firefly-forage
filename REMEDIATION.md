@@ -81,7 +81,7 @@ This document tracks the implementation of security fixes, test coverage improve
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | MAINT-001 | Extract command helpers | [x] | `loadSandbox()` and `loadRunningSandbox()` helpers |
-| MAINT-002 | Unify cleanup logic | [ ] | Single `sandbox.Cleanup()` function |
+| MAINT-002 | Unify cleanup logic | [x] | Single `sandbox.Cleanup()` function |
 | MAINT-003 | Add example config files | [ ] | Document config.json format |
 | MAINT-004 | Standardize logging across commands | [ ] | Consistent log levels |
 

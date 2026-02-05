@@ -1,14 +1,10 @@
 package cmd
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 	"github.com/spf13/cobra"
 )
 
@@ -25,67 +21,19 @@ func init() {
 
 func runDown(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
+	p := paths()
 
 	logging.Debug("removing sandbox", "name", name)
 
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	metadata, err := config.LoadSandboxMetadata(p.SandboxesDir, name)
 	if err != nil {
 		return errors.SandboxNotFound(name)
 	}
 
-	// Destroy container if running
-	if runtime.IsRunning(name) {
-		logInfo("Stopping container...")
-		logging.Debug("destroying container", "name", name)
-		if err := runtime.Destroy(name); err != nil {
-			logging.Warn("failed to destroy container", "error", err)
-		}
-	}
+	logInfo("Removing sandbox %s...", name)
 
-	// Clean up workspace if using a VCS backend
-	if metadata.WorkspaceMode != "" && metadata.WorkspaceMode != "direct" && metadata.SourceRepo != "" {
-		var backend workspace.Backend
-		switch metadata.WorkspaceMode {
-		case "jj":
-			backend = workspace.JJ()
-		case "git-worktree":
-			backend = workspace.Git()
-		}
-
-		if backend != nil {
-			logInfo("Cleaning up %s workspace...", backend.Name())
-			logging.Debug("cleaning up workspace", "backend", backend.Name(), "repo", metadata.SourceRepo, "name", name)
-			if err := backend.Remove(metadata.SourceRepo, name, metadata.Workspace); err != nil {
-				logging.Warn("failed to cleanup workspace", "error", err)
-			}
-		}
-	}
-
-	// Remove secrets
-	secretsPath := filepath.Join(paths.SecretsDir, name)
-	logging.Debug("removing secrets", "path", secretsPath)
-	if err := os.RemoveAll(secretsPath); err != nil {
-		logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
-	}
-
-	// Remove skills file
-	skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
-	if err := os.Remove(skillsPath); err != nil && !os.IsNotExist(err) {
-		logging.Warn("failed to remove skills file", "path", skillsPath, "error", err)
-	}
-
-	// Remove nix config file
-	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
-	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-		logging.Warn("failed to remove config file", "path", configPath, "error", err)
-	}
-
-	// Remove metadata
-	logging.Debug("removing metadata")
-	if err := config.DeleteSandboxMetadata(paths.SandboxesDir, name); err != nil {
-		logging.Warn("failed to remove metadata", "error", err)
-	}
+	// Use unified cleanup function
+	sandbox.Cleanup(metadata, p, sandbox.DefaultCleanupOptions())
 
 	logSuccess("Removed sandbox %s", name)
 	return nil
