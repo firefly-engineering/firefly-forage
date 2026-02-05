@@ -67,6 +67,7 @@
               gopls
               gotools
               go-tools # staticcheck
+              golangci-lint
 
               # Nix tooling
               nixfmt
