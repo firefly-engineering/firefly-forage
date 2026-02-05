@@ -113,7 +113,7 @@ forage-ctl down --all
 
 ### `ps`
 
-List running sandboxes.
+List sandboxes with health status.
 
 ```bash
 forage-ctl ps
@@ -121,10 +121,10 @@ forage-ctl ps
 
 **Output:**
 ```
-NAME            TEMPLATE     PORT   MODE  WORKSPACE                      STATUS
-myproject       claude       2200   dir   /home/user/projects/myproject  running
-agent-a         claude       2201   jj    ...forage/workspaces/agent-a   running
-agent-b         claude       2202   jj    ...forage/workspaces/agent-b   stopped
+NAME            TEMPLATE   PORT   MODE WORKSPACE                    HEALTH
+myproject       claude     2200   dir  /home/user/projects/myproj   healthy
+agent-a         claude     2201   jj   ...forage/workspaces/agent-a healthy
+agent-b         claude     2202   jj   ...forage/workspaces/agent-b stopped
 ```
 
 **Columns:**
@@ -136,7 +136,63 @@ agent-b         claude       2202   jj    ...forage/workspaces/agent-b   stopped
 | PORT | SSH port |
 | MODE | `dir` (direct workspace) or `jj` (JJ workspace) |
 | WORKSPACE | Path mounted at `/workspace` |
-| STATUS | `running`, `stopped`, or `not-found` |
+| HEALTH | Health status (see below) |
+
+**Health statuses:**
+
+| Status | Description |
+|--------|-------------|
+| `healthy` | Container running, SSH reachable, tmux session active |
+| `unhealthy` | Container running but SSH not reachable |
+| `no-tmux` | Container running, SSH works, but no tmux session |
+| `stopped` | Container not running |
+
+---
+
+### `status`
+
+Show detailed sandbox status and health information.
+
+```bash
+forage-ctl status <name>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the sandbox |
+
+**Example output:**
+```
+Sandbox: myproject
+========================================
+
+Configuration:
+  Template:      claude
+  Workspace:     /home/user/projects/myproject
+  Mode:          direct
+  SSH Port:      2200
+  Container IP:  192.168.100.11
+  Created:       2024-01-15T10:30:00+00:00
+
+Container Status:
+  Running:       yes
+  Uptime:        2h 30m
+
+Health Checks:
+  SSH:           reachable
+  Tmux Session:  active
+  Tmux Windows:
+    - 0:bash
+    - 1:claude
+
+Connect:
+  forage-ctl ssh myproject
+  ssh -p 2200 agent@localhost
+```
+
+Use this command for debugging connectivity issues or checking sandbox health.
 
 ---
 

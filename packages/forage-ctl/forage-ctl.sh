@@ -41,7 +41,8 @@ Commands:
     templates           List available sandbox templates
     up <name>          Create and start a sandbox
     down <name>        Stop and remove a sandbox
-    ps                 List running sandboxes
+    ps                 List sandboxes with health status
+    status <name>      Show detailed sandbox status and health
     ssh <name>         Connect to a sandbox via SSH (attaches to tmux)
     ssh-cmd <name>     Print SSH command for a sandbox
     exec <name> -- <cmd>  Execute command in sandbox
@@ -178,6 +179,72 @@ sandbox_status() {
     else
         echo "stopped"
     fi
+}
+
+# Check if SSH is reachable (quick check)
+check_ssh_health() {
+    local port="$1"
+    ssh -p "$port" -o ConnectTimeout=2 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -o BatchMode=yes agent@localhost true 2>/dev/null
+}
+
+# Check if tmux session exists
+check_tmux_health() {
+    local port="$1"
+    ssh -p "$port" -o ConnectTimeout=2 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -o BatchMode=yes agent@localhost 'tmux has-session -t forage 2>/dev/null' 2>/dev/null
+}
+
+# Get container uptime
+get_container_uptime() {
+    local container="$1"
+    # Get the container's start time from machinectl
+    local since
+    since=$(machinectl show "$container" -p Since --value 2>/dev/null)
+    if [[ -n "$since" && "$since" != "n/a" ]]; then
+        # Convert to human-readable format
+        local start_epoch
+        start_epoch=$(date -d "$since" +%s 2>/dev/null)
+        if [[ -n "$start_epoch" ]]; then
+            local now_epoch
+            now_epoch=$(date +%s)
+            local diff=$((now_epoch - start_epoch))
+            if [[ $diff -lt 60 ]]; then
+                echo "${diff}s"
+            elif [[ $diff -lt 3600 ]]; then
+                echo "$((diff / 60))m"
+            elif [[ $diff -lt 86400 ]]; then
+                echo "$((diff / 3600))h $((diff % 3600 / 60))m"
+            else
+                echo "$((diff / 86400))d $((diff % 86400 / 3600))h"
+            fi
+            return
+        fi
+    fi
+    echo "unknown"
+}
+
+# Get health status summary (for ps command)
+get_health_summary() {
+    local name="$1"
+    local port="$2"
+
+    if ! container_running "$name"; then
+        echo "stopped"
+        return
+    fi
+
+    if ! check_ssh_health "$port"; then
+        echo "unhealthy"
+        return
+    fi
+
+    if ! check_tmux_health "$port"; then
+        echo "no-tmux"
+        return
+    fi
+
+    echo "healthy"
 }
 
 # Find an available port
@@ -996,13 +1063,13 @@ cmd_down() {
 
 # List running sandboxes
 cmd_ps() {
-    printf "%-15s %-12s %-6s %-5s %-30s %s\n" "NAME" "TEMPLATE" "PORT" "MODE" "WORKSPACE" "STATUS"
-    printf "%s\n" "$(printf '%.0s-' {1..85})"
+    printf "%-15s %-10s %-6s %-4s %-28s %s\n" "NAME" "TEMPLATE" "PORT" "MODE" "WORKSPACE" "HEALTH"
+    printf "%s\n" "$(printf '%.0s-' {1..80})"
 
     for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
         [[ -f "$meta_file" ]] || continue
 
-        local name template port workspace workspace_mode status
+        local name template port workspace workspace_mode health
         name=$(jq -r '.name' "$meta_file")
         template=$(jq -r '.template' "$meta_file")
         port=$(jq -r '.port' "$meta_file")
@@ -1014,15 +1081,26 @@ cmd_ps() {
             workspace_mode="dir"
         fi
 
-        # Check actual container status
-        status=$(sandbox_status "$name")
+        # Get health status
+        health=$(get_health_summary "$name" "$port")
 
         # Truncate workspace if too long
-        if [[ ${#workspace} -gt 28 ]]; then
-            workspace="...${workspace: -25}"
+        if [[ ${#workspace} -gt 26 ]]; then
+            workspace="...${workspace: -23}"
         fi
 
-        printf "%-15s %-12s %-6s %-5s %-30s %s\n" "$name" "$template" "$port" "$workspace_mode" "$workspace" "$status"
+        # Color-code health status
+        local health_display
+        case "$health" in
+            healthy)   health_display="${GREEN}healthy${NC}" ;;
+            unhealthy) health_display="${RED}unhealthy${NC}" ;;
+            no-tmux)   health_display="${YELLOW}no-tmux${NC}" ;;
+            stopped)   health_display="${RED}stopped${NC}" ;;
+            *)         health_display="$health" ;;
+        esac
+
+        printf "%-15s %-10s %-6s %-4s %-28s " "$name" "$template" "$port" "$workspace_mode" "$workspace"
+        echo -e "$health_display"
     done
 }
 
@@ -1107,6 +1185,103 @@ cmd_exec() {
     # Execute via SSH
     exec ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         agent@localhost "$@"
+}
+
+# Show detailed sandbox status
+cmd_status() {
+    local name="$1"
+
+    if [[ -z "$name" ]]; then
+        log_error "Sandbox name is required"
+        exit 1
+    fi
+
+    if ! sandbox_exists "$name"; then
+        log_error "Sandbox not found: $name"
+        exit 2
+    fi
+
+    # Read metadata
+    local metadata
+    metadata=$(read_metadata "$name")
+
+    local template port workspace workspace_mode created_at network_slot
+    template=$(echo "$metadata" | jq -r '.template')
+    port=$(echo "$metadata" | jq -r '.port')
+    workspace=$(echo "$metadata" | jq -r '.workspace')
+    workspace_mode=$(echo "$metadata" | jq -r '.workspaceMode // "direct"')
+    created_at=$(echo "$metadata" | jq -r '.createdAt')
+    network_slot=$(echo "$metadata" | jq -r '.networkSlot')
+
+    local container
+    container=$(container_name "$name")
+    local container_ip="192.168.100.$((network_slot + 10))"
+
+    echo "Sandbox: $name"
+    echo "========================================"
+    echo ""
+
+    # Basic info
+    echo "Configuration:"
+    echo "  Template:      $template"
+    echo "  Workspace:     $workspace"
+    echo "  Mode:          $workspace_mode"
+    echo "  SSH Port:      $port"
+    echo "  Container IP:  $container_ip"
+    echo "  Created:       $created_at"
+    echo ""
+
+    # Container status
+    echo "Container Status:"
+    if container_running "$name"; then
+        echo -e "  Running:       ${GREEN}yes${NC}"
+        local uptime
+        uptime=$(get_container_uptime "$container")
+        echo "  Uptime:        $uptime"
+    else
+        echo -e "  Running:       ${RED}no${NC}"
+        echo ""
+        echo "Container is not running. Use 'forage-ctl reset $name' to restart."
+        return
+    fi
+    echo ""
+
+    # Health checks
+    echo "Health Checks:"
+
+    # SSH check
+    if check_ssh_health "$port"; then
+        echo -e "  SSH:           ${GREEN}reachable${NC}"
+    else
+        echo -e "  SSH:           ${RED}unreachable${NC}"
+        echo ""
+        echo "SSH is not responding. The container may still be starting."
+        return
+    fi
+
+    # Tmux check
+    if check_tmux_health "$port"; then
+        echo -e "  Tmux Session:  ${GREEN}active${NC}"
+
+        # Get tmux window info
+        local windows
+        windows=$(ssh -p "$port" -o ConnectTimeout=2 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes agent@localhost 'tmux list-windows -t forage -F "#{window_index}:#{window_name}"' 2>/dev/null)
+        if [[ -n "$windows" ]]; then
+            echo "  Tmux Windows:"
+            echo "$windows" | while read -r win; do
+                echo "    - $win"
+            done
+        fi
+    else
+        echo -e "  Tmux Session:  ${YELLOW}not found${NC}"
+    fi
+    echo ""
+
+    # Connection info
+    echo "Connect:"
+    echo "  forage-ctl ssh $name"
+    echo "  ssh -p $port agent@localhost"
 }
 
 # Show container logs
@@ -1323,6 +1498,9 @@ main() {
             ;;
         ps|list)
             cmd_ps
+            ;;
+        status)
+            cmd_status "$@"
             ;;
         ssh)
             cmd_ssh "$@"

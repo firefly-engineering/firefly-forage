@@ -626,7 +626,7 @@ forage-ctl down --all
 ### Phase 3: Robustness & UX
 
 - [x] Better port allocation (find free ports)
-- [ ] Health checks
+- [x] Health checks
 - [ ] Logging integration
 - [x] forage-ctl: exec, reset
 - [x] forage-ctl: logs, start, shell
