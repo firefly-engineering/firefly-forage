@@ -3,10 +3,16 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    extra-container.url = "github:erikarvstedt/extra-container";
+    extra-container.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      extra-container,
+    }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -20,7 +26,7 @@
     {
       nixosModules = {
         default = self.nixosModules.host;
-        host = import ./modules/host.nix { inherit self; };
+        host = import ./modules/host.nix { inherit self extra-container; };
       };
 
       lib = import ./lib { inherit (nixpkgs) lib; };
@@ -31,7 +37,9 @@
           pkgs = pkgsFor system;
         in
         {
-          forage-ctl = pkgs.callPackage ./packages/forage-ctl { };
+          forage-ctl = pkgs.callPackage ./packages/forage-ctl {
+            extra-container = extra-container.packages.${system}.default;
+          };
           default = self.packages.${system}.forage-ctl;
         }
       );
