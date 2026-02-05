@@ -177,6 +177,75 @@ func TestGenerateNixConfig_NoNixpkgsRev(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_ProxyMode(t *testing.T) {
+	cfg := &ContainerConfig{
+		Name:        "test-sandbox",
+		Port:        2200,
+		NetworkSlot: 1,
+		Template: &config.Template{
+			Network: "full",
+			Agents: map[string]config.AgentConfig{
+				"claude": {
+					AuthEnvVar: "ANTHROPIC_API_KEY",
+					SecretName: "anthropic-api-key",
+				},
+			},
+		},
+		HostConfig: &config.HostConfig{},
+		ProxyURL:   "http://10.100.1.1:8080",
+	}
+
+	result := GenerateNixConfig(cfg)
+
+	// Should contain proxy environment variables
+	if !strings.Contains(result, "ANTHROPIC_BASE_URL") {
+		t.Error("Config should contain ANTHROPIC_BASE_URL when proxy is enabled")
+	}
+	if !strings.Contains(result, "http://10.100.1.1:8080") {
+		t.Error("Config should contain proxy URL")
+	}
+	if !strings.Contains(result, "X-Forage-Sandbox") {
+		t.Error("Config should contain X-Forage-Sandbox header")
+	}
+	if !strings.Contains(result, "test-sandbox") {
+		t.Error("Config should contain sandbox name in header")
+	}
+	// Should NOT contain direct secret reading when proxy is enabled
+	if strings.Contains(result, "cat /run/secrets/anthropic-api-key") {
+		t.Error("Config should not read secrets directly when proxy is enabled")
+	}
+}
+
+func TestGenerateNixConfig_NoProxy(t *testing.T) {
+	cfg := &ContainerConfig{
+		Name:        "test-sandbox",
+		Port:        2200,
+		NetworkSlot: 1,
+		Template: &config.Template{
+			Network: "full",
+			Agents: map[string]config.AgentConfig{
+				"claude": {
+					AuthEnvVar: "ANTHROPIC_API_KEY",
+					SecretName: "anthropic-api-key",
+				},
+			},
+		},
+		HostConfig: &config.HostConfig{},
+		ProxyURL:   "", // No proxy
+	}
+
+	result := GenerateNixConfig(cfg)
+
+	// Should contain direct secret reading
+	if !strings.Contains(result, "cat /run/secrets/anthropic-api-key") {
+		t.Error("Config should read secrets directly when proxy is disabled")
+	}
+	// Should NOT contain proxy URL
+	if strings.Contains(result, "ANTHROPIC_BASE_URL") {
+		t.Error("Config should not contain ANTHROPIC_BASE_URL when proxy is disabled")
+	}
+}
+
 func TestGenerateSkills(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:          "test-sandbox",

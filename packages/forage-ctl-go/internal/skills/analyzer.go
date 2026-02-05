@@ -370,11 +370,29 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 		for name, agent := range template.Agents {
 			sb.WriteString("- **" + name + "**")
 			if agent.AuthEnvVar != "" {
-				sb.WriteString(" (auth via $" + agent.AuthEnvVar + ")")
+				if template.UseProxy {
+					sb.WriteString(" (auth via proxy)")
+				} else {
+					sb.WriteString(" (auth via $" + agent.AuthEnvVar + ")")
+				}
 			}
 			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
+	}
+
+	// API Proxy section
+	if template.UseProxy {
+		sb.WriteString("## API Proxy\n\n")
+		sb.WriteString("This sandbox uses an API proxy for authentication. API keys are not stored\n")
+		sb.WriteString("in this container - they are injected by the proxy on the host.\n\n")
+		sb.WriteString("**How it works:**\n")
+		sb.WriteString("- `ANTHROPIC_BASE_URL` points to the host proxy\n")
+		sb.WriteString("- Requests are forwarded with API key injection\n")
+		sb.WriteString("- Rate limiting and audit logging are applied\n\n")
+		sb.WriteString("**Limitations:**\n")
+		sb.WriteString("- Only works with API key authentication\n")
+		sb.WriteString("- For Max/Pro plans, use `claude login` directly (auth stays in sandbox)\n\n")
 	}
 
 	// Guidelines

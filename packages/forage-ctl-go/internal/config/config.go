@@ -23,6 +23,7 @@ type HostConfig struct {
 	StateDir           string            `json:"stateDir"`
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
+	ProxyURL           string            `json:"proxyUrl,omitempty"` // URL of the forage-proxy server
 }
 
 type PortRange struct {
@@ -38,6 +39,7 @@ type Template struct {
 	AllowedHosts  []string               `json:"allowedHosts"`
 	Agents        map[string]AgentConfig `json:"agents"`
 	ExtraPackages []string               `json:"extraPackages"`
+	UseProxy      bool                   `json:"useProxy,omitempty"` // Use forage-proxy for API calls
 }
 
 type AgentConfig struct {

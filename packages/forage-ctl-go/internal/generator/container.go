@@ -22,6 +22,7 @@ type ContainerConfig struct {
 	WorkspaceMode   string
 	SourceRepo      string
 	NixpkgsRev      string
+	ProxyURL        string // URL of the forage-proxy server (if using proxy mode)
 }
 
 // GenerateNixConfig generates the nix configuration for the container
@@ -53,7 +54,7 @@ func GenerateNixConfig(cfg *ContainerConfig) string {
 	networkConfig := buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot)
 
 	// Build agent packages and environment
-	agentConfig := buildAgentConfig(cfg.Template.Agents)
+	agentConfig := buildAgentConfig(cfg.Template.Agents, cfg.Name, cfg.ProxyURL)
 
 	// Build registry config for nix pinning
 	registryConfig := ""
@@ -153,7 +154,7 @@ type agentConfigResult struct {
 	environment string
 }
 
-func buildAgentConfig(agents map[string]config.AgentConfig) agentConfigResult {
+func buildAgentConfig(agents map[string]config.AgentConfig, sandboxName string, proxyURL string) agentConfigResult {
 	var packages []string
 	var envVars []string
 
@@ -161,10 +162,18 @@ func buildAgentConfig(agents map[string]config.AgentConfig) agentConfigResult {
 		if agent.PackagePath != "" {
 			packages = append(packages, agent.PackagePath)
 		}
-		if agent.AuthEnvVar != "" && agent.SecretName != "" {
+		// When using proxy, don't inject secrets directly - the proxy will inject them
+		if proxyURL == "" && agent.AuthEnvVar != "" && agent.SecretName != "" {
 			envVars = append(envVars, fmt.Sprintf(`%s = "$(cat /run/secrets/%s 2>/dev/null || echo '')"`,
 				agent.AuthEnvVar, agent.SecretName))
 		}
+	}
+
+	// Add proxy configuration if enabled
+	if proxyURL != "" {
+		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_BASE_URL = %q`, proxyURL))
+		// Add custom header to identify the sandbox
+		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_CUSTOM_HEADERS = "X-Forage-Sandbox: %s"`, sandboxName))
 	}
 
 	envConfig := ""

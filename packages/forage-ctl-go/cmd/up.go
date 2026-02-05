@@ -163,6 +163,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return errors.ConfigError("failed to setup secrets", err)
 	}
 
+	// Determine proxy URL
+	proxyURL := ""
+	if template.UseProxy && hostConfig.ProxyURL != "" {
+		proxyURL = hostConfig.ProxyURL
+		logging.Debug("using API proxy", "url", proxyURL)
+	}
+
 	// Generate container configuration
 	containerCfg := &generator.ContainerConfig{
 		Name:           name,
@@ -176,6 +183,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		WorkspaceMode:  workspaceMode,
 		SourceRepo:     sourceRepo,
 		NixpkgsRev:     hostConfig.NixpkgsRev,
+		ProxyURL:       proxyURL,
 	}
 
 	nixConfig := generator.GenerateNixConfig(containerCfg)

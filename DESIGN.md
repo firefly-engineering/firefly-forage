@@ -680,23 +680,40 @@ Features deferred from Phase 3 that benefit from Go rewrite:
 - [x] DNS filtering
 - [x] Network mode switching
 
-### Phase 7: API Bridge (Future)
+### Phase 7: API Proxy
 
-- [ ] Proxy service running on host
-- [ ] Auth injection at proxy level
-- [ ] Rate limiting
-- [ ] Audit logging
-- [ ] Secrets never enter sandbox
+HTTP proxy for API key injection, rate limiting, and audit logging.
+
+- [x] Proxy service running on host (forage-proxy)
+- [x] Auth injection for API keys (reads from /run/secrets)
+- [x] Per-sandbox rate limiting
+- [x] Request/response audit logging
+- [x] Sandbox configuration for proxy mode
+- [x] Documentation of limitations
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Sandbox         │     │ API Bridge       │     │ External APIs   │
+│ Sandbox         │     │ forage-proxy     │     │ External APIs   │
 │                 │     │ (on host)        │     │                 │
-│ claude-wrapper ─┼────►│ - Auth injection │────►│ api.anthropic.  │
-│  (no secrets)   │     │ - Rate limiting  │     │                 │
-│                 │     │ - Audit logs     │     │                 │
+│ ANTHROPIC_BASE  │     │ - Read API key   │     │                 │
+│ _URL=proxy:8080─┼────►│ - Inject header  │────►│ api.anthropic.  │
+│                 │     │ - Rate limit     │     │                 │
+│ (no API key)    │     │ - Audit log      │     │                 │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
+
+**Limitations:**
+
+This approach only works for **API key authentication**. For Claude Max/Pro plans
+(OAuth-based), the "secrets never enter sandbox" goal is not achievable without
+significant complexity. Max plan users should:
+
+1. Run `claude login` inside the sandbox (token stored in keychain, not env var)
+2. Use the proxy for rate limiting and audit logging only (auth passes through)
+
+The proxy still provides value for Max plans (rate limiting, logging) but cannot
+inject authentication. See [LLM Gateway docs](https://code.claude.com/docs/en/llm-gateway)
+for official gateway configuration options.
 
 ### Phase 8: Git Worktree Backend
 
