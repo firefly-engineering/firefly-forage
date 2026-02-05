@@ -177,10 +177,22 @@ func TestLoadTemplate_NotFound(t *testing.T) {
 func TestListTemplates(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create two templates
+	// Create two valid templates (must have agents with all required fields)
 	templates := []Template{
-		{Name: "claude", Description: "Claude sandbox"},
-		{Name: "multi", Description: "Multi-agent sandbox"},
+		{
+			Name:        "claude",
+			Description: "Claude sandbox",
+			Agents: map[string]AgentConfig{
+				"claude": {PackagePath: "claude-code", SecretName: "anthropic-api-key", AuthEnvVar: "ANTHROPIC_API_KEY"},
+			},
+		},
+		{
+			Name:        "multi",
+			Description: "Multi-agent sandbox",
+			Agents: map[string]AgentConfig{
+				"agent1": {PackagePath: "agent1", SecretName: "key1", AuthEnvVar: "API_KEY"},
+			},
+		},
 	}
 
 	for _, tmpl := range templates {

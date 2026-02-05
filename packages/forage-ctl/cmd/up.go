@@ -1,21 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 	"github.com/spf13/cobra"
 )
 
@@ -44,329 +35,68 @@ func init() {
 
 func runUp(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
+	ctx := context.Background()
 
 	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
 
-	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified
-	flagCount := 0
-	if upWorkspace != "" {
-		flagCount++
-	}
-	if upRepo != "" {
-		flagCount++
-	}
-	if upGitWorktree != "" {
-		flagCount++
-	}
-	if flagCount == 0 {
-		return errors.New(errors.ExitGeneralError, "one of --workspace, --repo, or --git-worktree is required")
-	}
-	if flagCount > 1 {
-		return errors.New(errors.ExitGeneralError, "--workspace, --repo, and --git-worktree are mutually exclusive")
-	}
-
-	// Check if sandbox already exists
-	if config.SandboxExists(paths.SandboxesDir, name) {
-		return errors.New(errors.ExitGeneralError, fmt.Sprintf("sandbox %s already exists", name))
-	}
-
-	// Load configurations
-	logging.Debug("loading host config", "configDir", paths.ConfigDir)
-	hostConfig, err := config.LoadHostConfig(paths.ConfigDir)
+	// Parse workspace mode from flags
+	opts, err := parseCreateOptions(name)
 	if err != nil {
-		return errors.ConfigError("failed to load host config", err)
+		return err
 	}
 
-	logging.Debug("loading template", "template", upTemplate)
-	template, err := config.LoadTemplate(paths.TemplatesDir, upTemplate)
+	// Create the sandbox using the sandbox package
+	creator, err := sandbox.NewCreator()
 	if err != nil {
-		return errors.TemplateNotFound(upTemplate)
+		return errors.ConfigError("failed to initialize", err)
 	}
 
-	// List existing sandboxes for port allocation
-	sandboxes, err := config.ListSandboxes(paths.SandboxesDir)
+	logInfo("Creating sandbox %s...", name)
+
+	result, err := creator.Create(ctx, opts)
 	if err != nil {
-		logging.Debug("no existing sandboxes found", "error", err)
-		sandboxes = []*config.SandboxMetadata{}
-	}
-
-	// Allocate port and network slot
-	logging.Debug("allocating port", "portRange", hostConfig.PortRange)
-	allocatedPort, networkSlot, err := port.Allocate(hostConfig, sandboxes)
-	if err != nil {
-		return errors.PortAllocationFailed(err)
-	}
-	logging.Debug("port allocated", "port", allocatedPort, "slot", networkSlot)
-
-	// Determine workspace mode and effective workspace path
-	var workspaceMode string
-	var effectiveWorkspace string
-	var sourceRepo string
-	var gitBranch string
-	var backend workspace.Backend
-
-	if upRepo != "" || upGitWorktree != "" {
-		// VCS workspace mode (jj or git-worktree)
-		var repoPath string
-		if upRepo != "" {
-			repoPath = upRepo
-			backend = workspace.JJ()
-		} else {
-			repoPath = upGitWorktree
-			backend = workspace.Git()
-		}
-
-		absRepo, err := filepath.Abs(repoPath)
-		if err != nil {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("invalid repo path: %s", err))
-		}
-
-		logging.Debug("checking repository", "backend", backend.Name(), "path", absRepo)
-		if !backend.IsRepo(absRepo) {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("not a %s repository: %s", backend.Name(), absRepo))
-		}
-
-		if backend.Exists(absRepo, name) {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("%s workspace %s already exists in repo", backend.Name(), name))
-		}
-
-		workspaceMode = backend.Name()
-		sourceRepo = absRepo
-		effectiveWorkspace = filepath.Join(paths.WorkspacesDir, name)
-
-		// For git backend, store the branch name
-		if gitBackend, ok := backend.(*workspace.GitBackend); ok {
-			gitBranch = gitBackend.BranchName(name)
-		}
-
-		// Create workspace
-		logInfo("Creating %s workspace...", backend.Name())
-		logging.Debug("creating workspaces directory", "path", paths.WorkspacesDir)
-		if err := os.MkdirAll(paths.WorkspacesDir, 0755); err != nil {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("failed to create workspaces directory: %s", err))
-		}
-
-		logging.Debug("creating workspace", "backend", backend.Name(), "repo", absRepo, "name", name, "path", effectiveWorkspace)
-		if err := backend.Create(absRepo, name, effectiveWorkspace); err != nil {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("failed to create %s workspace: %s", backend.Name(), err))
-		}
-	} else {
-		// Direct workspace mode
-		absWorkspace, err := filepath.Abs(upWorkspace)
-		if err != nil {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("invalid workspace path: %s", err))
-		}
-
-		if _, err := os.Stat(absWorkspace); os.IsNotExist(err) {
-			return errors.New(errors.ExitGeneralError, fmt.Sprintf("workspace does not exist: %s", absWorkspace))
-		}
-
-		workspaceMode = "direct"
-		effectiveWorkspace = absWorkspace
-	}
-
-	logging.Debug("workspace configured", "mode", workspaceMode, "path", effectiveWorkspace)
-
-	// Create metadata
-	metadata := &config.SandboxMetadata{
-		Name:            name,
-		Template:        upTemplate,
-		Port:            allocatedPort,
-		Workspace:       effectiveWorkspace,
-		NetworkSlot:     networkSlot,
-		CreatedAt:       time.Now().Format(time.RFC3339),
-		WorkspaceMode:   workspaceMode,
-		SourceRepo:      sourceRepo,
-		JJWorkspaceName: name, // For jj mode, workspace name equals sandbox name
-		GitBranch:       gitBranch,
-	}
-
-	// Set up secrets
-	secretsPath := filepath.Join(paths.SecretsDir, name)
-	logging.Debug("setting up secrets", "path", secretsPath)
-	if err := setupSecrets(secretsPath, template, hostConfig); err != nil {
-		cleanup(metadata, paths, hostConfig, backend)
-		return errors.ConfigError("failed to setup secrets", err)
-	}
-
-	// Determine proxy URL
-	proxyURL := ""
-	if template.UseProxy && hostConfig.ProxyURL != "" {
-		proxyURL = hostConfig.ProxyURL
-		logging.Debug("using API proxy", "url", proxyURL)
-	}
-
-	// Generate container configuration
-	containerCfg := &generator.ContainerConfig{
-		Name:           name,
-		Port:           allocatedPort,
-		NetworkSlot:    networkSlot,
-		Workspace:      effectiveWorkspace,
-		SecretsPath:    secretsPath,
-		AuthorizedKeys: hostConfig.AuthorizedKeys,
-		Template:       template,
-		HostConfig:     hostConfig,
-		WorkspaceMode:  workspaceMode,
-		SourceRepo:     sourceRepo,
-		NixpkgsRev:     hostConfig.NixpkgsRev,
-		ProxyURL:       proxyURL,
-	}
-
-	nixConfig := generator.GenerateNixConfig(containerCfg)
-
-	// Write container config
-	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
-	logging.Debug("writing container config", "path", configPath)
-	if err := os.MkdirAll(paths.SandboxesDir, 0755); err != nil {
-		cleanup(metadata, paths, hostConfig, backend)
-		return errors.ContainerFailed("create sandboxes directory", err)
-	}
-	if err := os.WriteFile(configPath, []byte(nixConfig), 0644); err != nil {
-		cleanup(metadata, paths, hostConfig, backend)
-		return errors.ContainerFailed("write config", err)
-	}
-
-	// Create container via runtime
-	logInfo("Creating container...")
-	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := runtime.Create(runtime.CreateOptions{
-		Name:       name,
-		ConfigPath: configPath,
-		Start:      true,
-	}); err != nil {
-		cleanup(metadata, paths, hostConfig, backend)
-		return errors.ContainerFailed("create", err)
-	}
-
-	// Save metadata
-	logging.Debug("saving metadata")
-	if err := config.SaveSandboxMetadata(paths.SandboxesDir, metadata); err != nil {
-		cleanup(metadata, paths, hostConfig, backend)
-		return errors.ConfigError("failed to save metadata", err)
-	}
-
-	// Wait for SSH to be ready
-	logInfo("Waiting for sandbox to be ready...")
-	logging.Debug("waiting for SSH", "port", allocatedPort, "timeout", 30)
-	if !waitForSSH(allocatedPort, 30) {
-		logWarning("SSH not ready after 30 seconds, sandbox may still be starting")
-	}
-
-	// Analyze project and inject skills file
-	logging.Debug("analyzing workspace for project-aware skills", "path", effectiveWorkspace)
-	analyzer := skills.NewAnalyzer(effectiveWorkspace)
-	projectInfo := analyzer.Analyze()
-	logging.Debug("project analysis complete",
-		"type", projectInfo.Type,
-		"buildSystem", projectInfo.BuildSystem,
-		"frameworks", projectInfo.Frameworks)
-
-	skillsContent := skills.GenerateSkills(metadata, template, projectInfo)
-	skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
-	if err := os.WriteFile(skillsPath, []byte(skillsContent), 0644); err != nil {
-		logging.Warn("failed to save skills file", "error", err)
-	}
-
-	// Copy skills to container workspace
-	logging.Debug("injecting skills into container")
-	if err := copySkillsToContainer(allocatedPort, skillsContent); err != nil {
-		logging.Warn("failed to inject skills", "error", err)
+		return errors.New(errors.ExitGeneralError, err.Error())
 	}
 
 	logSuccess("Sandbox %s created", name)
-	fmt.Printf("  Port: %d\n", allocatedPort)
-	fmt.Printf("  Workspace: %s\n", effectiveWorkspace)
+	fmt.Printf("  Port: %d\n", result.Port)
+	fmt.Printf("  Workspace: %s\n", result.Workspace)
 	fmt.Printf("  Connect: forage-ctl ssh %s\n", name)
 
 	return nil
 }
 
-func setupSecrets(secretsPath string, template *config.Template, hostConfig *config.HostConfig) error {
-	if err := os.MkdirAll(secretsPath, 0700); err != nil {
-		return err
+// parseCreateOptions parses command flags into CreateOptions.
+func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
+	opts := sandbox.CreateOptions{
+		Name:     name,
+		Template: upTemplate,
 	}
 
-	for _, agent := range template.Agents {
-		if agent.SecretName == "" {
-			continue
-		}
-
-		secretValue, ok := hostConfig.Secrets[agent.SecretName]
-		if !ok {
-			logging.Debug("secret not found in host config", "secret", agent.SecretName)
-			continue
-		}
-
-		secretFile := filepath.Join(secretsPath, agent.SecretName)
-		if err := os.WriteFile(secretFile, []byte(secretValue), 0600); err != nil {
-			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
-		}
-		logging.Debug("secret written", "secret", agent.SecretName)
+	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified
+	flagCount := 0
+	if upWorkspace != "" {
+		flagCount++
+		opts.WorkspaceMode = sandbox.WorkspaceModeDirect
+		opts.WorkspacePath = upWorkspace
+	}
+	if upRepo != "" {
+		flagCount++
+		opts.WorkspaceMode = sandbox.WorkspaceModeJJ
+		opts.RepoPath = upRepo
+	}
+	if upGitWorktree != "" {
+		flagCount++
+		opts.WorkspaceMode = sandbox.WorkspaceModeGitWorktree
+		opts.RepoPath = upGitWorktree
 	}
 
-	return nil
-}
-
-func waitForSSH(port int, timeoutSeconds int) bool {
-	for i := 0; i < timeoutSeconds; i++ {
-		if health.CheckSSH(port) {
-			logging.Debug("SSH ready", "attempt", i+1)
-			return true
-		}
-		time.Sleep(time.Second)
+	if flagCount == 0 {
+		return opts, errors.New(errors.ExitGeneralError, "one of --workspace, --repo, or --git-worktree is required")
 	}
-	return false
-}
-
-func copySkillsToContainer(port int, content string) error {
-	// Use SSH to write the file
-	_, err := ssh.ExecWithOutput(port, "bash", "-c",
-		fmt.Sprintf("cat > /workspace/CLAUDE.md << 'SKILLS_EOF'\n%s\nSKILLS_EOF", content))
-	return err
-}
-
-func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *config.HostConfig, backend workspace.Backend) {
-	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
-
-	var cleanupErrors []string
-
-	// Clean up workspace if created via backend
-	if backend != nil && metadata.SourceRepo != "" && metadata.Workspace != "" {
-		logging.Debug("removing workspace", "backend", backend.Name(), "name", metadata.Name)
-		if err := backend.Remove(metadata.SourceRepo, metadata.Name, metadata.Workspace); err != nil {
-			logging.Warn("failed to remove workspace", "error", err)
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("workspace: %v", err))
-		}
+	if flagCount > 1 {
+		return opts, errors.New(errors.ExitGeneralError, "--workspace, --repo, and --git-worktree are mutually exclusive")
 	}
 
-	// Clean up secrets
-	secretsPath := filepath.Join(paths.SecretsDir, metadata.Name)
-	if err := os.RemoveAll(secretsPath); err != nil {
-		logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("secrets: %v", err))
-	}
-
-	// Clean up config file
-	configPath := filepath.Join(paths.SandboxesDir, metadata.Name+".nix")
-	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-		logging.Warn("failed to remove config file", "path", configPath, "error", err)
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("config: %v", err))
-	}
-
-	// Clean up metadata
-	if err := config.DeleteSandboxMetadata(paths.SandboxesDir, metadata.Name); err != nil {
-		logging.Warn("failed to remove metadata", "name", metadata.Name, "error", err)
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("metadata: %v", err))
-	}
-
-	// Try to destroy container if it was created
-	if err := runtime.Destroy(metadata.Name); err != nil {
-		logging.Debug("container destroy during cleanup", "error", err)
-		// Don't add to errors - container may not have been created
-	}
-
-	if len(cleanupErrors) > 0 {
-		logging.Warn("cleanup completed with errors", "count", len(cleanupErrors))
-	}
+	return opts, nil
 }

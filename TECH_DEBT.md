@@ -190,9 +190,9 @@ config = mkIf cfg.enable {
 
 ## Phase 2: Architecture Improvements
 
-### 2.1 Extract Business Logic from Commands
+### 2.1 Extract Business Logic from Commands ✅
 
-**Priority:** High | **Effort:** Large | **Risk:** Medium
+**Priority:** High | **Effort:** Large | **Risk:** Medium | **Status:** Complete
 
 The `runUp` function is 240+ lines mixing validation, configuration, container creation, and health checks.
 
