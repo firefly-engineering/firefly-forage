@@ -44,7 +44,7 @@ Agents can only persistently modify files in `/workspace`.
 | Mode | Description |
 |------|-------------|
 | `full` | Unrestricted internet access |
-| `restricted` | Allowlist of hosts (planned) |
+| `restricted` | Allowlist of specific hosts |
 | `none` | No network access |
 
 Even with `network = "none"`, containers can communicate with the nix daemon socket.
@@ -145,15 +145,17 @@ forage-ctl reset myproject
 - Check git/jj history for unexpected changes
 - Monitor network traffic if concerned
 
-## Future Security Enhancements
+## Additional Security Features
 
-### API Bridge (Phase 5)
+### API Proxy
 
-A proxy service that:
+The `forage-ctl proxy` command starts an HTTP proxy that:
 - Keeps secrets on the host, never in containers
-- Logs all API calls for audit
-- Enforces rate limits
-- Filters/modifies requests
+- Injects API keys into requests at runtime
+- Can log all API calls for audit
+- Enables rate limiting and request filtering
+
+## Future Security Enhancements
 
 ### Syscall Filtering
 

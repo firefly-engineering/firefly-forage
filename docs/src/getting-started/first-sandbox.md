@@ -91,8 +91,8 @@ forage-ctl ps
 
 Output:
 ```
-NAME            TEMPLATE     PORT   MODE  WORKSPACE                      STATUS
-myproject       claude       2200   dir   /home/user/projects/myproject  running
+NAME            TEMPLATE   PORT   MODE  WORKSPACE                      STATUS
+myproject       claude     2200   dir   /home/user/projects/myproject  ✓ healthy
 ```
 
 ## Reset if Needed

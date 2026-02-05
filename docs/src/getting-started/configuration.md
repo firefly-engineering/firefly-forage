@@ -181,7 +181,7 @@ services.firefly-forage.templates = {
     # ...
   };
 
-  # Restricted to specific hosts (future)
+  # Restricted to specific hosts
   restricted = {
     network = "restricted";
     allowedHosts = [ "api.anthropic.com" "api.openai.com" ];
@@ -190,7 +190,7 @@ services.firefly-forage.templates = {
 };
 ```
 
-> **Note:** `restricted` mode is not yet implemented.
+You can also change network modes at runtime using `forage-ctl network`.
 
 ## Complete Example
 

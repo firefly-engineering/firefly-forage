@@ -149,25 +149,30 @@ forage-ctl down agent-a
 
 The changes made in that workspace remain in the repository history—only the workspace is removed.
 
-## Comparison: --workspace vs --repo
+## Comparison: --workspace vs --repo vs --git-worktree
 
-| Aspect | `--workspace` | `--repo` |
-|--------|---------------|----------|
-| Working directory | Direct bind mount | JJ workspace |
-| Multiple sandboxes | Need separate directories | Share same repo |
-| Isolation | File-level (same files) | Change-level (separate working copies) |
-| VCS | Any (git, jj, etc.) | JJ only |
-| Cleanup | Removes skill files | Forgets JJ workspace |
+| Aspect | `--workspace` | `--repo` | `--git-worktree` |
+|--------|---------------|----------|------------------|
+| Working directory | Direct bind mount | JJ workspace | Git worktree |
+| Multiple sandboxes | Need separate directories | Share same repo | Share same repo |
+| Isolation | File-level (same files) | Change-level (JJ) | Branch-level (git) |
+| VCS | Any (git, jj, etc.) | JJ only | Git only |
+| Cleanup | Removes skill files | Forgets JJ workspace | Removes git worktree |
 
 **Use `--workspace` when:**
 - Simple single-agent workflow
-- Project doesn't use JJ
+- Project doesn't use JJ or git worktrees
 - You want direct file access
 
 **Use `--repo` when:**
 - Multiple agents on same codebase
 - You want change isolation
 - Project uses JJ for version control
+
+**Use `--git-worktree` when:**
+- Multiple agents on same git repository
+- You prefer git over JJ
+- Each agent works on a separate branch (auto-created as `forage-<name>`)
 
 ## Troubleshooting
 

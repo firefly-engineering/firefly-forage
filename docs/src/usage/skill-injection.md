@@ -118,14 +118,9 @@ The Forage skills supplement rather than override your project documentation.
 
 When a sandbox is removed with `forage-ctl down`:
 
-- **Direct mode (`--workspace`)**: The skill file is removed unless `--keep-skills` is passed
+- **Direct mode (`--workspace`)**: The skill file is removed from the workspace
 - **JJ mode (`--repo`)**: The entire workspace directory is removed, including skills
-
-To keep the skill file:
-
-```bash
-forage-ctl down myproject --keep-skills
-```
+- **Git worktree mode (`--git-worktree`)**: The worktree is removed, including skills
 
 ## Customization (Future)
 

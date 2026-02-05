@@ -81,14 +81,14 @@ Controls network access:
 | Mode | Description |
 |------|-------------|
 | `full` | Unrestricted internet access (default) |
-| `restricted` | Only allowed hosts (not yet implemented) |
+| `restricted` | Only allowed hosts can be accessed |
 | `none` | No network access |
 
 ```nix
 network = "full";
 ```
 
-For restricted mode (future):
+For restricted mode:
 
 ```nix
 network = "restricted";
@@ -97,6 +97,8 @@ allowedHosts = [
   "api.openai.com"
 ];
 ```
+
+You can also change network modes at runtime using `forage-ctl network`.
 
 ## Example Templates
 

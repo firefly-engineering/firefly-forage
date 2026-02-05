@@ -32,7 +32,7 @@ multi           claude,aider        full       Multi-agent sandbox
 Create and start a sandbox.
 
 ```bash
-forage-ctl up <name> --template <template> [--workspace <path> | --repo <path>] [--port <port>]
+forage-ctl up <name> --template <template> [--workspace <path> | --repo <path> | --git-worktree <path>]
 ```
 
 **Arguments:**
@@ -48,9 +48,9 @@ forage-ctl up <name> --template <template> [--workspace <path> | --repo <path>] 
 | `--template, -t <name>` | Template to use (required) |
 | `--workspace, -w <path>` | Directory to mount at `/workspace` |
 | `--repo, -r <path>` | JJ repository to create workspace from |
-| `--port, -p <port>` | Specific SSH port (auto-assigned if omitted) |
+| `--git-worktree, -g <path>` | Git repository to create worktree from |
 
-> **Note:** `--workspace` and `--repo` are mutually exclusive. One is required.
+> **Note:** Exactly one of `--workspace`, `--repo`, or `--git-worktree` is required.
 
 **Examples:**
 
@@ -61,8 +61,8 @@ forage-ctl up myproject -t claude -w ~/projects/myproject
 # JJ workspace (creates isolated working copy)
 forage-ctl up agent-a -t claude --repo ~/projects/myrepo
 
-# Specific port
-forage-ctl up myproject -t claude -w ~/projects/myproject -p 2205
+# Git worktree (creates isolated worktree with branch forage-<name>)
+forage-ctl up agent-b -t claude --git-worktree ~/projects/myrepo
 ```
 
 ---
@@ -72,8 +72,7 @@ forage-ctl up myproject -t claude -w ~/projects/myproject -p 2205
 Stop and remove a sandbox.
 
 ```bash
-forage-ctl down <name> [--keep-skills]
-forage-ctl down --all
+forage-ctl down <name>
 ```
 
 **Arguments:**
@@ -82,31 +81,18 @@ forage-ctl down --all
 |----------|-------------|
 | `<name>` | Name of the sandbox to remove |
 
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--keep-skills` | Don't remove injected skill files |
-| `--all` | Remove all sandboxes |
-
-**Examples:**
+**Example:**
 
 ```bash
-# Remove single sandbox
 forage-ctl down myproject
-
-# Remove but keep .claude/forage-skills.md
-forage-ctl down myproject --keep-skills
-
-# Remove all sandboxes
-forage-ctl down --all
 ```
 
 **Cleanup performed:**
 - Stops and destroys the container
-- Removes secrets from `/run/forage-secrets/<name>/`
+- Removes secrets from `/var/lib/forage/secrets/<name>/`
 - For JJ mode: runs `jj workspace forget` and removes workspace directory
-- For direct mode: removes `.claude/forage-skills.md` (unless `--keep-skills`)
+- For git-worktree mode: removes the worktree
+- Removes skills file and container configuration
 - Deletes sandbox metadata
 
 ---
@@ -121,10 +107,10 @@ forage-ctl ps
 
 **Output:**
 ```
-NAME            TEMPLATE   PORT   MODE WORKSPACE                    HEALTH
-myproject       claude     2200   dir  /home/user/projects/myproj   healthy
-agent-a         claude     2201   jj   ...forage/workspaces/agent-a healthy
-agent-b         claude     2202   jj   ...forage/workspaces/agent-b stopped
+NAME            TEMPLATE   PORT   MODE WORKSPACE                    STATUS
+myproject       claude     2200   dir  /home/user/projects/myproj   ✓ healthy
+agent-a         claude     2201   jj   ...forage/workspaces/agent-a ✓ healthy
+agent-b         claude     2202   jj   ...forage/workspaces/agent-b ● stopped
 ```
 
 **Columns:**
@@ -134,18 +120,18 @@ agent-b         claude     2202   jj   ...forage/workspaces/agent-b stopped
 | NAME | Sandbox name |
 | TEMPLATE | Template used |
 | PORT | SSH port |
-| MODE | `dir` (direct workspace) or `jj` (JJ workspace) |
+| MODE | `dir` (direct workspace), `jj` (JJ workspace), or `git` (git worktree) |
 | WORKSPACE | Path mounted at `/workspace` |
-| HEALTH | Health status (see below) |
+| STATUS | Health status (see below) |
 
-**Health statuses:**
+**Status values:**
 
 | Status | Description |
 |--------|-------------|
-| `healthy` | Container running, SSH reachable, tmux session active |
-| `unhealthy` | Container running but SSH not reachable |
-| `no-tmux` | Container running, SSH works, but no tmux session |
-| `stopped` | Container not running |
+| `✓ healthy` | Container running, SSH reachable, tmux session active |
+| `⚠ unhealthy` | Container running but SSH not reachable |
+| `○ no-tmux` | Container running, SSH works, but no tmux session |
+| `● stopped` | Container not running |
 
 ---
 
@@ -219,23 +205,6 @@ ssh -p <port> -t agent@localhost 'tmux attach -t forage || tmux new -s forage'
 - Detach: `Ctrl-b d`
 - New window: `Ctrl-b c`
 - Next/prev window: `Ctrl-b n` / `Ctrl-b p`
-
----
-
-### `ssh-cmd`
-
-Print the SSH command for connecting to a sandbox.
-
-```bash
-forage-ctl ssh-cmd <name>
-```
-
-**Output:**
-```
-ssh -p 2200 -o StrictHostKeyChecking=no agent@myhost
-```
-
-Useful for connecting from remote machines or configuring SSH clients.
 
 ---
 
@@ -383,6 +352,112 @@ Use this when:
 - The container is in a bad state
 - You want a fresh environment
 - The agent has polluted the container filesystem
+
+---
+
+### `network`
+
+Change sandbox network isolation mode.
+
+```bash
+forage-ctl network <name> <mode> [--allow <host>...] [--no-restart]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the sandbox |
+| `<mode>` | Network mode: `full`, `restricted`, or `none` |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--allow <host>` | Additional hosts to allow (restricted mode only) |
+| `--no-restart` | Don't restart sandbox (changes won't take effect until reset) |
+
+**Modes:**
+
+| Mode | Description |
+|------|-------------|
+| `full` | Unrestricted internet access (default) |
+| `restricted` | Only allowed hosts can be accessed |
+| `none` | No network access except SSH for management |
+
+**Examples:**
+
+```bash
+# Switch to no network
+forage-ctl network myproject none
+
+# Switch to restricted with allowed hosts
+forage-ctl network myproject restricted --allow api.anthropic.com
+```
+
+---
+
+### `gateway`
+
+Interactive sandbox selector (gateway mode).
+
+```bash
+forage-ctl gateway [sandbox-name]
+```
+
+If a sandbox name is provided, connects directly. Otherwise, presents an interactive picker.
+
+This command is designed to be used as a login shell for SSH access, providing a single entry point to all sandboxes.
+
+---
+
+### `pick`
+
+Interactive sandbox picker.
+
+```bash
+forage-ctl pick
+```
+
+Opens a TUI for selecting and connecting to sandboxes.
+
+**Controls:**
+- Arrow keys or `j/k` to navigate
+- `/` to filter
+- `Enter` to connect
+- `n` to show new sandbox instructions
+- `d` to show remove instructions
+- `q` or `Esc` to quit
+
+---
+
+### `proxy`
+
+Start the API proxy server.
+
+```bash
+forage-ctl proxy [--port <port>] [--host <host>]
+```
+
+Starts an HTTP proxy that injects API keys into requests. Used for sandboxes that need auth injection without storing secrets in the container.
+
+---
+
+### `runtime`
+
+Show container runtime information.
+
+```bash
+forage-ctl runtime
+```
+
+Displays the active container runtime and lists available runtimes on the system.
+
+**Supported runtimes:**
+- `nspawn` - NixOS (systemd-nspawn via extra-container)
+- `apple` - macOS 13+ (Apple Virtualization.framework)
+- `podman` - Linux, macOS (rootless preferred)
+- `docker` - Linux, macOS, Windows
 
 ---
 

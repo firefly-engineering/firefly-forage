@@ -87,9 +87,15 @@ mdbook serve docs
 
 ## Status
 
-✅ **Phase 1** - Basic sandboxing (complete)
-✅ **Phase 2** - JJ workspace integration (complete)
-🚧 **Phase 3** - Robustness & UX (in progress)
+All implementation phases are complete:
+
+✅ **Phase 1-3** - Basic sandboxing, JJ workspaces, UX improvements
+✅ **Phase 4** - Go rewrite of forage-ctl
+✅ **Phase 5** - Gateway & advanced UX
+✅ **Phase 6** - Network isolation modes
+✅ **Phase 7** - API proxy for auth injection
+✅ **Phase 8** - Git worktree backend
+✅ **Phase 9** - Multi-runtime support (nspawn, Docker, Podman, Apple Container)
 
 ## License
 

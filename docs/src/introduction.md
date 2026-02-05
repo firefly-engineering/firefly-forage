@@ -84,4 +84,14 @@ forage-ctl down myproject
 
 ## Status
 
-Firefly Forage is under active development. Phase 1 (basic sandboxing) and Phase 2 (JJ workspace integration) are complete. See the [roadmap](https://github.com/firefly-engineering/firefly-forage/blob/main/DESIGN.md#implementation-phases) for what's coming next.
+Firefly Forage has completed all planned implementation phases:
+
+- Phases 1-3: Basic sandboxing, JJ workspaces, UX improvements
+- Phase 4: Go rewrite of forage-ctl
+- Phase 5: Gateway & interactive picker
+- Phase 6: Network isolation modes
+- Phase 7: API proxy for auth injection
+- Phase 8: Git worktree backend
+- Phase 9: Multi-runtime support (nspawn, Docker, Podman, Apple Container)
+
+See the [DESIGN.md](https://github.com/firefly-engineering/firefly-forage/blob/main/DESIGN.md) for architecture details.
