@@ -7,6 +7,8 @@ set -euo pipefail
 FORAGE_CONFIG_DIR="${FORAGE_CONFIG_DIR:-/etc/firefly-forage}"
 FORAGE_STATE_DIR="${FORAGE_STATE_DIR:-/var/lib/firefly-forage}"
 FORAGE_CONTAINER_PREFIX="forage-"
+FORAGE_SANDBOXES_DIR="${FORAGE_STATE_DIR}/sandboxes"
+FORAGE_SECRETS_DIR="/run/forage-secrets"
 
 # Colors (disabled if not a terminal)
 if [[ -t 1 ]]; then
@@ -39,7 +41,7 @@ Commands:
     up <name>          Create and start a sandbox
     down <name>        Stop and remove a sandbox
     ps                 List running sandboxes
-    ssh <name>         Connect to a sandbox via SSH
+    ssh <name>         Connect to a sandbox via SSH (attaches to tmux)
     ssh-cmd <name>     Print SSH command for a sandbox
     exec <name> -- <cmd>  Execute command in sandbox
     reset <name>       Reset sandbox (restart with fresh state)
@@ -57,6 +59,23 @@ Examples:
     forage-ctl down myproject
 
 EOF
+}
+
+# Read host configuration
+read_host_config() {
+    local config_file="${FORAGE_CONFIG_DIR}/config.json"
+    if [[ ! -f "$config_file" ]]; then
+        log_error "Host configuration not found: $config_file"
+        log_info "Is firefly-forage enabled in your NixOS configuration?"
+        exit 1
+    fi
+    cat "$config_file"
+}
+
+# Get value from host config
+get_config() {
+    local key="$1"
+    read_host_config | jq -r "$key"
 }
 
 # List available templates
@@ -90,27 +109,68 @@ container_name() {
     echo "${FORAGE_CONTAINER_PREFIX}$1"
 }
 
-# Check if a sandbox exists
-sandbox_exists() {
-    local name="$1"
-    machinectl show "$(container_name "$name")" &>/dev/null
+# Get metadata file path
+metadata_file() {
+    echo "${FORAGE_SANDBOXES_DIR}/$1.json"
 }
 
-# Get sandbox info
-sandbox_info() {
+# Read sandbox metadata
+read_metadata() {
+    local name="$1"
+    local meta_file
+    meta_file=$(metadata_file "$name")
+    if [[ -f "$meta_file" ]]; then
+        cat "$meta_file"
+    else
+        return 1
+    fi
+}
+
+# Write sandbox metadata
+write_metadata() {
+    local name="$1"
+    local data="$2"
+    local meta_file
+    meta_file=$(metadata_file "$name")
+    mkdir -p "$(dirname "$meta_file")"
+    echo "$data" > "$meta_file"
+}
+
+# Delete sandbox metadata
+delete_metadata() {
+    local name="$1"
+    local meta_file
+    meta_file=$(metadata_file "$name")
+    rm -f "$meta_file"
+}
+
+# Check if a sandbox exists (via metadata)
+sandbox_exists() {
+    local name="$1"
+    [[ -f "$(metadata_file "$name")" ]]
+}
+
+# Check if container is running
+container_running() {
     local name="$1"
     local container
     container=$(container_name "$name")
+    machinectl show "$container" &>/dev/null
+}
 
-    if ! machinectl show "$container" &>/dev/null; then
-        return 1
+# Get sandbox status
+sandbox_status() {
+    local name="$1"
+    if ! sandbox_exists "$name"; then
+        echo "not-found"
+        return
     fi
 
-    # Get info from machinectl
-    local state
-    state=$(machinectl show "$container" -p State --value 2>/dev/null || echo "unknown")
-
-    echo "$state"
+    if container_running "$name"; then
+        echo "running"
+    else
+        echo "stopped"
+    fi
 }
 
 # Find an available port
@@ -118,14 +178,386 @@ find_available_port() {
     local start="${1:-2200}"
     local end="${2:-2299}"
 
+    # Also check existing metadata to avoid conflicts
+    local used_ports=()
+    for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
+        [[ -f "$meta_file" ]] || continue
+        used_ports+=("$(jq -r '.port' "$meta_file")")
+    done
+
     for port in $(seq "$start" "$end"); do
-        if ! ss -tuln | grep -q ":$port "; then
+        # Check if port is in use by OS
+        if ss -tuln | grep -q ":$port "; then
+            continue
+        fi
+        # Check if port is reserved by another sandbox
+        local reserved=false
+        for used in "${used_ports[@]}"; do
+            if [[ "$port" == "$used" ]]; then
+                reserved=true
+                break
+            fi
+        done
+        if ! $reserved; then
             echo "$port"
             return 0
         fi
     done
 
     return 1
+}
+
+# Find an available network slot
+find_available_network_slot() {
+    local used_slots=()
+    for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
+        [[ -f "$meta_file" ]] || continue
+        used_slots+=("$(jq -r '.networkSlot' "$meta_file")")
+    done
+
+    for slot in $(seq 1 200); do
+        local reserved=false
+        for used in "${used_slots[@]}"; do
+            if [[ "$slot" == "$used" ]]; then
+                reserved=true
+                break
+            fi
+        done
+        if ! $reserved; then
+            echo "$slot"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Get UID/GID for configured user
+get_user_uid() {
+    local username="$1"
+    id -u "$username" 2>/dev/null || echo "1000"
+}
+
+get_user_gid() {
+    local username="$1"
+    id -g "$username" 2>/dev/null || echo "1000"
+}
+
+# Set up secrets for a sandbox
+setup_secrets() {
+    local name="$1"
+    local template_file="$2"
+
+    local secrets_dir="${FORAGE_SECRETS_DIR}/${name}"
+    mkdir -p "$secrets_dir"
+    chmod 700 "$secrets_dir"
+
+    # Get host secrets configuration
+    local host_secrets
+    host_secrets=$(get_config '.secrets')
+
+    # Copy secrets needed by template agents
+    local agents
+    agents=$(jq -r '.agents | keys[]' "$template_file")
+
+    for agent in $agents; do
+        local secret_name
+        secret_name=$(jq -r ".agents.\"$agent\".secretName" "$template_file")
+        local secret_path
+        secret_path=$(echo "$host_secrets" | jq -r ".\"$secret_name\" // empty")
+
+        if [[ -n "$secret_path" && -f "$secret_path" ]]; then
+            cp "$secret_path" "${secrets_dir}/${secret_name}"
+            chmod 400 "${secrets_dir}/${secret_name}"
+        else
+            log_warning "Secret not found for agent $agent: $secret_name"
+        fi
+    done
+}
+
+# Clean up secrets for a sandbox
+cleanup_secrets() {
+    local name="$1"
+    rm -rf "${FORAGE_SECRETS_DIR:?}/${name:?}"
+}
+
+# Inject skills into workspace
+inject_skills() {
+    local name="$1"
+    local workspace="$2"
+    local template_file="$3"
+
+    local claude_dir="${workspace}/.claude"
+    mkdir -p "$claude_dir"
+
+    # Read template info
+    local network allowed_hosts agents_json
+    network=$(jq -r '.network // "full"' "$template_file")
+    allowed_hosts=$(jq -r '.allowedHosts | join(", ")' "$template_file")
+    agents_json=$(jq -r '.agents | keys | join(", ")' "$template_file")
+
+    # Generate skills content
+    local network_desc
+    case "$network" in
+        full) network_desc="Full internet access" ;;
+        restricted) network_desc="Restricted to allowed hosts: $allowed_hosts" ;;
+        none) network_desc="No network access (air-gapped)" ;;
+        *) network_desc="Unknown" ;;
+    esac
+
+    cat > "${claude_dir}/forage-skills.md" <<EOF
+# Forage Sandbox Skills
+
+You are running inside a Firefly Forage sandbox named \`${name}\`.
+
+## Environment
+
+- **Workspace**: \`/workspace\` (your working directory)
+- **Network**: ${network_desc}
+- **Session**: tmux session \`forage\` (persistent across reconnections)
+
+## Available Agents
+
+${agents_json:-No agents configured}
+
+## Sandbox Constraints
+
+- The root filesystem is ephemeral (tmpfs) - changes outside /workspace are lost on restart
+- \`/nix/store\` is read-only (shared from host)
+- \`/workspace\` is your persistent working directory
+- Secrets are mounted read-only at \`/run/secrets/\`
+
+## Tips
+
+- Use \`tmux\` for long-running processes - your session persists across SSH disconnections
+- All project work should be done in \`/workspace\`
+- The sandbox can be reset with \`forage-ctl reset ${name}\` from the host
+
+## Sub-Agent Spawning
+
+When spawning sub-agents (e.g., with Claude Code's Task tool), be aware:
+- Sub-agents share this same sandbox environment
+- Use tmux windows/panes for parallel agent work
+- Each sub-agent has access to the same workspace and tools
+
+---
+*This file is auto-generated by Firefly Forage. Do not edit manually.*
+EOF
+
+    log_info "Injected skills to ${claude_dir}/forage-skills.md"
+}
+
+# Clean up injected skills
+cleanup_skills() {
+    local workspace="$1"
+    rm -f "${workspace}/.claude/forage-skills.md"
+}
+
+# Wait for SSH to become available
+wait_for_ssh() {
+    local port="$1"
+    local timeout="${2:-60}"
+    local start_time
+    start_time=$(date +%s)
+
+    log_info "Waiting for SSH to become available on port $port..."
+
+    while true; do
+        if ssh -o ConnectTimeout=1 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+           -p "$port" agent@localhost true 2>/dev/null; then
+            return 0
+        fi
+
+        local current_time
+        current_time=$(date +%s)
+        local elapsed=$((current_time - start_time))
+
+        if [[ $elapsed -ge $timeout ]]; then
+            log_error "Timeout waiting for SSH (${timeout}s)"
+            return 1
+        fi
+
+        sleep 1
+    done
+}
+
+# Generate container configuration and create with extra-container
+create_container() {
+    local name="$1"
+    local template_file="$2"
+    local workspace="$3"
+    local port="$4"
+    local network_slot="$5"
+
+    # Get host configuration
+    local config_user authorized_keys_json
+    config_user=$(get_config '.user')
+    authorized_keys_json=$(get_config '.authorizedKeys')
+
+    local host_uid host_gid
+    host_uid=$(get_user_uid "$config_user")
+    host_gid=$(get_user_gid "$config_user")
+
+    # Convert authorized keys to Nix list format
+    local authorized_keys_nix
+    authorized_keys_nix=$(echo "$authorized_keys_json" | jq -r '. | map("\"" + . + "\"") | "[ " + join(" ") + " ]"')
+
+    # Read template data
+    local template_json
+    template_json=$(cat "$template_file")
+    # Note: network mode (full/restricted/none) will be used for firewall rules in future
+    # local network
+    # network=$(echo "$template_json" | jq -r '.network // "full"')
+
+    # Get extra-container path
+    local extra_container_cmd
+    extra_container_cmd=$(get_config '.extraContainerPath')
+
+    # Container IP based on network slot
+    local container_ip="192.168.100.$((network_slot + 10))"
+    local host_ip="192.168.100.1"
+
+    # Build agent packages list
+    local agent_packages=""
+    for agent in $(echo "$template_json" | jq -r '.agents | keys[]'); do
+        local pkg_path auth_env secret_name
+        pkg_path=$(echo "$template_json" | jq -r ".agents.\"$agent\".packagePath")
+        auth_env=$(echo "$template_json" | jq -r ".agents.\"$agent\".authEnvVar")
+        secret_name=$(echo "$template_json" | jq -r ".agents.\"$agent\".secretName")
+
+        # Create wrapper script for agent
+        agent_packages+="
+          (pkgs.writeShellApplication {
+            name = \"$agent\";
+            runtimeInputs = [ (builtins.storePath \"$pkg_path\") ];
+            text = '''
+              if [ -f \"/run/secrets/$secret_name\" ]; then
+                export $auth_env=\"\$(cat /run/secrets/$secret_name)\"
+              fi
+              exec \$(readlink -f $pkg_path/bin/*) \"\$@\"
+            ''';
+          })"
+    done
+
+    # Build extra packages list
+    local extra_pkgs=""
+    for pkg_path in $(echo "$template_json" | jq -r '.extraPackages[]'); do
+        extra_pkgs+=" (builtins.storePath \"$pkg_path\")"
+    done
+
+    # Create temporary Nix file for container config
+    local config_file
+    config_file=$(mktemp --suffix=.nix)
+
+    cat > "$config_file" <<EOF
+{ pkgs, lib, ... }:
+{
+  containers."forage-${name}" = {
+    ephemeral = true;
+    privateNetwork = true;
+    hostAddress = "$host_ip";
+    localAddress = "$container_ip";
+
+    forwardPorts = [{
+      containerPort = 22;
+      hostPort = $port;
+      protocol = "tcp";
+    }];
+
+    bindMounts = {
+      "/nix/store" = {
+        hostPath = "/nix/store";
+        isReadOnly = true;
+      };
+      "/workspace" = {
+        hostPath = "$workspace";
+        isReadOnly = false;
+      };
+      "/run/secrets" = {
+        hostPath = "${FORAGE_SECRETS_DIR}/${name}";
+        isReadOnly = true;
+      };
+    };
+
+    config = { config, pkgs, ... }: {
+      system.stateVersion = "24.11";
+      boot.isContainer = true;
+
+      networking = {
+        hostName = "forage-${name}";
+        firewall.allowedTCPPorts = [ 22 ];
+        useHostResolvConf = lib.mkForce true;
+      };
+
+      users.users.agent = {
+        isNormalUser = true;
+        uid = $host_uid;
+        group = "agent";
+        home = "/home/agent";
+        shell = pkgs.bash;
+        openssh.authorizedKeys.keys = $authorized_keys_nix;
+        extraGroups = [ "wheel" ];
+      };
+
+      users.groups.agent.gid = $host_gid;
+
+      services.openssh = {
+        enable = true;
+        settings = {
+          PermitRootLogin = "no";
+          PasswordAuthentication = false;
+        };
+      };
+
+      systemd.services.forage-tmux = {
+        description = "Forage tmux session";
+        after = [ "multi-user.target" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          Type = "forking";
+          User = "agent";
+          Group = "agent";
+          WorkingDirectory = "/workspace";
+          ExecStart = "\${pkgs.tmux}/bin/tmux new-session -d -s forage -c /workspace";
+          ExecStop = "\${pkgs.tmux}/bin/tmux kill-session -t forage";
+          Restart = "on-failure";
+          RestartSec = "5s";
+        };
+      };
+
+      environment.systemPackages = [
+        pkgs.tmux
+        pkgs.git
+        pkgs.curl
+        pkgs.vim
+        pkgs.coreutils
+        pkgs.bash
+        $agent_packages
+        $extra_pkgs
+      ];
+
+      environment.variables.WORKSPACE = "/workspace";
+
+      security.sudo = {
+        enable = true;
+        wheelNeedsPassword = false;
+      };
+    };
+  };
+}
+EOF
+
+    log_info "Creating container with extra-container..."
+
+    # Run extra-container to create and start
+    if ! sudo "$extra_container_cmd" create --start "$config_file"; then
+        log_error "Failed to create container"
+        rm -f "$config_file"
+        return 1
+    fi
+
+    rm -f "$config_file"
+    return 0
 }
 
 # Create and start a sandbox
@@ -207,76 +639,149 @@ cmd_up() {
         exit 1
     fi
 
+    # Read port range from config
+    local port_from port_to
+    port_from=$(get_config '.portRange.from')
+    port_to=$(get_config '.portRange.to')
+
     # Find available port if not specified
     if [[ -z "$port" ]]; then
-        port=$(find_available_port) || {
-            log_error "No available ports in range"
+        port=$(find_available_port "$port_from" "$port_to") || {
+            log_error "No available ports in range $port_from-$port_to"
             exit 4
         }
+    fi
+
+    # Find available network slot
+    local network_slot
+    network_slot=$(find_available_network_slot) || {
+        log_error "No available network slots"
+        exit 4
+    }
+
+    log_info "Creating sandbox '$name' from template '$template'"
+    log_info "Workspace: $workspace → /workspace"
+    log_info "SSH port: $port"
+    log_info "Network slot: $network_slot (IP: 192.168.100.$((network_slot + 10)))"
+
+    # Set up secrets
+    setup_secrets "$name" "$template_file"
+
+    # Inject skills into workspace
+    inject_skills "$name" "$workspace" "$template_file"
+
+    # Create metadata
+    local created_at
+    created_at=$(date -Iseconds)
+    local metadata
+    metadata=$(jq -n \
+        --arg name "$name" \
+        --arg template "$template" \
+        --argjson port "$port" \
+        --arg workspace "$workspace" \
+        --argjson networkSlot "$network_slot" \
+        --arg createdAt "$created_at" \
+        '{name: $name, template: $template, port: $port, workspace: $workspace, networkSlot: $networkSlot, createdAt: $createdAt}')
+
+    write_metadata "$name" "$metadata"
+
+    # Create and start container
+    if ! create_container "$name" "$template_file" "$workspace" "$port" "$network_slot"; then
+        log_error "Failed to create container"
+        delete_metadata "$name"
+        cleanup_secrets "$name"
+        cleanup_skills "$workspace"
+        exit 5
+    fi
+
+    # Wait for SSH
+    if ! wait_for_ssh "$port" 60; then
+        log_warning "SSH did not become available, but container may still be starting"
+    fi
+
+    log_success "Sandbox '$name' created successfully"
+    log_info "Connect with: forage-ctl ssh $name"
+}
+
+# Stop and remove a sandbox
+cmd_down() {
+    local name="${1:-}"
+    local all=false
+    local keep_skills=false
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --all)
+                all=true
+                shift
+                ;;
+            --keep-skills)
+                keep_skills=true
+                shift
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                exit 1
+                ;;
+            *)
+                name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if $all; then
+        log_info "Stopping all sandboxes..."
+        for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
+            [[ -f "$meta_file" ]] || continue
+            local sandbox_name
+            sandbox_name=$(jq -r '.name' "$meta_file")
+            log_info "Stopping $sandbox_name..."
+            cmd_down "$sandbox_name"
+        done
+        log_success "All sandboxes stopped"
+        return
+    fi
+
+    if [[ -z "$name" ]]; then
+        log_error "Sandbox name is required"
+        exit 1
+    fi
+
+    if ! sandbox_exists "$name"; then
+        log_error "Sandbox not found: $name"
+        exit 2
     fi
 
     local container
     container=$(container_name "$name")
 
-    log_info "Creating sandbox '$name' from template '$template'"
-    log_info "Workspace: $workspace → /workspace"
-    log_info "SSH port: $port"
+    # Get extra-container path
+    local extra_container_cmd
+    extra_container_cmd=$(get_config '.extraContainerPath')
 
-    # TODO: Implement actual container creation
-    # This will use nixos-container or systemd-nspawn directly
-    # For now, this is a placeholder
+    # Read metadata for workspace path
+    local workspace
+    workspace=$(read_metadata "$name" | jq -r '.workspace')
 
-    log_warning "Container creation not yet implemented"
-    log_info "This is a placeholder - actual implementation coming soon"
+    log_info "Stopping sandbox '$name'..."
 
-    # The implementation will:
-    # 1. Generate a NixOS container config from the template
-    # 2. Create the container with appropriate bind mounts
-    # 3. Start the container
-    # 4. Configure SSH port forwarding
+    # Destroy container with extra-container
+    sudo "$extra_container_cmd" destroy "$container" 2>/dev/null || true
 
-    log_success "Sandbox '$name' created (port $port)"
-}
+    # Clean up secrets
+    cleanup_secrets "$name"
 
-# Stop and remove a sandbox
-cmd_down() {
-    local name="$1"
-    local all=false
-
-    if [[ "$name" == "--all" ]]; then
-        all=true
+    # Optionally clean up skills
+    if ! $keep_skills && [[ -n "$workspace" ]]; then
+        cleanup_skills "$workspace"
     fi
 
-    if $all; then
-        log_info "Stopping all sandboxes..."
-        # List all forage containers and stop them
-        for container in $(machinectl list --no-legend | awk '{print $1}' | grep "^${FORAGE_CONTAINER_PREFIX}"); do
-            local sandbox_name="${container#$FORAGE_CONTAINER_PREFIX}"
-            log_info "Stopping $sandbox_name..."
-            machinectl terminate "$container" 2>/dev/null || true
-        done
-        log_success "All sandboxes stopped"
-    else
-        if [[ -z "$name" ]]; then
-            log_error "Sandbox name is required"
-            exit 1
-        fi
+    # Remove metadata
+    delete_metadata "$name"
 
-        local container
-        container=$(container_name "$name")
-
-        if ! sandbox_exists "$name"; then
-            log_error "Sandbox not found: $name"
-            exit 2
-        fi
-
-        log_info "Stopping sandbox '$name'..."
-        machinectl terminate "$container" 2>/dev/null || true
-
-        # TODO: Clean up any additional resources
-
-        log_success "Sandbox '$name' stopped"
-    fi
+    log_success "Sandbox '$name' stopped and removed"
 }
 
 # List running sandboxes
@@ -284,26 +789,25 @@ cmd_ps() {
     printf "%-15s %-12s %-6s %-35s %s\n" "NAME" "TEMPLATE" "PORT" "WORKSPACE" "STATUS"
     printf "%s\n" "$(printf '%.0s-' {1..80})"
 
-    # List all forage containers
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
+    for meta_file in "${FORAGE_SANDBOXES_DIR}"/*.json; do
+        [[ -f "$meta_file" ]] || continue
 
-        local container state
-        container=$(echo "$line" | awk '{print $1}')
-        state=$(echo "$line" | awk '{print $3}')
+        local name template port workspace status
+        name=$(jq -r '.name' "$meta_file")
+        template=$(jq -r '.template' "$meta_file")
+        port=$(jq -r '.port' "$meta_file")
+        workspace=$(jq -r '.workspace' "$meta_file")
 
-        # Skip non-forage containers
-        [[ "$container" != ${FORAGE_CONTAINER_PREFIX}* ]] && continue
+        # Check actual container status
+        status=$(sandbox_status "$name")
 
-        local name="${container#$FORAGE_CONTAINER_PREFIX}"
+        # Truncate workspace if too long
+        if [[ ${#workspace} -gt 33 ]]; then
+            workspace="...${workspace: -30}"
+        fi
 
-        # TODO: Get template and workspace from container metadata
-        local template="unknown"
-        local port="?"
-        local workspace="?"
-
-        printf "%-15s %-12s %-6s %-35s %s\n" "$name" "$template" "$port" "$workspace" "$state"
-    done < <(machinectl list --no-legend 2>/dev/null || true)
+        printf "%-15s %-12s %-6s %-35s %s\n" "$name" "$template" "$port" "$workspace" "$status"
+    done
 }
 
 # Connect to sandbox via SSH
@@ -320,11 +824,15 @@ cmd_ssh() {
         exit 2
     fi
 
-    # TODO: Get port from container metadata
-    local port="2200"  # Placeholder
+    # Get port from metadata
+    local port
+    port=$(read_metadata "$name" | jq -r '.port')
 
     log_info "Connecting to sandbox '$name' on port $port..."
-    exec ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null agent@localhost
+
+    # Connect and attach to tmux session
+    exec ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -t agent@localhost 'tmux attach -t forage || tmux new -s forage'
 }
 
 # Print SSH command
@@ -341,8 +849,10 @@ cmd_ssh_cmd() {
         exit 2
     fi
 
-    # TODO: Get port and hostname from container metadata
-    local port="2200"  # Placeholder
+    # Get port from metadata
+    local port
+    port=$(read_metadata "$name" | jq -r '.port')
+
     local hostname
     hostname=$(hostname)
 
@@ -369,15 +879,18 @@ cmd_exec() {
         exit 1
     fi
 
-    local container
-    container=$(container_name "$name")
-
     if ! sandbox_exists "$name"; then
         log_error "Sandbox not found: $name"
         exit 2
     fi
 
-    exec machinectl shell "$container" /bin/bash -c "$*"
+    # Get port from metadata
+    local port
+    port=$(read_metadata "$name" | jq -r '.port')
+
+    # Execute via SSH
+    exec ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        agent@localhost "$@"
 }
 
 # Reset sandbox
@@ -396,16 +909,44 @@ cmd_reset() {
 
     log_info "Resetting sandbox '$name'..."
 
-    # TODO: Get template and workspace from container metadata
-    # For now, just restart the container
+    # Read metadata to preserve settings
+    local metadata template workspace port network_slot
+    metadata=$(read_metadata "$name")
+    template=$(echo "$metadata" | jq -r '.template')
+    workspace=$(echo "$metadata" | jq -r '.workspace')
+    port=$(echo "$metadata" | jq -r '.port')
+    network_slot=$(echo "$metadata" | jq -r '.networkSlot')
+
+    local template_file="${FORAGE_CONFIG_DIR}/templates/${template}.json"
     local container
     container=$(container_name "$name")
 
-    machinectl terminate "$container" 2>/dev/null || true
-    sleep 1
-    # TODO: Restart with same config
+    # Get extra-container path
+    local extra_container_cmd
+    extra_container_cmd=$(get_config '.extraContainerPath')
 
-    log_success "Sandbox '$name' reset"
+    # Destroy existing container
+    sudo "$extra_container_cmd" destroy "$container" 2>/dev/null || true
+
+    # Re-setup secrets
+    cleanup_secrets "$name"
+    setup_secrets "$name" "$template_file"
+
+    # Re-inject skills
+    inject_skills "$name" "$workspace" "$template_file"
+
+    # Recreate container
+    if ! create_container "$name" "$template_file" "$workspace" "$port" "$network_slot"; then
+        log_error "Failed to recreate container"
+        exit 5
+    fi
+
+    # Wait for SSH
+    if ! wait_for_ssh "$port" 60; then
+        log_warning "SSH did not become available, but container may still be starting"
+    fi
+
+    log_success "Sandbox '$name' reset successfully"
 }
 
 # Main entry point

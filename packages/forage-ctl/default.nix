@@ -7,6 +7,8 @@
   gnugrep,
   gawk,
   findutils,
+  nix,
+  extra-container,
 }:
 writeShellApplication {
   name = "forage-ctl";
@@ -19,6 +21,8 @@ writeShellApplication {
     gnugrep
     gawk
     findutils
+    nix
+    extra-container
   ];
 
   text = builtins.readFile ./forage-ctl.sh;
