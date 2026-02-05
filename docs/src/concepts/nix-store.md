@@ -167,27 +167,44 @@ Garbage collection happens on the host. If the host runs `nix-collect-garbage`, 
 
 Best practice: Don't run aggressive garbage collection while sandboxes are active.
 
-## Future: Registry Pinning
+## Registry Pinning
 
-To ensure consistency across all `nix run nixpkgs#foo` commands, a future enhancement will inject a pinned nix registry:
+Forage automatically pins the nix registry in each sandbox to match the host's nixpkgs version. This ensures consistency across all `nix run nixpkgs#foo` and `nix shell` commands.
 
-```nix
-# In container config
-environment.etc."nix/registry.json".text = builtins.toJSON {
-  version = 2;
-  flakes = [{
-    from = { type = "indirect"; id = "nixpkgs"; };
-    to = {
-      type = "github";
-      owner = "NixOS";
-      repo = "nixpkgs";
-      rev = "abc123...";  # Pinned to host's nixpkgs
-    };
-  }];
-};
+### How It Works
+
+The host module extracts the nixpkgs revision from its flake inputs and passes it to each container. The container's `/etc/nix/registry.json` is configured to resolve `nixpkgs` to this specific revision:
+
+```json
+{
+  "version": 2,
+  "flakes": [{
+    "from": { "type": "indirect", "id": "nixpkgs" },
+    "to": {
+      "type": "github",
+      "owner": "NixOS",
+      "repo": "nixpkgs",
+      "rev": "abc123..."
+    }
+  }]
+}
 ```
 
-This will ensure:
-- All sandboxes use the same nixpkgs version
-- No accumulation of different nixpkgs versions in the store
-- Reproducible tool installations across sandboxes
+### Benefits
+
+- **Consistency**: All sandboxes use the same nixpkgs version
+- **No store bloat**: Packages aren't duplicated across nixpkgs versions
+- **Reproducibility**: Tool installations are reproducible across sandboxes
+- **Cache efficiency**: If the host already has a package, it's instantly available
+
+### Verification
+
+Inside a sandbox, you can verify the pinning:
+
+```bash
+# Show the registry
+nix registry list
+
+# The nixpkgs entry should show the pinned revision
+# nixpkgs flake:nixpkgs github:NixOS/nixpkgs/<rev>
+```

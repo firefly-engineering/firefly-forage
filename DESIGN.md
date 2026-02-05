@@ -96,12 +96,12 @@ The nix store is bind-mounted read-only. All nix operations go through the host'
 
 **Verified:** Tested with `unshare --mount` and confirmed nix builds work.
 
-### Nix Registry Pinning (Future)
+### Nix Registry Pinning
 
-To ensure consistency across all `nix run nixpkgs#foo` and `nix shell` invocations, sandboxes should inject a pinned nix registry:
+Sandboxes automatically have a pinned nix registry that matches the host's nixpkgs version:
 
 ```nix
-# In container config
+# Generated in container config
 environment.etc."nix/registry.json".text = builtins.toJSON {
   version = 2;
   flakes = [
@@ -111,7 +111,7 @@ environment.etc."nix/registry.json".text = builtins.toJSON {
         type = "github";
         owner = "NixOS";
         repo = "nixpkgs";
-        rev = "abc123...";  # Pinned to host's nixpkgs
+        rev = "...";  # Automatically set to host's nixpkgs revision
       };
     }
   ];
@@ -122,9 +122,9 @@ environment.etc."nix/registry.json".text = builtins.toJSON {
 - All agents use the same nixpkgs version
 - Reproducible tool installations across sandboxes
 - No accumulation of different nixpkgs versions in store
-- Can pin to the same nixpkgs used to build the sandbox
+- Pinned to the same nixpkgs used to build the sandbox
 
-**Implementation:** The host module could expose its nixpkgs input revision, and the container config generator would inject this into each sandbox's registry.
+**Implementation:** The host module exposes its nixpkgs input revision via `config.json`, and the container config generator injects this into each sandbox's registry.
 
 ### Instance Tracking: Stateless
 
@@ -634,7 +634,7 @@ forage-ctl down --all
 - [ ] Advanced skill injection (project analysis)
 - [ ] Gateway service with sandbox selector (single port access)
 - [ ] TUI picker for sandbox selection
-- [ ] Nix registry pinning (pin nixpkgs to host version)
+- [x] Nix registry pinning (pin nixpkgs to host version)
 
 ### Phase 4: Network Isolation
 

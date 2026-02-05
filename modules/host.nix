@@ -1,4 +1,4 @@
-{ self, extra-container }:
+{ self, extra-container, nixpkgs }:
 {
   config,
   lib,
@@ -174,6 +174,8 @@ in
             stateDir = cfg.stateDir;
             # Path to extra-container command
             extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
+            # Nixpkgs revision for registry pinning
+            nixpkgsRev = nixpkgs.rev or "unknown";
           };
         };
       }

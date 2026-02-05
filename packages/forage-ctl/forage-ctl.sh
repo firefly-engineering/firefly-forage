@@ -505,6 +505,10 @@ create_container() {
     local extra_container_cmd
     extra_container_cmd=$(get_config '.extraContainerPath')
 
+    # Get nixpkgs revision for registry pinning
+    local nixpkgs_rev
+    nixpkgs_rev=$(get_config '.nixpkgsRev')
+
     # Container IP based on network slot
     local container_ip="192.168.100.$((network_slot + 10))"
     local host_ip="192.168.100.1"
@@ -639,6 +643,22 @@ create_container() {
       ];
 
       environment.variables.WORKSPACE = "/workspace";
+
+      # Pin nixpkgs registry to host's version
+      environment.etc."nix/registry.json".text = builtins.toJSON {
+        version = 2;
+        flakes = [
+          {
+            from = { type = "indirect"; id = "nixpkgs"; };
+            to = {
+              type = "github";
+              owner = "NixOS";
+              repo = "nixpkgs";
+              rev = "$nixpkgs_rev";
+            };
+          }
+        ];
+      };
 
       security.sudo = {
         enable = true;

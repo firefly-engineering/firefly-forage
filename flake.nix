@@ -26,7 +26,7 @@
     {
       nixosModules = {
         default = self.nixosModules.host;
-        host = import ./modules/host.nix { inherit self extra-container; };
+        host = import ./modules/host.nix { inherit self extra-container nixpkgs; };
       };
 
       lib = import ./lib { inherit (nixpkgs) lib; };
