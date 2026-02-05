@@ -42,6 +42,25 @@ in
   - `/workspace` is your persistent working directory
   - Secrets are mounted read-only at `/run/secrets/`
 
+  ## Installing Additional Tools
+
+  Any tool not pre-installed can be used via Nix. The sandbox has access to the
+  host's Nix daemon, so you can run any package from nixpkgs:
+
+  ```bash
+  # Run a tool once
+  nix run nixpkgs#ripgrep -- --help
+
+  # Enter a shell with multiple tools
+  nix shell nixpkgs#jq nixpkgs#yq
+
+  # Build and run a flake
+  nix run github:owner/repo
+  ```
+
+  This works because `/nix/store` is shared (read-only) and the Nix daemon
+  handles all builds on the host. New packages appear instantly in the sandbox.
+
   ## Tips
 
   - Use `tmux` for long-running processes - your session persists across SSH disconnections
