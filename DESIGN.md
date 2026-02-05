@@ -627,10 +627,10 @@ forage-ctl down --all
 
 - [x] Better port allocation (find free ports)
 - [x] Health checks
-- [ ] Logging integration
+- [x] Logging integration (slog with --verbose and --json flags)
 - [x] forage-ctl: exec, reset
 - [x] forage-ctl: logs, start, shell
-- [ ] Error handling improvements
+- [x] Error handling improvements (typed errors with exit codes)
 - [x] Nix registry pinning (pin nixpkgs to host version)
 
 ### Phase 4: Rewrite forage-ctl in Go

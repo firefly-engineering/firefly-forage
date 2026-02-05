@@ -9,9 +9,11 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/container"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/jj"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/port"
 	"github.com/spf13/cobra"
 )
@@ -41,41 +43,48 @@ func runUp(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	paths := config.DefaultPaths()
 
+	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
+
 	// Validate flags
 	if upWorkspace != "" && upRepo != "" {
-		return fmt.Errorf("--workspace and --repo are mutually exclusive")
+		return errors.New(errors.ExitGeneralError, "--workspace and --repo are mutually exclusive")
 	}
 	if upWorkspace == "" && upRepo == "" {
-		return fmt.Errorf("either --workspace or --repo is required")
+		return errors.New(errors.ExitGeneralError, "either --workspace or --repo is required")
 	}
 
 	// Check if sandbox already exists
 	if config.SandboxExists(paths.SandboxesDir, name) {
-		return fmt.Errorf("sandbox %s already exists", name)
+		return errors.New(errors.ExitGeneralError, fmt.Sprintf("sandbox %s already exists", name))
 	}
 
 	// Load configurations
+	logging.Debug("loading host config", "configDir", paths.ConfigDir)
 	hostConfig, err := config.LoadHostConfig(paths.ConfigDir)
 	if err != nil {
-		return fmt.Errorf("failed to load host config: %w", err)
+		return errors.ConfigError("failed to load host config", err)
 	}
 
+	logging.Debug("loading template", "template", upTemplate)
 	template, err := config.LoadTemplate(paths.TemplatesDir, upTemplate)
 	if err != nil {
-		return fmt.Errorf("template not found: %s", upTemplate)
+		return errors.TemplateNotFound(upTemplate)
 	}
 
 	// List existing sandboxes for port allocation
 	sandboxes, err := config.ListSandboxes(paths.SandboxesDir)
 	if err != nil {
+		logging.Debug("no existing sandboxes found", "error", err)
 		sandboxes = []*config.SandboxMetadata{}
 	}
 
 	// Allocate port and network slot
+	logging.Debug("allocating port", "portRange", hostConfig.PortRange)
 	allocatedPort, networkSlot, err := port.Allocate(hostConfig, sandboxes)
 	if err != nil {
-		return fmt.Errorf("failed to allocate port: %w", err)
+		return errors.PortAllocationFailed(err)
 	}
+	logging.Debug("port allocated", "port", allocatedPort, "slot", networkSlot)
 
 	// Determine workspace mode and effective workspace path
 	var workspaceMode string
@@ -87,15 +96,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 		// JJ mode
 		absRepo, err := filepath.Abs(upRepo)
 		if err != nil {
-			return fmt.Errorf("invalid repo path: %w", err)
+			return errors.JJError("invalid repo path", err)
 		}
 
+		logging.Debug("checking jj repo", "path", absRepo)
 		if !jj.IsRepo(absRepo) {
-			return fmt.Errorf("not a jj repository: %s", absRepo)
+			return errors.JJError(fmt.Sprintf("not a jj repository: %s", absRepo), nil)
 		}
 
 		if jj.WorkspaceExists(absRepo, name) {
-			return fmt.Errorf("jj workspace %s already exists in repo", name)
+			return errors.JJError(fmt.Sprintf("jj workspace %s already exists in repo", name), nil)
 		}
 
 		workspaceMode = "jj"
@@ -105,27 +115,31 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 		// Create jj workspace
 		logInfo("Creating jj workspace...")
+		logging.Debug("creating workspaces directory", "path", paths.WorkspacesDir)
 		if err := os.MkdirAll(paths.WorkspacesDir, 0755); err != nil {
-			return fmt.Errorf("failed to create workspaces directory: %w", err)
+			return errors.JJError("failed to create workspaces directory", err)
 		}
 
+		logging.Debug("creating jj workspace", "repo", absRepo, "name", name, "path", effectiveWorkspace)
 		if err := jj.CreateWorkspace(absRepo, name, effectiveWorkspace); err != nil {
-			return fmt.Errorf("failed to create jj workspace: %w", err)
+			return errors.JJError("failed to create jj workspace", err)
 		}
 	} else {
 		// Direct workspace mode
 		absWorkspace, err := filepath.Abs(upWorkspace)
 		if err != nil {
-			return fmt.Errorf("invalid workspace path: %w", err)
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("invalid workspace path: %s", err))
 		}
 
 		if _, err := os.Stat(absWorkspace); os.IsNotExist(err) {
-			return fmt.Errorf("workspace does not exist: %s", absWorkspace)
+			return errors.New(errors.ExitGeneralError, fmt.Sprintf("workspace does not exist: %s", absWorkspace))
 		}
 
 		workspaceMode = "direct"
 		effectiveWorkspace = absWorkspace
 	}
+
+	logging.Debug("workspace configured", "mode", workspaceMode, "path", effectiveWorkspace)
 
 	// Create metadata
 	metadata := &config.SandboxMetadata{
@@ -142,9 +156,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	// Set up secrets
 	secretsPath := filepath.Join(paths.SecretsDir, name)
+	logging.Debug("setting up secrets", "path", secretsPath)
 	if err := setupSecrets(secretsPath, template, hostConfig); err != nil {
 		cleanup(metadata, paths, hostConfig)
-		return fmt.Errorf("failed to setup secrets: %w", err)
+		return errors.ConfigError("failed to setup secrets", err)
 	}
 
 	// Generate container configuration
@@ -166,33 +181,37 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	// Write container config
 	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
+	logging.Debug("writing container config", "path", configPath)
 	if err := os.MkdirAll(paths.SandboxesDir, 0755); err != nil {
 		cleanup(metadata, paths, hostConfig)
-		return fmt.Errorf("failed to create sandboxes directory: %w", err)
+		return errors.ContainerFailed("create sandboxes directory", err)
 	}
 	if err := os.WriteFile(configPath, []byte(nixConfig), 0644); err != nil {
 		cleanup(metadata, paths, hostConfig)
-		return fmt.Errorf("failed to write container config: %w", err)
+		return errors.ContainerFailed("write config", err)
 	}
 
 	// Create container with extra-container
 	logInfo("Creating container...")
+	logging.Debug("running extra-container", "path", hostConfig.ExtraContainerPath, "config", configPath)
 	createCmd := exec.Command("sudo", hostConfig.ExtraContainerPath, "create", "--start", configPath)
 	createCmd.Stdout = os.Stdout
 	createCmd.Stderr = os.Stderr
 	if err := createCmd.Run(); err != nil {
 		cleanup(metadata, paths, hostConfig)
-		return fmt.Errorf("failed to create container: %w", err)
+		return errors.ContainerFailed("create", err)
 	}
 
 	// Save metadata
+	logging.Debug("saving metadata")
 	if err := config.SaveSandboxMetadata(paths.SandboxesDir, metadata); err != nil {
 		cleanup(metadata, paths, hostConfig)
-		return fmt.Errorf("failed to save metadata: %w", err)
+		return errors.ConfigError("failed to save metadata", err)
 	}
 
 	// Wait for SSH to be ready
 	logInfo("Waiting for sandbox to be ready...")
+	logging.Debug("waiting for SSH", "port", allocatedPort, "timeout", 30)
 	if !waitForSSH(allocatedPort, 30) {
 		logWarning("SSH not ready after 30 seconds, sandbox may still be starting")
 	}
@@ -201,12 +220,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 	skillsContent := generator.GenerateSkills(metadata, template)
 	skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
 	if err := os.WriteFile(skillsPath, []byte(skillsContent), 0644); err != nil {
-		logWarning("Failed to save skills file: %v", err)
+		logging.Warn("failed to save skills file", "error", err)
 	}
 
 	// Copy skills to container workspace
+	logging.Debug("injecting skills into container")
 	if err := copySkillsToContainer(allocatedPort, skillsContent); err != nil {
-		logWarning("Failed to inject skills: %v", err)
+		logging.Warn("failed to inject skills", "error", err)
 	}
 
 	logSuccess("Sandbox %s created", name)
@@ -229,6 +249,7 @@ func setupSecrets(secretsPath string, template *config.Template, hostConfig *con
 
 		secretValue, ok := hostConfig.Secrets[agent.SecretName]
 		if !ok {
+			logging.Debug("secret not found in host config", "secret", agent.SecretName)
 			continue
 		}
 
@@ -236,6 +257,7 @@ func setupSecrets(secretsPath string, template *config.Template, hostConfig *con
 		if err := os.WriteFile(secretFile, []byte(secretValue), 0600); err != nil {
 			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
 		}
+		logging.Debug("secret written", "secret", agent.SecretName)
 	}
 
 	return nil
@@ -244,6 +266,7 @@ func setupSecrets(secretsPath string, template *config.Template, hostConfig *con
 func waitForSSH(port int, timeoutSeconds int) bool {
 	for i := 0; i < timeoutSeconds; i++ {
 		if health.CheckSSH(port) {
+			logging.Debug("SSH ready", "attempt", i+1)
 			return true
 		}
 		time.Sleep(time.Second)
@@ -259,8 +282,11 @@ func copySkillsToContainer(port int, content string) error {
 }
 
 func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *config.HostConfig) {
+	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
+
 	// Clean up jj workspace if created
 	if metadata.WorkspaceMode == "jj" && metadata.SourceRepo != "" && metadata.JJWorkspaceName != "" {
+		logging.Debug("forgetting jj workspace", "name", metadata.JJWorkspaceName)
 		jj.ForgetWorkspace(metadata.SourceRepo, metadata.JJWorkspaceName)
 		if metadata.Workspace != "" {
 			os.RemoveAll(metadata.Workspace)
