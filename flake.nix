@@ -62,14 +62,27 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              nixfmt-rfc-style
+              # Go toolchain
+              go
+              gopls
+              gotools
+              go-tools # staticcheck
+
+              # Nix tooling
+              nixfmt
               nil
+
+              # Documentation
               mdbook
+
+              # Testing dependencies
+              git
+              jujutsu
             ];
           };
         }
       );
 
-      formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt);
     };
 }
