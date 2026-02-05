@@ -36,7 +36,7 @@ This document tracks the implementation of security fixes, test coverage improve
 |----|------|--------|-------|
 | TEST-001 | Create `sandbox/creator_test.go` | [x] | Test full creation workflow with mocks |
 | TEST-002 | Create `gateway/server_test.go` | [x] | Test SSH handling and picker logic |
-| TEST-003 | Add runtime implementation tests | [ ] | Docker and nspawn basic tests |
+| TEST-003 | Add runtime implementation tests | [x] | Docker and nspawn basic tests |
 
 ### P2 - Supporting Package Tests
 
