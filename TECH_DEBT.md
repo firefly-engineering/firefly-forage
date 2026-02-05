@@ -435,33 +435,27 @@ Then update `cmd/root.go` to use `logging.User*` instead of local functions.
 
 ## Phase 4: Testing Infrastructure
 
-### 4.1 Add Test Fixtures
+### 4.1 Add Test Fixtures ✅
 
-**Priority:** Medium | **Effort:** Medium | **Risk:** Low
+**Priority:** Medium | **Effort:** Medium | **Risk:** Low | **Status:** Complete
 
-```
-internal/
-├── testutil/
-│   ├── fixtures/
-│   │   ├── valid_host_config.json
-│   │   ├── invalid_host_config.json
-│   │   ├── valid_sandbox_metadata.json
-│   │   └── valid_template.json
-│   ├── mock_fs.go
-│   ├── mock_executor.go
-│   └── assertions.go
-```
+Created:
+- `internal/testutil/fixtures/` with JSON fixture files
+- `internal/testutil/fixtures.go` with fixture loading helpers (using embed.FS)
+- `internal/system/mock.go` with MockFS and MockExecutor (already existed)
+- Tests for all fixture loading functions
 
-### 4.2 Add Unit Tests for Critical Paths
+### 4.2 Add Unit Tests for Critical Paths ✅
 
-**Priority:** High | **Effort:** Large | **Risk:** Low
+**Priority:** High | **Effort:** Large | **Risk:** Low | **Status:** Complete
 
-**Target coverage:**
-- `internal/config/` - Config loading and validation
-- `internal/ssh/` - SSH command building
-- `internal/port/` - Port allocation
-- `internal/health/` - Health check logic
-- `internal/skills/` - Skill file generation
+**Coverage added:**
+- `internal/config/` - Config loading and validation ✓ (existed)
+- `internal/ssh/` - SSH command building ✓ (added ssh_test.go)
+- `internal/port/` - Port allocation ✓ (existed)
+- `internal/health/` - Health check logic ✓ (added health_test.go)
+- `internal/skills/` - Skill file generation ✓ (existed)
+- `internal/system/` - Mock implementations ✓ (added mock_test.go)
 
 **Example test for SSH builder:**
 
@@ -486,29 +480,27 @@ func TestSSHOptionsExecArgs(t *testing.T) {
 }
 ```
 
-### 4.3 Add Integration Test Framework
+### 4.3 Add Integration Test Framework ✅
 
-**Priority:** Medium | **Effort:** Large | **Risk:** Low
+**Priority:** Medium | **Effort:** Large | **Risk:** Low | **Status:** Complete
 
-Create a test harness that can spin up actual containers (in CI with nspawn support):
+Created `internal/integration/harness.go` with:
+- `TestHarness` struct for managing integration test environments
+- Auto-skip when `FORAGE_INTEGRATION_TESTS` env var is not set
+- Template and workspace creation helpers
+- SSH readiness waiting
+- Automatic cleanup of containers and resources
+- Example test showing usage pattern
 
+**Usage:**
 ```go
-// internal/integration/harness.go
-type TestHarness struct {
-    tempDir string
-    runtime runtime.Runtime
+func TestMyIntegrationTest(t *testing.T) {
+    h := NewHarness(t) // Skips if FORAGE_INTEGRATION_TESTS not set
+    h.AddTemplate("test", DefaultTemplate())
+    workspace := h.CreateWorkspace("my-sandbox")
+    // ... create sandbox, run tests ...
+    // Cleanup is automatic via t.Cleanup
 }
-
-func NewHarness(t *testing.T) *TestHarness {
-    // Skip if not running integration tests
-    if os.Getenv("FORAGE_INTEGRATION_TESTS") == "" {
-        t.Skip("integration tests disabled")
-    }
-    // ...
-}
-
-func (h *TestHarness) CreateSandbox(name string, opts ...Option) error { ... }
-func (h *TestHarness) Cleanup() { ... }
 ```
 
 ---

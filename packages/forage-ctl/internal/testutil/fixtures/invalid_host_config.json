@@ -1,0 +1,9 @@
+{
+  "user": "",
+  "portRange": {
+    "from": 3000,
+    "to": 2000
+  },
+  "authorizedKeys": [],
+  "secrets": {}
+}

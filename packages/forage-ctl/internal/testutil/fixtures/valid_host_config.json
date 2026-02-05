@@ -1,0 +1,17 @@
+{
+  "user": "testuser",
+  "portRange": {
+    "from": 2200,
+    "to": 2299
+  },
+  "authorizedKeys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample test@example.com"
+  ],
+  "secrets": {
+    "anthropic-api-key": "sk-ant-test-key-12345",
+    "openai-api-key": "sk-test-openai-key"
+  },
+  "stateDir": "/var/lib/firefly-forage",
+  "extraContainerPath": "/nix/store/abc123-extra-container/bin/extra-container",
+  "nixpkgsRev": "abc123def456"
+}
