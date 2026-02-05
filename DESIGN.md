@@ -631,18 +631,55 @@ forage-ctl down --all
 - [x] forage-ctl: exec, reset
 - [x] forage-ctl: logs, start, shell
 - [ ] Error handling improvements
-- [ ] Advanced skill injection (project analysis)
-- [ ] Gateway service with sandbox selector (single port access)
-- [ ] TUI picker for sandbox selection
 - [x] Nix registry pinning (pin nixpkgs to host version)
 
-### Phase 4: Network Isolation
+### Phase 4: Rewrite forage-ctl in Go
+
+The bash implementation is reaching its limits (~1500 lines). Rewrite in Go for:
+- Better error handling and testing
+- Type safety and maintainability
+- Foundation for gateway service (HTTP server)
+- Easier contributor onboarding
+
+- [ ] Project structure with cobra CLI framework
+- [ ] Port existing commands (up, down, ps, status, ssh, exec, etc.)
+- [ ] Container runtime abstraction (prep for Phase 8)
+- [ ] Structured logging with slog
+- [ ] Unit tests for core logic
+- [ ] Integration tests
+
+```
+forage-ctl/
+├── cmd/
+│   ├── root.go
+│   ├── up.go
+│   ├── down.go
+│   ├── ps.go
+│   └── ...
+├── internal/
+│   ├── container/    # nspawn backend
+│   ├── workspace/    # jj/git workspace management
+│   ├── config/       # host config, templates
+│   └── health/       # health checks
+├── go.mod
+└── main.go
+```
+
+### Phase 5: Gateway & Advanced UX
+
+Features deferred from Phase 3 that benefit from Go rewrite:
+
+- [ ] Gateway service with sandbox selector (single port access)
+- [ ] TUI picker for sandbox selection (bubbletea)
+- [ ] Advanced skill injection (project analysis)
+
+### Phase 6: Network Isolation
 
 - [ ] nftables rules for restricted mode
 - [ ] DNS filtering
 - [ ] Network mode switching
 
-### Phase 5: API Bridge (Future)
+### Phase 7: API Bridge (Future)
 
 - [ ] Proxy service running on host
 - [ ] Auth injection at proxy level
@@ -660,7 +697,7 @@ forage-ctl down --all
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
-### Phase 6: Git Worktree Backend
+### Phase 8: Git Worktree Backend
 
 Alternative to JJ workspaces for projects using plain git.
 
@@ -679,7 +716,7 @@ forage-ctl up agent-b --template claude --git-worktree ~/projects/myrepo
 # git worktree add /var/lib/forage/workspaces/agent-a -b agent-a
 ```
 
-### Phase 7: Container Runtime Abstraction
+### Phase 9: Container Runtime Abstraction
 
 Abstract the container backend to support multiple platforms.
 
