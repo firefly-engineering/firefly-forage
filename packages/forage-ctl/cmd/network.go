@@ -99,8 +99,8 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	if wasRunning && !networkNoRestart {
 		logInfo("Stopping sandbox for network reconfiguration...")
 		logging.Debug("stopping container", "name", name)
-		if err := runtime.Stop(name); err != nil {
-			logging.Warn("failed to stop container", "error", err)
+		if stopErr := runtime.Stop(name); stopErr != nil {
+			logging.Warn("failed to stop container", "error", stopErr)
 		}
 	}
 
@@ -121,7 +121,10 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 		NixpkgsRev:     hostConfig.NixpkgsRev,
 	}
 
-	nixConfig := generator.GenerateNixConfig(containerCfg)
+	nixConfig, err := generator.GenerateNixConfig(containerCfg)
+	if err != nil {
+		return fmt.Errorf("failed to generate container config: %w", err)
+	}
 
 	// Write updated container config
 	configPath := filepath.Join(paths.SandboxesDir, name+".nix")

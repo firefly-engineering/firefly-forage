@@ -7,8 +7,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
-func TestGenerateNixConfig(t *testing.T) {
-	cfg := &ContainerConfig{
+// validTestConfig returns a valid ContainerConfig for testing
+func validTestConfig() *ContainerConfig {
+	return &ContainerConfig{
 		Name:        "test-sandbox",
 		Port:        2200,
 		NetworkSlot: 1,
@@ -35,8 +36,15 @@ func TestGenerateNixConfig(t *testing.T) {
 		WorkspaceMode: "direct",
 		NixpkgsRev:    "abc123def",
 	}
+}
 
-	result := GenerateNixConfig(cfg)
+func TestGenerateNixConfig(t *testing.T) {
+	cfg := validTestConfig()
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
 
 	// Check container name
 	if !strings.Contains(result, "containers.forage-test-sandbox") {
@@ -84,22 +92,15 @@ func TestGenerateNixConfig(t *testing.T) {
 }
 
 func TestGenerateNixConfig_JJMode(t *testing.T) {
-	cfg := &ContainerConfig{
-		Name:        "test-sandbox",
-		Port:        2200,
-		NetworkSlot: 1,
-		Workspace:   "/var/lib/forage/workspaces/test-sandbox",
-		SecretsPath: "/run/secrets/test-sandbox",
-		Template: &config.Template{
-			Name:    "claude",
-			Network: "full",
-		},
-		HostConfig:    &config.HostConfig{},
-		WorkspaceMode: "jj",
-		SourceRepo:    "/home/user/myrepo",
-	}
+	cfg := validTestConfig()
+	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
+	cfg.WorkspaceMode = "jj"
+	cfg.SourceRepo = "/home/user/myrepo"
 
-	result := GenerateNixConfig(cfg)
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
 
 	// Check JJ bind mount
 	if !strings.Contains(result, "/home/user/myrepo/.jj") {
@@ -131,18 +132,14 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.network, func(t *testing.T) {
-			cfg := &ContainerConfig{
-				Name:        "test",
-				Port:        2200,
-				NetworkSlot: 1,
-				Template: &config.Template{
-					Network:      tt.network,
-					AllowedHosts: tt.allowedHosts,
-				},
-				HostConfig: &config.HostConfig{},
-			}
+			cfg := validTestConfig()
+			cfg.Template.Network = tt.network
+			cfg.Template.AllowedHosts = tt.allowedHosts
 
-			result := GenerateNixConfig(cfg)
+			result, err := GenerateNixConfig(cfg)
+			if err != nil {
+				t.Fatalf("GenerateNixConfig failed: %v", err)
+			}
 
 			for _, s := range tt.shouldHave {
 				if !strings.Contains(result, s) {
@@ -160,16 +157,13 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 }
 
 func TestGenerateNixConfig_NoNixpkgsRev(t *testing.T) {
-	cfg := &ContainerConfig{
-		Name:        "test",
-		Port:        2200,
-		NetworkSlot: 1,
-		Template:    &config.Template{Network: "full"},
-		HostConfig:  &config.HostConfig{},
-		NixpkgsRev:  "", // No revision
-	}
+	cfg := validTestConfig()
+	cfg.NixpkgsRev = "" // No revision
 
-	result := GenerateNixConfig(cfg)
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
 
 	// Should not contain registry config when no revision
 	if strings.Contains(result, "registry.json") {
@@ -178,24 +172,13 @@ func TestGenerateNixConfig_NoNixpkgsRev(t *testing.T) {
 }
 
 func TestGenerateNixConfig_ProxyMode(t *testing.T) {
-	cfg := &ContainerConfig{
-		Name:        "test-sandbox",
-		Port:        2200,
-		NetworkSlot: 1,
-		Template: &config.Template{
-			Network: "full",
-			Agents: map[string]config.AgentConfig{
-				"claude": {
-					AuthEnvVar: "ANTHROPIC_API_KEY",
-					SecretName: "anthropic-api-key",
-				},
-			},
-		},
-		HostConfig: &config.HostConfig{},
-		ProxyURL:   "http://10.100.1.1:8080",
-	}
+	cfg := validTestConfig()
+	cfg.ProxyURL = "http://10.100.1.1:8080"
 
-	result := GenerateNixConfig(cfg)
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
 
 	// Should contain proxy environment variables
 	if !strings.Contains(result, "ANTHROPIC_BASE_URL") {
@@ -211,38 +194,116 @@ func TestGenerateNixConfig_ProxyMode(t *testing.T) {
 		t.Error("Config should contain sandbox name in header")
 	}
 	// Should NOT contain direct secret reading when proxy is enabled
-	if strings.Contains(result, "cat /run/secrets/anthropic-api-key") {
+	if strings.Contains(result, "cat /run/secrets/anthropic") {
 		t.Error("Config should not read secrets directly when proxy is enabled")
 	}
 }
 
 func TestGenerateNixConfig_NoProxy(t *testing.T) {
-	cfg := &ContainerConfig{
-		Name:        "test-sandbox",
-		Port:        2200,
-		NetworkSlot: 1,
-		Template: &config.Template{
-			Network: "full",
-			Agents: map[string]config.AgentConfig{
-				"claude": {
-					AuthEnvVar: "ANTHROPIC_API_KEY",
-					SecretName: "anthropic-api-key",
-				},
-			},
-		},
-		HostConfig: &config.HostConfig{},
-		ProxyURL:   "", // No proxy
+	cfg := validTestConfig()
+	cfg.ProxyURL = "" // No proxy
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
 	}
 
-	result := GenerateNixConfig(cfg)
-
 	// Should contain direct secret reading
-	if !strings.Contains(result, "cat /run/secrets/anthropic-api-key") {
+	if !strings.Contains(result, "cat /run/secrets/anthropic") {
 		t.Error("Config should read secrets directly when proxy is disabled")
 	}
 	// Should NOT contain proxy URL
 	if strings.Contains(result, "ANTHROPIC_BASE_URL") {
 		t.Error("Config should not contain ANTHROPIC_BASE_URL when proxy is disabled")
+	}
+}
+
+func TestContainerConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		modify  func(*ContainerConfig)
+		wantErr string
+	}{
+		{
+			name:    "valid config",
+			modify:  func(c *ContainerConfig) {},
+			wantErr: "",
+		},
+		{
+			name:    "missing name",
+			modify:  func(c *ContainerConfig) { c.Name = "" },
+			wantErr: "container name is required",
+		},
+		{
+			name:    "invalid port (zero)",
+			modify:  func(c *ContainerConfig) { c.Port = 0 },
+			wantErr: "invalid port",
+		},
+		{
+			name:    "invalid port (too high)",
+			modify:  func(c *ContainerConfig) { c.Port = 70000 },
+			wantErr: "invalid port",
+		},
+		{
+			name:    "invalid network slot (zero)",
+			modify:  func(c *ContainerConfig) { c.NetworkSlot = 0 },
+			wantErr: "invalid network slot",
+		},
+		{
+			name:    "invalid network slot (too high)",
+			modify:  func(c *ContainerConfig) { c.NetworkSlot = 300 },
+			wantErr: "invalid network slot",
+		},
+		{
+			name:    "missing workspace",
+			modify:  func(c *ContainerConfig) { c.Workspace = "" },
+			wantErr: "workspace path is required",
+		},
+		{
+			name:    "missing secrets path",
+			modify:  func(c *ContainerConfig) { c.SecretsPath = "" },
+			wantErr: "secrets path is required",
+		},
+		{
+			name:    "missing authorized keys",
+			modify:  func(c *ContainerConfig) { c.AuthorizedKeys = nil },
+			wantErr: "at least one authorized key is required",
+		},
+		{
+			name:    "missing template",
+			modify:  func(c *ContainerConfig) { c.Template = nil },
+			wantErr: "template is required",
+		},
+		{
+			name:    "invalid workspace mode",
+			modify:  func(c *ContainerConfig) { c.WorkspaceMode = "invalid" },
+			wantErr: "invalid workspace mode",
+		},
+		{
+			name:    "jj mode without source repo",
+			modify:  func(c *ContainerConfig) { c.WorkspaceMode = "jj"; c.SourceRepo = "" },
+			wantErr: "source repo is required for jj workspace mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			tt.modify(cfg)
+
+			err := cfg.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("Validate() unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("Validate() expected error containing %q, got nil", tt.wantErr)
+				} else if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("Validate() error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+			}
+		})
 	}
 }
 

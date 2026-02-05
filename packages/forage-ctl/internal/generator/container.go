@@ -28,8 +28,54 @@ type ContainerConfig struct {
 	ProxyURL       string // URL of the forage-proxy server (if using proxy mode)
 }
 
-// GenerateNixConfig generates the nix configuration for the container
-func GenerateNixConfig(cfg *ContainerConfig) string {
+// Validate checks that the ContainerConfig has all required fields
+func (c *ContainerConfig) Validate() error {
+	if c.Name == "" {
+		return fmt.Errorf("container name is required")
+	}
+	if c.Port <= 0 || c.Port > 65535 {
+		return fmt.Errorf("invalid port: %d (must be 1-65535)", c.Port)
+	}
+	if c.NetworkSlot < 1 || c.NetworkSlot > 254 {
+		return fmt.Errorf("invalid network slot: %d (must be 1-254)", c.NetworkSlot)
+	}
+	if c.Workspace == "" {
+		return fmt.Errorf("workspace path is required")
+	}
+	if c.SecretsPath == "" {
+		return fmt.Errorf("secrets path is required")
+	}
+	if len(c.AuthorizedKeys) == 0 {
+		return fmt.Errorf("at least one authorized key is required")
+	}
+	if c.Template == nil {
+		return fmt.Errorf("template is required")
+	}
+	if err := c.Template.Validate(); err != nil {
+		return fmt.Errorf("invalid template: %w", err)
+	}
+
+	// Validate workspace mode
+	validModes := map[string]bool{"": true, "direct": true, "jj": true, "git-worktree": true}
+	if !validModes[c.WorkspaceMode] {
+		return fmt.Errorf("invalid workspace mode: %s", c.WorkspaceMode)
+	}
+
+	// jj mode requires source repo
+	if c.WorkspaceMode == "jj" && c.SourceRepo == "" {
+		return fmt.Errorf("source repo is required for jj workspace mode")
+	}
+
+	return nil
+}
+
+// GenerateNixConfig generates the nix configuration for the container.
+// Returns the generated config and any validation error.
+func GenerateNixConfig(cfg *ContainerConfig) (string, error) {
+	if err := cfg.Validate(); err != nil {
+		return "", fmt.Errorf("invalid container config: %w", err)
+	}
+
 	containerName := config.ContainerName(cfg.Name)
 
 	// Build bind mounts
@@ -151,7 +197,7 @@ func GenerateNixConfig(cfg *ContainerConfig) string {
 		registryConfig,
 		config.TmuxSessionName,
 		cfg.Port,
-	)
+	), nil
 }
 
 type agentConfigResult struct {

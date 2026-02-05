@@ -69,7 +69,7 @@ This document tracks the implementation of security fixes, test coverage improve
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
 | ARCH-003 | Persist port registry in metadata | [x] | Remove in-memory sandboxPorts map |
-| ARCH-004 | Add Nix config validation | [ ] | Validate before writing |
+| ARCH-004 | Add Nix config validation | [x] | Validate before writing |
 | ARCH-005 | Replace global runtime in commands | [ ] | Use injected dependencies |
 
 ---
@@ -120,4 +120,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | MAINT-004: Verified logging already standardized | - |
 | 2026-02-05 | MAINT-006: Verified config formats already documented | - |
 | 2026-02-05 | TEST-008: Added GitHub Actions CI workflow | - |
+| 2026-02-05 | ARCH-004: Added Nix config validation | - |
 

@@ -102,7 +102,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 
 	// Set up secrets
 	secretsPath := filepath.Join(c.paths.SecretsDir, opts.Name)
-	if err := c.setupSecrets(secretsPath, template); err != nil {
+	if err = c.setupSecrets(secretsPath, template); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to setup secrets: %w", err)
 	}
@@ -130,7 +130,11 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		ProxyURL:       proxyURL,
 	}
 
-	nixConfig := generator.GenerateNixConfig(containerCfg)
+	nixConfig, err := generator.GenerateNixConfig(containerCfg)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to generate container config: %w", err)
+	}
 
 	// Write container config
 	configPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".nix")
