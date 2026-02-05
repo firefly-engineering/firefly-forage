@@ -32,6 +32,10 @@ func (s *Server) HandleConnection(args []string) error {
 	// If a sandbox name is provided as argument, connect directly
 	if len(args) > 0 && args[0] != "" {
 		sandboxName := args[0]
+		// Validate before attempting connection (defense in depth - ConnectToSandbox also validates)
+		if err := config.ValidateSandboxName(sandboxName); err != nil {
+			return fmt.Errorf("invalid sandbox name: %w", err)
+		}
 		return s.ConnectToSandbox(sandboxName)
 	}
 
@@ -49,7 +53,12 @@ func (s *Server) HandleSSHOriginalCommand() error {
 		// Parse the command - first word is sandbox name
 		parts := strings.Fields(originalCmd)
 		if len(parts) > 0 {
-			return s.ConnectToSandbox(parts[0])
+			sandboxName := parts[0]
+			// Validate before attempting connection (defense in depth)
+			if err := config.ValidateSandboxName(sandboxName); err != nil {
+				return fmt.Errorf("invalid sandbox name in SSH command: %w", err)
+			}
+			return s.ConnectToSandbox(sandboxName)
 		}
 	}
 
