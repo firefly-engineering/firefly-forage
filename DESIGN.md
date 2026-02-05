@@ -617,11 +617,11 @@ forage-ctl down --all
 
 ### Phase 2: JJ Workspace Integration
 
-- [ ] Workspace creation on sandbox up
-- [ ] Workspace cleanup on sandbox down
-- [ ] Mount configuration for shared .jj
-- [ ] Handle workspace conflicts
-- [ ] forage-ctl: --repo flag for jj integration
+- [x] Workspace creation on sandbox up
+- [x] Workspace cleanup on sandbox down
+- [x] Mount configuration for shared .jj
+- [x] Handle workspace conflicts
+- [x] forage-ctl: --repo flag for jj integration
 
 ### Phase 3: Robustness & UX
 
