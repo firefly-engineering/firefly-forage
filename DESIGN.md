@@ -1,0 +1,435 @@
+# Firefly Forage - Design Document
+
+Firefly Forage is a NixOS module for creating isolated, ephemeral sandboxes to run AI coding agents safely.
+
+## Goals
+
+1. **Isolation** - Run AI agents in contained environments
+2. **Efficiency** - Share the nix store read-only, no duplication
+3. **Disposability** - Ephemeral container roots, easy reset
+4. **Multi-agent** - Support multiple concurrent sandboxes
+5. **Security** - Auth obfuscation, optional network isolation
+6. **Usability** - Simple CLI, automatic SSH access
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Host Machine                                                    │
+│                                                                 │
+│  nix-daemon ◄──────────────────────────────┐                    │
+│       │                                    │                    │
+│       ▼                                    │                    │
+│  /nix/store ◄──────────────────────────────┼───────────┐        │
+│  (writable by daemon)                      │           │        │
+│                                            │           │        │
+│  ┌─────────────────────────────┐  ┌────────┴───────────┴──┐     │
+│  │ sandbox-project-a           │  │ sandbox-project-b     │     │
+│  │                             │  │                       │     │
+│  │ /nix/store (ro bind)        │  │ /nix/store (ro bind)  │     │
+│  │ /nix/var/nix/daemon-socket  │  │ /nix/var/nix/daemon.. │     │
+│  │ /workspace ──► ~/proj-a     │  │ /workspace ──► ~/pr.. │     │
+│  │ /run/secrets (ro bind)      │  │ /run/secrets (ro ..)  │     │
+│  │                             │  │                       │     │
+│  │ agent: claude               │  │ agents: claude, open  │     │
+│  │ sshd :22 ──► host:2200      │  │ sshd :22 ──► host:22. │     │
+│  └─────────────────────────────┘  └───────────────────────┘     │
+│                                                                 │
+│  forage-ctl (CLI)                                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Core Concepts
+
+### Sandbox Template
+
+A declarative specification for a type of sandbox:
+- Which agents are available
+- Extra packages to include
+- Network access policy
+- Resource limits (future)
+
+### Sandbox Instance
+
+A running container created from a template:
+- Bound to a specific workspace directory
+- Allocated a unique SSH port
+- Ephemeral root filesystem (tmpfs)
+- Persistent workspace via bind mount
+
+### Agent Wrapper
+
+A generated binary that:
+- Reads auth from a bind-mounted secret file
+- Sets environment variables for the agent
+- Executes the real agent binary
+- Keeps global environment clean (auth obfuscation)
+
+## Design Decisions
+
+### Container Backend: systemd-nspawn
+
+We use NixOS containers (systemd-nspawn) because:
+- Native NixOS integration
+- Lightweight (shares kernel)
+- Excellent bind mount support
+- Built-in networking options
+- No portability requirement outside NixOS
+
+### Nix Store: Read-Only with Daemon Socket
+
+The nix store is bind-mounted read-only. All nix operations go through the host's nix daemon via a bind-mounted socket.
+
+**Bind mounts required:**
+```nix
+"/nix/store" = { hostPath = "/nix/store"; isReadOnly = true; };
+"/nix/var/nix/daemon-socket" = { hostPath = "/nix/var/nix/daemon-socket"; };
+```
+
+**Why this works:**
+1. When `/nix/store` is read-only, nix client detects it can't write
+2. Client automatically uses daemon mode
+3. Daemon on host performs actual store writes
+4. Container sees new paths via the same bind mount
+5. Content-addressed store means no conflicts
+
+**Verified:** Tested with `unshare --mount` and confirmed nix builds work.
+
+### Instance Tracking: Stateless
+
+Instead of maintaining state files, we derive instance information from:
+- Running systemd-nspawn containers (machinectl list)
+- Container naming convention: `forage-{name}`
+- Introspection of bind mounts for workspace info
+
+Benefits:
+- No state to corrupt or get out of sync
+- System is the source of truth
+- Simpler implementation
+
+### User Identity: Same UID as Host
+
+The container runs with a user that has the same UID/GID as the host user who created the sandbox. This ensures:
+- No permission issues with bind-mounted workspace
+- Files created in workspace have correct ownership
+- No need for complex UID mapping
+
+### Auth Obfuscation
+
+Agent authentication is handled via wrapper binaries:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Container                                               │
+│                                                         │
+│  $ claude chat "hello"                                  │
+│       │                                                 │
+│       ▼                                                 │
+│  /usr/bin/claude (wrapper)                              │
+│       │                                                 │
+│       ├─► read /run/secrets/anthropic-api-key           │
+│       ├─► export ANTHROPIC_API_KEY="sk-..."             │
+│       └─► exec /nix/store/.../bin/claude "$@"           │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+The wrapper:
+- Reads auth from a file (not environment variable)
+- Sets env var only for the child process
+- Agent cannot easily discover where auth came from
+- Provides minimal protection against credential exfiltration
+
+### Network Isolation Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `full` | Unrestricted internet | Default, needed for API calls |
+| `restricted` | Allowlist of hosts | Limit to specific APIs |
+| `none` | No network (except daemon) | Maximum isolation |
+
+Implementation:
+- `full`: Use host network or NAT
+- `restricted`: nftables rules in container
+- `none`: Private network with no routing
+
+## Module Structure
+
+```
+firefly-forage/
+├── flake.nix                     # Flake definition
+├── DESIGN.md                     # This document
+├── README.md                     # User documentation
+│
+├── modules/
+│   ├── host.nix                  # NixOS module for host machine
+│   └── sandbox.nix               # Container configuration generator
+│
+├── lib/
+│   ├── mkSandbox.nix             # Sandbox template builder
+│   ├── mkAgentWrapper.nix        # Auth wrapper generator
+│   └── types.nix                 # Custom types for options
+│
+└── packages/
+    └── forage-ctl/               # CLI management tool
+        ├── default.nix
+        └── forage-ctl.sh
+```
+
+## Configuration Interface
+
+### Host Configuration
+
+```nix
+{ inputs, config, pkgs, ... }:
+{
+  imports = [ inputs.firefly-forage.nixosModules.default ];
+
+  services.firefly-forage = {
+    enable = true;
+
+    # SSH access to sandboxes
+    authorizedKeys = config.users.users.myuser.openssh.authorizedKeys.keys;
+
+    # Port range for sandbox SSH (one port per instance)
+    portRange = { from = 2200; to = 2299; };
+
+    # User identity for sandbox (UID/GID matching)
+    user = "myuser";
+
+    # Secrets (paths to files containing API keys)
+    secrets = {
+      anthropic = config.sops.secrets.anthropic-api-key.path;
+      openai = config.sops.secrets.openai-api-key.path;
+    };
+
+    # Sandbox templates
+    templates = {
+      claude = {
+        description = "Claude Code agent sandbox";
+
+        agents.claude = {
+          package = pkgs.claude-code;
+          secretName = "anthropic";
+          authEnvVar = "ANTHROPIC_API_KEY";
+        };
+
+        extraPackages = with pkgs; [
+          ripgrep
+          fd
+          jq
+          tree
+        ];
+
+        network = "full";
+      };
+
+      multi = {
+        description = "Multi-agent sandbox";
+
+        agents = {
+          claude = {
+            package = pkgs.claude-code;
+            secretName = "anthropic";
+            authEnvVar = "ANTHROPIC_API_KEY";
+          };
+          opencode = {
+            package = pkgs.opencode;
+            secretName = "openai";
+            authEnvVar = "OPENAI_API_KEY";
+          };
+        };
+
+        extraPackages = with pkgs; [ ripgrep fd ];
+        network = "full";
+      };
+
+      isolated = {
+        description = "Network-isolated sandbox";
+
+        agents.claude = {
+          package = pkgs.claude-code;
+          secretName = "anthropic";
+          authEnvVar = "ANTHROPIC_API_KEY";
+        };
+
+        network = "none";
+      };
+    };
+  };
+}
+```
+
+## CLI Interface
+
+### Commands
+
+```bash
+# List available templates
+forage-ctl templates
+TEMPLATE    AGENTS          NETWORK    DESCRIPTION
+claude      claude          full       Claude Code agent sandbox
+multi       claude,opencode full       Multi-agent sandbox
+isolated    claude          none       Network-isolated sandbox
+
+# Create and start a sandbox
+forage-ctl up <name> --template <template> --workspace <path>
+forage-ctl up myproject --template claude --workspace ~/projects/myproject
+
+# List running sandboxes
+forage-ctl ps
+NAME        TEMPLATE    PORT    WORKSPACE                      STATUS
+myproject   claude      2200    /home/user/projects/myproject  running
+other       multi       2201    /home/user/projects/other      running
+
+# Connect to sandbox via SSH
+forage-ctl ssh <name>
+forage-ctl ssh myproject
+
+# Get SSH command (for use from remote machines)
+forage-ctl ssh-cmd <name>
+# Output: ssh -p 2200 -o StrictHostKeyChecking=no agent@hostname
+
+# Execute command in sandbox
+forage-ctl exec <name> -- <command>
+forage-ctl exec myproject -- claude --version
+
+# Reset sandbox (restart with fresh ephemeral state)
+forage-ctl reset <name>
+
+# Stop and remove sandbox
+forage-ctl down <name>
+
+# Stop and remove all sandboxes
+forage-ctl down --all
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Sandbox not found |
+| 3 | Template not found |
+| 4 | Port allocation failed |
+| 5 | Container start failed |
+
+## Implementation Phases
+
+### Phase 1: Basic Sandbox
+
+- [ ] Flake structure and module skeleton
+- [ ] Basic host module with template definitions
+- [ ] Container configuration generator
+- [ ] Agent wrapper generator
+- [ ] forage-ctl: up, down, ps, ssh
+- [ ] Port allocation (simple sequential)
+- [ ] Documentation
+
+### Phase 2: Robustness
+
+- [ ] Better port allocation (find free ports)
+- [ ] Health checks
+- [ ] Logging integration
+- [ ] forage-ctl: exec, reset, logs
+- [ ] Error handling improvements
+
+### Phase 3: Network Isolation
+
+- [ ] nftables rules for restricted mode
+- [ ] DNS filtering
+- [ ] Network mode switching
+
+### Phase 4: API Bridge (Future)
+
+- [ ] Proxy service running on host
+- [ ] Auth injection at proxy level
+- [ ] Rate limiting
+- [ ] Audit logging
+- [ ] Secrets never enter sandbox
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Sandbox         │     │ API Bridge       │     │ External APIs   │
+│                 │     │ (on host)        │     │                 │
+│ claude-wrapper ─┼────►│ - Auth injection │────►│ api.anthropic.  │
+│  (no secrets)   │     │ - Rate limiting  │     │                 │
+│                 │     │ - Audit logs     │     │                 │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+## Security Considerations
+
+### Threat Model
+
+**Trusted:**
+- Host system administrator
+- Nix store contents (from nixpkgs/trusted sources)
+
+**Untrusted:**
+- AI agent behavior
+- Code being worked on in workspace
+
+### Mitigations
+
+| Threat | Mitigation |
+|--------|------------|
+| Agent exfiltrates API keys | Auth obfuscation via wrappers |
+| Agent accesses host filesystem | Container isolation, bind mounts only |
+| Agent makes unwanted network calls | Network isolation modes |
+| Agent corrupts sandbox | Ephemeral root, easy reset |
+| Agent escapes container | systemd-nspawn security features |
+
+### Limitations
+
+- Auth obfuscation is not foolproof (determined agent could find it)
+- Network isolation doesn't prevent data exfil via API calls
+- Container escape vulnerabilities may exist
+
+### Future Improvements
+
+- API bridge removes secrets from sandbox entirely
+- Syscall filtering (seccomp)
+- Capability dropping
+- Read-only workspace mode for review tasks
+
+## Testing Strategy
+
+### Unit Tests
+
+- Template validation
+- Port allocation logic
+- Wrapper generation
+
+### Integration Tests
+
+- Container lifecycle (up/down/reset)
+- SSH connectivity
+- Nix builds inside container
+- Agent execution
+
+### Manual Testing
+
+- Real AI agent workflows
+- Multi-agent scenarios
+- Network isolation verification
+
+## Related Projects
+
+- **NixOS Containers**: Built on top of this
+- **devenv**: Development environments (different scope)
+- **nix-shells**: Per-project environments (not isolated)
+- **Docker/Podman**: Alternative container runtimes (not used)
+
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Template** | Declarative specification for a sandbox type |
+| **Instance** | Running sandbox created from a template |
+| **Agent** | AI coding tool (claude-code, opencode, etc.) |
+| **Wrapper** | Generated binary that injects auth and calls agent |
+| **Workspace** | Bind-mounted project directory |
+| **Ephemeral** | Container root that doesn't persist across restarts |
