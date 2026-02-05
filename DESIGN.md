@@ -196,32 +196,57 @@ forage-ctl down agent-a
 
 Sandboxes automatically include "skills" - configuration that teaches agents about available tools and project conventions.
 
-**Injected via CLAUDE.md (for Claude Code):**
-```markdown
-# Sandbox Environment
+**Injection location:** `.claude/forage-skills.md` (or similar)
 
-This is a Firefly Forage sandbox. Follow these conventions:
+This avoids modifying the project's `CLAUDE.md` which may contain valuable upstream information. Claude Code loads instructions from multiple files in `.claude/`.
 
-## Version Control
-- Use `jj` (Jujutsu) instead of `git` for all version control operations
-- Common commands: `jj status`, `jj diff`, `jj commit`, `jj new`
-- This workspace is isolated - commits won't affect other workspaces
-
-## Available Tools
-- ripgrep (rg) - fast search
-- fd - fast file finder
-- jq - JSON processing
-- nix - package management (via daemon)
-
-## Project Structure
-[Auto-generated from repo analysis or user config]
+```
+workspace/
+├── .claude/
+│   ├── forage-skills.md    ◄── Injected by forage (sandbox-specific)
+│   └── settings.json       ◄── May also inject settings here
+├── CLAUDE.md               ◄── Untouched (from upstream repo)
+└── src/
 ```
 
-**Skill sources:**
-1. **Built-in skills**: jj usage, nix conventions, sandbox awareness
-2. **Template skills**: Defined in sandbox template configuration
-3. **Project skills**: From repo's existing CLAUDE.md (merged)
-4. **User skills**: Custom per-sandbox configuration
+**Injected content (.claude/forage-skills.md):**
+```markdown
+# Firefly Forage Sandbox Environment
+
+This workspace is running inside a Firefly Forage sandbox.
+
+## Version Control: JJ (Jujutsu)
+
+Use `jj` instead of `git` for all version control operations:
+
+- `jj status` - Show working copy status
+- `jj diff` - Show changes
+- `jj new` - Create new change
+- `jj describe -m "message"` - Set change description
+- `jj bookmark set main` - Update bookmark
+
+This is an isolated jj workspace. Your changes won't affect other
+workspaces until you explicitly share them.
+
+## Available Tools
+
+- `rg` (ripgrep) - Fast recursive search
+- `fd` - Fast file finder
+- `jq` - JSON processing
+- `nix build` - Build nix expressions (uses host daemon)
+
+## Sandbox Constraints
+
+- The nix store is read-only (builds go through host daemon)
+- Network access: [full|restricted|none]
+- This container is ephemeral - only /workspace persists
+```
+
+**Skill sources (in priority order):**
+1. **Project skills**: From repo's existing `CLAUDE.md` (untouched, highest priority)
+2. **Forage skills**: Injected `.claude/forage-skills.md` (sandbox-aware instructions)
+3. **Template skills**: From sandbox template configuration
+4. **User skills**: Custom per-sandbox overrides
 
 **Configuration:**
 ```nix
@@ -230,13 +255,21 @@ templates.claude = {
     jj = true;           # Include jj skill (default: true)
     nix = true;          # Include nix skill (default: true)
 
+    # Additional custom instructions
     custom = ''
-      ## Custom Instructions
+      ## Testing Requirements
       Always write tests before implementation.
     '';
   };
+
+  # Optionally inject into .claude/settings.json
+  claudeSettings = {
+    # Any claude-code settings to inject
+  };
 };
 ```
+
+**Cleanup:** The injected `.claude/forage-skills.md` is created at sandbox start and can be removed on sandbox down if desired (though it's harmless to leave).
 
 ### Tmux Session Management
 
