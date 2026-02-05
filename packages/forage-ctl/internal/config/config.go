@@ -31,6 +31,43 @@ func ValidateSandboxName(name string) error {
 	return nil
 }
 
+// safePath validates that a constructed path stays within the base directory.
+// This prevents path traversal attacks where names like "../../../etc/passwd"
+// could escape the intended directory.
+func safePath(baseDir, name, suffix string) (string, error) {
+	// Reject absolute paths in name
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("name cannot be an absolute path")
+	}
+
+	// Reject names containing path separators
+	if filepath.Dir(name) != "." {
+		return "", fmt.Errorf("name cannot contain path separators")
+	}
+
+	// Construct the path
+	path := filepath.Join(baseDir, name+suffix)
+
+	// Get absolute paths for comparison
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid base directory: %w", err)
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Ensure the resolved path is within the base directory
+	// Add separator to prevent prefix matching (e.g., /var/lib/forage vs /var/lib/forage-evil)
+	if !filepath.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return "", fmt.Errorf("path escapes base directory")
+	}
+
+	return path, nil
+}
+
 const (
 	DefaultConfigDir    = "/etc/firefly-forage"
 	DefaultStateDir     = "/var/lib/firefly-forage"
@@ -223,7 +260,10 @@ func LoadHostConfig(configDir string) (*HostConfig, error) {
 
 // LoadTemplate loads a template configuration
 func LoadTemplate(templatesDir, name string) (*Template, error) {
-	templatePath := filepath.Join(templatesDir, name+".json")
+	templatePath, err := safePath(templatesDir, name, ".json")
+	if err != nil {
+		return nil, fmt.Errorf("invalid template name: %w", err)
+	}
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read template %s: %w", name, err)
@@ -271,7 +311,10 @@ func ListTemplates(templatesDir string) ([]*Template, error) {
 
 // LoadSandboxMetadata loads metadata for a sandbox
 func LoadSandboxMetadata(sandboxesDir, name string) (*SandboxMetadata, error) {
-	metaPath := filepath.Join(sandboxesDir, name+".json")
+	metaPath, err := safePath(sandboxesDir, name, ".json")
+	if err != nil {
+		return nil, fmt.Errorf("invalid sandbox name: %w", err)
+	}
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox not found: %s", name)
@@ -296,7 +339,10 @@ func SaveSandboxMetadata(sandboxesDir string, metadata *SandboxMetadata) error {
 		return fmt.Errorf("failed to create sandboxes directory: %w", err)
 	}
 
-	metaPath := filepath.Join(sandboxesDir, metadata.Name+".json")
+	metaPath, err := safePath(sandboxesDir, metadata.Name, ".json")
+	if err != nil {
+		return fmt.Errorf("invalid sandbox name: %w", err)
+	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
@@ -311,7 +357,10 @@ func SaveSandboxMetadata(sandboxesDir string, metadata *SandboxMetadata) error {
 
 // DeleteSandboxMetadata removes metadata for a sandbox
 func DeleteSandboxMetadata(sandboxesDir, name string) error {
-	metaPath := filepath.Join(sandboxesDir, name+".json")
+	metaPath, err := safePath(sandboxesDir, name, ".json")
+	if err != nil {
+		return fmt.Errorf("invalid sandbox name: %w", err)
+	}
 	return os.Remove(metaPath)
 }
 
@@ -343,8 +392,11 @@ func ListSandboxes(sandboxesDir string) ([]*SandboxMetadata, error) {
 
 // SandboxExists checks if a sandbox exists
 func SandboxExists(sandboxesDir, name string) bool {
-	metaPath := filepath.Join(sandboxesDir, name+".json")
-	_, err := os.Stat(metaPath)
+	metaPath, err := safePath(sandboxesDir, name, ".json")
+	if err != nil {
+		return false // Invalid name means it doesn't exist
+	}
+	_, err = os.Stat(metaPath)
 	return err == nil
 }
 

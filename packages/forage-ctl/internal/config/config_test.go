@@ -347,6 +347,44 @@ func TestListSandboxes_NonexistentDir(t *testing.T) {
 	}
 }
 
+func TestSafePath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		base    string
+		fname   string
+		suffix  string
+		wantErr bool
+	}{
+		{"valid name", tmpDir, "sandbox1", ".json", false},
+		{"valid with dash", tmpDir, "my-sandbox", ".json", false},
+		{"path traversal", tmpDir, "../escape", ".json", true},
+		{"deep traversal", tmpDir, "../../etc/passwd", "", true},
+		{"absolute escape", tmpDir, "/etc/passwd", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := safePath(tt.base, tt.fname, tt.suffix)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("safePath(%q, %q, %q) error = %v, wantErr %v",
+					tt.base, tt.fname, tt.suffix, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadSandboxMetadata_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Attempt to load with path traversal attack
+	_, err := LoadSandboxMetadata(tmpDir, "../../../etc/passwd")
+	if err == nil {
+		t.Error("Expected error for path traversal, got nil")
+	}
+}
+
 func TestValidateSandboxName(t *testing.T) {
 	tests := []struct {
 		name    string
