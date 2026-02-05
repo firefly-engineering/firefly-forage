@@ -7,7 +7,7 @@
 //
 // The picker displays running sandboxes and allows selection:
 //
-//	result, err := tui.RunPicker(sandboxes, paths)
+//	result, err := tui.RunPicker(sandboxes, paths, rt)
 //	switch result.Action {
 //	case tui.ActionAttach:
 //	    // Connect to result.Sandbox

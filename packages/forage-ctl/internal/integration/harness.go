@@ -67,9 +67,13 @@ func NewHarness(t *testing.T) *TestHarness {
 	}
 
 	// Try to detect the real runtime
-	rt := runtime.Global()
-	if rt == nil {
-		t.Skip("no container runtime available")
+	cfg := &runtime.Config{
+		Type:         runtime.RuntimeAuto,
+		SandboxesDir: paths.SandboxesDir,
+	}
+	rt, err := runtime.New(cfg)
+	if err != nil {
+		t.Skipf("no container runtime available: %v", err)
 	}
 
 	// Load host config from system if available

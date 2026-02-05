@@ -127,7 +127,7 @@ func TestModelKeyHandling(t *testing.T) {
 	}
 
 	t.Run("quit with q", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 		model := newModel.(Model)
 
@@ -143,7 +143,7 @@ func TestModelKeyHandling(t *testing.T) {
 	})
 
 	t.Run("quit with esc", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		model := newModel.(Model)
 
@@ -153,7 +153,7 @@ func TestModelKeyHandling(t *testing.T) {
 	})
 
 	t.Run("new sandbox with n", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := newModel.(Model)
 
@@ -163,7 +163,7 @@ func TestModelKeyHandling(t *testing.T) {
 	})
 
 	t.Run("window size update", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		newModel, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 		model := newModel.(Model)
 
@@ -198,7 +198,7 @@ func TestModelView(t *testing.T) {
 	}
 
 	t.Run("normal view contains help", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		view := m.View()
 
 		if !strings.Contains(view, "[enter] Attach") {
@@ -213,7 +213,7 @@ func TestModelView(t *testing.T) {
 	})
 
 	t.Run("quitting view is empty", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
 		m.quitting = true
 		view := m.View()
 
@@ -247,7 +247,7 @@ func TestRunPickerEmptySandboxes(t *testing.T) {
 		SandboxesDir: "/var/lib/firefly-forage/sandboxes",
 	}
 
-	result, err := RunPicker([]*config.SandboxMetadata{}, paths)
+	result, err := RunPicker([]*config.SandboxMetadata{}, paths, nil)
 	if err != nil {
 		t.Fatalf("RunPicker with empty sandboxes failed: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestSimplePicker(t *testing.T) {
 	}
 
 	t.Run("empty sandboxes", func(t *testing.T) {
-		output := SimplePicker([]*config.SandboxMetadata{}, paths)
+		output := SimplePicker([]*config.SandboxMetadata{}, paths, nil)
 
 		if !strings.Contains(output, "No sandboxes found") {
 			t.Error("Should indicate no sandboxes found")
@@ -289,7 +289,7 @@ func TestSimplePicker(t *testing.T) {
 			},
 		}
 
-		output := SimplePicker(sandboxes, paths)
+		output := SimplePicker(sandboxes, paths, nil)
 
 		if !strings.Contains(output, "Firefly Forage") {
 			t.Error("Should contain title")

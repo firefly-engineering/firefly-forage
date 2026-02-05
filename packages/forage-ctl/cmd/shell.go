@@ -28,7 +28,7 @@ func runShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rt := runtime.Global()
+	rt := getRuntime()
 	if rt == nil {
 		return errors.New(errors.ExitGeneralError, "no container runtime available")
 	}

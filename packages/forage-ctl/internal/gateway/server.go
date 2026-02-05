@@ -2,6 +2,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,12 +17,13 @@ import (
 
 // Server represents the gateway server
 type Server struct {
-	Paths *config.Paths
+	Paths   *config.Paths
+	Runtime runtime.Runtime
 }
 
 // NewServer creates a new gateway server
-func NewServer(paths *config.Paths) *Server {
-	return &Server{Paths: paths}
+func NewServer(paths *config.Paths, rt runtime.Runtime) *Server {
+	return &Server{Paths: paths, Runtime: rt}
 }
 
 // HandleConnection handles an incoming connection
@@ -80,7 +82,7 @@ func (s *Server) ShowPicker() error {
 		return nil
 	}
 
-	result, err := tui.RunPicker(sandboxes, s.Paths)
+	result, err := tui.RunPicker(sandboxes, s.Paths, s.Runtime)
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}
@@ -117,8 +119,11 @@ func (s *Server) ConnectToSandbox(name string) error {
 		return fmt.Errorf("sandbox not found: %s", name)
 	}
 
-	if !runtime.IsRunning(name) {
-		return fmt.Errorf("sandbox %s is not running", name)
+	if s.Runtime != nil {
+		running, _ := s.Runtime.IsRunning(context.Background(), name)
+		if !running {
+			return fmt.Errorf("sandbox %s is not running", name)
+		}
 	}
 
 	logging.Debug("connecting to sandbox", "name", name, "port", metadata.Port)
@@ -151,5 +156,5 @@ func (s *Server) ListSandboxes() (string, error) {
 		return "", err
 	}
 
-	return tui.SimplePicker(sandboxes, s.Paths), nil
+	return tui.SimplePicker(sandboxes, s.Paths, s.Runtime), nil
 }

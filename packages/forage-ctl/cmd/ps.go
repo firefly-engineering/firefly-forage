@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 )
 
@@ -22,9 +21,10 @@ func init() {
 }
 
 func runPs(cmd *cobra.Command, args []string) error {
-	paths := config.DefaultPaths()
+	p := paths()
+	rt := getRuntime()
 
-	sandboxes, err := config.ListSandboxes(paths.SandboxesDir)
+	sandboxes, err := listSandboxes()
 	if err != nil {
 		return fmt.Errorf("failed to list sandboxes: %w", err)
 	}
@@ -44,13 +44,14 @@ func runPs(cmd *cobra.Command, args []string) error {
 			mode = "dir"
 		}
 
-		status := health.GetSummary(sb.Name, sb.Port, paths.SandboxesDir)
+		status := health.GetSummary(sb.Name, sb.Port, rt)
 		statusStr := formatStatus(status)
 
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n",
 			sb.Name, sb.Template, sb.Port, mode, sb.Workspace, statusStr)
 	}
 
+	_ = p // keep paths() call for consistency
 	return w.Flush()
 }
 

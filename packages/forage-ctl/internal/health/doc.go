@@ -16,16 +16,16 @@
 //
 // Individual checks:
 //
-//	health.CheckSSH(port)   // SSH connectivity
-//	health.CheckTmux(port)  // tmux session exists
-//	health.GetUptime(name)  // Container uptime
+//	health.CheckSSH(port)      // SSH connectivity
+//	health.CheckTmux(port)     // tmux session exists
+//	health.GetUptime(name, rt) // Container uptime
 //
 // Combined checks:
 //
-//	result := health.Check(sandboxName, port, sandboxesDir)
+//	result := health.Check(sandboxName, port, rt)
 //	// result.ContainerRunning, .SSHReachable, .TmuxActive, .Uptime
 //
-//	status := health.GetSummary(sandboxName, port, sandboxesDir)
+//	status := health.GetSummary(sandboxName, port, rt)
 //	// Returns StatusHealthy, StatusUnhealthy, etc.
 //
 // # Constants

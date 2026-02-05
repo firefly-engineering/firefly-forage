@@ -11,6 +11,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 // Action represents the action to take after picker selection
@@ -105,14 +106,15 @@ type Model struct {
 	height   int
 }
 
-// NewPicker creates a new sandbox picker
-func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) Model {
+// NewPicker creates a new sandbox picker.
+// The rt parameter is optional; if nil, all sandboxes will show as stopped.
+func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) Model {
 	items := make([]list.Item, len(sandboxes))
 	for i, sb := range sandboxes {
-		status := health.GetSummary(sb.Name, sb.Port, paths.SandboxesDir)
+		status := health.GetSummary(sb.Name, sb.Port, rt)
 		uptime := "stopped"
 		if status != health.StatusStopped {
-			uptime = health.GetUptime(sb.Name)
+			uptime = health.GetUptime(sb.Name, rt)
 		}
 		items[i] = sandboxItem{
 			metadata: sb,
@@ -208,13 +210,14 @@ func (m Model) Result() PickerResult {
 	return m.result
 }
 
-// RunPicker runs the interactive sandbox picker
-func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) (PickerResult, error) {
+// RunPicker runs the interactive sandbox picker.
+// The rt parameter is optional; if nil, all sandboxes will show as stopped.
+func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) (PickerResult, error) {
 	if len(sandboxes) == 0 {
 		return PickerResult{Action: ActionNew}, nil
 	}
 
-	m := NewPicker(sandboxes, paths)
+	m := NewPicker(sandboxes, paths, rt)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
@@ -229,8 +232,9 @@ func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) (Picker
 	return model.Result(), nil
 }
 
-// SimplePicker is a non-interactive picker that just lists sandboxes
-func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) string {
+// SimplePicker is a non-interactive picker that just lists sandboxes.
+// The rt parameter is optional; if nil, all sandboxes will show as stopped.
+func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) string {
 	var sb strings.Builder
 
 	sb.WriteString("Firefly Forage - Sandboxes\n")
@@ -243,7 +247,7 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths) stri
 	}
 
 	for i, sandbox := range sandboxes {
-		status := health.GetSummary(sandbox.Name, sandbox.Port, paths.SandboxesDir)
+		status := health.GetSummary(sandbox.Name, sandbox.Port, rt)
 		statusIcon := "●"
 		switch status {
 		case health.StatusHealthy:

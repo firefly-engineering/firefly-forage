@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
@@ -25,18 +25,18 @@ func init() {
 
 func runReset(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
+	p := paths()
 
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	metadata, err := loadSandbox(name)
 	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
+		return err
 	}
 
 	// Stop the container if running
-	if runtime.IsRunning(name) {
+	if isRunning(name) {
 		logInfo("Stopping container...")
 		logging.Debug("destroying container", "name", name)
-		if err := runtime.Destroy(name); err != nil {
+		if err := app.Default.Destroy(name); err != nil {
 			logWarning("Failed to stop container: %v", err)
 		}
 	}
@@ -45,9 +45,9 @@ func runReset(cmd *cobra.Command, args []string) error {
 	logInfo("Starting container...")
 
 	// The container config should still exist in the sandboxes directory
-	configPath := fmt.Sprintf("%s/%s.nix", paths.SandboxesDir, name)
+	configPath := fmt.Sprintf("%s/%s.nix", p.SandboxesDir, name)
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := runtime.Create(runtime.CreateOptions{
+	if err := app.Default.Create(runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,

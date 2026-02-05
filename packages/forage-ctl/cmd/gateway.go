@@ -10,7 +10,6 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 )
 
@@ -33,23 +32,24 @@ func init() {
 }
 
 func runGateway(cmd *cobra.Command, args []string) error {
-	paths := config.DefaultPaths()
+	p := paths()
+	rt := getRuntime()
 
 	logging.Debug("gateway mode started")
 
 	// If sandbox name provided, connect directly
 	if len(args) == 1 {
-		return connectToSandbox(args[0], paths)
+		return connectToSandbox(args[0], p)
 	}
 
 	// List sandboxes
-	sandboxes, err := config.ListSandboxes(paths.SandboxesDir)
+	sandboxes, err := listSandboxes()
 	if err != nil {
 		return fmt.Errorf("failed to list sandboxes: %w", err)
 	}
 
 	// Run interactive picker
-	result, err := tui.RunPicker(sandboxes, paths)
+	result, err := tui.RunPicker(sandboxes, p, rt)
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}
@@ -59,14 +59,14 @@ func runGateway(cmd *cobra.Command, args []string) error {
 	switch result.Action {
 	case tui.ActionAttach:
 		if result.Sandbox != nil {
-			return connectToSandbox(result.Sandbox.Name, paths)
+			return connectToSandbox(result.Sandbox.Name, p)
 		}
 
 	case tui.ActionNew:
 		fmt.Println("\nTo create a new sandbox, run:")
 		fmt.Println("  forage-ctl up <name> -t <template> -w <workspace>")
 		fmt.Println("\nAvailable templates:")
-		templates, _ := config.ListTemplates(paths.TemplatesDir)
+		templates, _ := config.ListTemplates(p.TemplatesDir)
 		for _, t := range templates {
 			fmt.Printf("  - %s: %s\n", t.Name, t.Description)
 		}
@@ -90,7 +90,7 @@ func connectToSandbox(name string, paths *config.Paths) error {
 		return fmt.Errorf("sandbox not found: %s", name)
 	}
 
-	if !runtime.IsRunning(name) {
+	if !isRunning(name) {
 		return fmt.Errorf("sandbox %s is not running", name)
 	}
 

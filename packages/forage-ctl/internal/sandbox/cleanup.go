@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -46,7 +47,8 @@ func DefaultCleanupOptions() CleanupOptions {
 // Cleanup removes sandbox resources.
 // This is the canonical cleanup function used by both the down command
 // and error recovery in the create flow.
-func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts CleanupOptions) {
+// The rt parameter is optional; if nil, container destruction is skipped.
+func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts CleanupOptions, rt runtime.Runtime) {
 	if metadata == nil {
 		return
 	}
@@ -55,10 +57,11 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 	logging.Debug("cleaning up sandbox", "name", name)
 
 	// Destroy container if requested and running
-	if opts.DestroyContainer {
-		if runtime.IsRunning(name) {
+	if opts.DestroyContainer && rt != nil {
+		running, _ := rt.IsRunning(context.Background(), name)
+		if running {
 			logging.Debug("destroying container", "name", name)
-			if err := runtime.Destroy(name); err != nil {
+			if err := rt.Destroy(context.Background(), name); err != nil {
 				logging.Debug("container destroy during cleanup", "error", err)
 			}
 		}

@@ -26,7 +26,7 @@
 //
 // The Server type handles gateway operations:
 //
-//	server := gateway.NewServer(paths)
+//	server := gateway.NewServer(paths, rt)
 //	server.HandleSSHOriginalCommand()  // Process SSH_ORIGINAL_COMMAND
 //	server.HandleConnection(args)      // Handle connection with args
 //	server.ConnectToSandbox(name)      // Connect to specific sandbox

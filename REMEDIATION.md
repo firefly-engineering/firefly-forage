@@ -70,7 +70,7 @@ This document tracks the implementation of security fixes, test coverage improve
 |----|------|--------|-------|
 | ARCH-003 | Persist port registry in metadata | [x] | Remove in-memory sandboxPorts map |
 | ARCH-004 | Add Nix config validation | [x] | Validate before writing |
-| ARCH-005 | Replace global runtime in commands | [ ] | Use injected dependencies |
+| ARCH-005 | Replace global runtime in commands | [x] | Use injected dependencies |
 
 ---
 
@@ -122,4 +122,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | TEST-008: Added GitHub Actions CI workflow | - |
 | 2026-02-05 | ARCH-004: Added Nix config validation | - |
 | 2026-02-05 | ARCH-002: Decomposed sandbox.Creator.Create() | - |
+| 2026-02-05 | ARCH-005: Replaced global runtime with injected dependencies | - |
 

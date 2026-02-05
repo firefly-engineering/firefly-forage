@@ -12,7 +12,7 @@ func TestServer_HandleConnection_InvalidName(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	// Test invalid sandbox names - should fail validation
 	invalidNames := []string{
@@ -37,7 +37,7 @@ func TestServer_HandleConnection_ValidNameNotFound(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	// Valid name but sandbox doesn't exist
 	err := server.HandleConnection([]string{"nonexistent"})
@@ -50,7 +50,7 @@ func TestServer_ConnectToSandbox_InvalidName(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	// Test path traversal attack
 	err := server.ConnectToSandbox("../../../etc/passwd")
@@ -63,10 +63,6 @@ func TestServer_ConnectToSandbox_NotRunning(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	// Set up mock runtime
-	runtime.SetGlobal(env.Runtime)
-	defer runtime.SetGlobal(nil)
-
 	// Add sandbox metadata but don't mark it as running
 	env.AddSandbox(&config.SandboxMetadata{
 		Name:     "stopped-sandbox",
@@ -77,7 +73,7 @@ func TestServer_ConnectToSandbox_NotRunning(t *testing.T) {
 	// Mark as stopped in runtime
 	env.Runtime.Containers["stopped-sandbox"].Status = runtime.StatusStopped
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	err := server.ConnectToSandbox("stopped-sandbox")
 	if err == nil {
@@ -89,7 +85,7 @@ func TestServer_ShowPicker_NoSandboxes(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	// ShowPicker should not error when there are no sandboxes
 	err := server.ShowPicker()
@@ -102,7 +98,7 @@ func TestServer_ListSandboxes_Empty(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	result, err := server.ListSandboxes()
 	if err != nil {
@@ -131,7 +127,7 @@ func TestServer_ListSandboxes_WithSandboxes(t *testing.T) {
 		Port:     2201,
 	})
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	result, err := server.ListSandboxes()
 	if err != nil {
@@ -148,7 +144,7 @@ func TestNewServer(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	server := NewServer(env.Paths)
+	server := NewServer(env.Paths, env.Runtime)
 
 	if server == nil {
 		t.Fatal("NewServer() returned nil")

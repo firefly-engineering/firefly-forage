@@ -361,7 +361,7 @@ func (c *Creator) cleanup(metadata *config.SandboxMetadata) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
 	// Use unified cleanup function with all options enabled
-	Cleanup(metadata, c.paths, DefaultCleanupOptions())
+	Cleanup(metadata, c.paths, DefaultCleanupOptions(), c.rt)
 }
 
 // copySkillsToContainer copies skills content into the container.

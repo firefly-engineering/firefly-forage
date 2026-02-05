@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
@@ -9,7 +10,17 @@ import (
 // paths returns the default paths configuration.
 // This is a helper to reduce repetition in commands.
 func paths() *config.Paths {
-	return config.DefaultPaths()
+	return app.Default.Paths
+}
+
+// getRuntime returns the application runtime.
+func getRuntime() runtime.Runtime {
+	return app.Default.Runtime
+}
+
+// isRunning checks if a container is running using the app's runtime.
+func isRunning(name string) bool {
+	return app.Default.IsRunning(name)
 }
 
 // loadSandbox loads sandbox metadata or returns a SandboxNotFound error.
@@ -31,9 +42,14 @@ func loadRunningSandbox(name string) (*config.SandboxMetadata, error) {
 		return nil, err
 	}
 
-	if !runtime.IsRunning(name) {
+	if !isRunning(name) {
 		return nil, errors.SandboxNotRunning(name)
 	}
 
 	return metadata, nil
+}
+
+// listSandboxes lists all sandbox metadata.
+func listSandboxes() ([]*config.SandboxMetadata, error) {
+	return config.ListSandboxes(paths().SandboxesDir)
 }

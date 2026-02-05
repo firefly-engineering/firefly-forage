@@ -23,6 +23,7 @@ func init() {
 func runDown(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	p := paths()
+	rt := getRuntime()
 
 	logging.Debug("removing sandbox", "name", name)
 
@@ -34,7 +35,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 	logInfo("Removing sandbox %s...", name)
 
 	// Use unified cleanup function
-	sandbox.Cleanup(metadata, p, sandbox.DefaultCleanupOptions())
+	sandbox.Cleanup(metadata, p, sandbox.DefaultCleanupOptions(), rt)
 
 	logSuccess("Removed sandbox %s", name)
 	return nil

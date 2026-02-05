@@ -11,6 +11,11 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
 
+// CheckOptions holds options for health checking.
+type CheckOptions struct {
+	Runtime runtime.Runtime
+}
+
 // Status represents the health status of a sandbox
 type Status string
 
@@ -62,8 +67,7 @@ func GetTmuxWindows(port int) []string {
 
 // GetUptime returns the container uptime in human-readable format.
 // Uses the runtime-agnostic Status method to get container start time.
-func GetUptime(sandboxName string) string {
-	rt := runtime.Global()
+func GetUptime(sandboxName string, rt runtime.Runtime) string {
 	if rt == nil {
 		return "unknown"
 	}
@@ -117,18 +121,21 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd %dh", days, hours)
 }
 
-// Check performs all health checks for a sandbox
-func Check(sandboxName string, port int, sandboxesDir string) *CheckResult {
+// Check performs all health checks for a sandbox.
+// The rt parameter is optional; if nil, container running check returns false.
+func Check(sandboxName string, port int, rt runtime.Runtime) *CheckResult {
 	result := &CheckResult{}
 
 	// Check container
-	result.ContainerRunning = runtime.IsRunning(sandboxName)
+	if rt != nil {
+		result.ContainerRunning, _ = rt.IsRunning(context.Background(), sandboxName)
+	}
 	if !result.ContainerRunning {
 		return result
 	}
 
 	// Check uptime
-	result.Uptime = GetUptime(sandboxName)
+	result.Uptime = GetUptime(sandboxName, rt)
 
 	// Check SSH
 	result.SSHReachable = CheckSSH(port)
@@ -145,9 +152,14 @@ func Check(sandboxName string, port int, sandboxesDir string) *CheckResult {
 	return result
 }
 
-// GetSummary returns a summary health status
-func GetSummary(sandboxName string, port int, sandboxesDir string) Status {
-	if !runtime.IsRunning(sandboxName) {
+// GetSummary returns a summary health status.
+// The rt parameter is optional; if nil, returns StatusStopped.
+func GetSummary(sandboxName string, port int, rt runtime.Runtime) Status {
+	if rt == nil {
+		return StatusStopped
+	}
+	running, _ := rt.IsRunning(context.Background(), sandboxName)
+	if !running {
 		return StatusStopped
 	}
 	if !CheckSSH(port) {

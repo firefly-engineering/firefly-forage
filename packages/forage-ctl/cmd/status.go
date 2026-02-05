@@ -6,8 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 )
 
@@ -24,14 +22,13 @@ func init() {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
 
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	metadata, err := loadSandbox(name)
 	if err != nil {
-		return errors.SandboxNotFound(name)
+		return err
 	}
 
-	result := health.Check(name, metadata.Port, paths.SandboxesDir)
+	result := health.Check(name, metadata.Port, getRuntime())
 
 	fmt.Printf("Sandbox: %s\n", metadata.Name)
 	fmt.Printf("Template: %s\n", metadata.Template)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
@@ -95,11 +96,11 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if sandbox is running
-	wasRunning := runtime.IsRunning(name)
+	wasRunning := isRunning(name)
 	if wasRunning && !networkNoRestart {
 		logInfo("Stopping sandbox for network reconfiguration...")
 		logging.Debug("stopping container", "name", name)
-		if stopErr := runtime.Stop(name); stopErr != nil {
+		if stopErr := app.Default.Stop(name); stopErr != nil {
 			logging.Warn("failed to stop container", "error", stopErr)
 		}
 	}
@@ -143,13 +144,13 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	logInfo("Recreating container with new network configuration...")
 
 	// Destroy old container
-	if err := runtime.Destroy(name); err != nil {
+	if err := app.Default.Destroy(name); err != nil {
 		logging.Warn("failed to destroy old container", "error", err)
 	}
 
 	// Create new container via runtime
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := runtime.Create(runtime.CreateOptions{
+	if err := app.Default.Create(runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,

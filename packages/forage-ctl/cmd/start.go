@@ -3,9 +3,8 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 var startCmd = &cobra.Command{
@@ -21,19 +20,18 @@ func init() {
 
 func runStart(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	paths := config.DefaultPaths()
 
-	_, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	_, err := loadSandbox(name)
 	if err != nil {
-		return errors.SandboxNotFound(name)
+		return err
 	}
 
-	if runtime.IsRunning(name) {
+	if isRunning(name) {
 		logInfo("Sandbox %s is already running", name)
 		return nil
 	}
 
-	if err := runtime.Start(name); err != nil {
+	if err := app.Default.Start(name); err != nil {
 		return errors.ContainerFailed("start", err)
 	}
 
