@@ -15,8 +15,7 @@
       text = ''
         # Load auth from secret file (not visible in environment)
         if [ -f "${secretPath}" ]; then
-          export ${authEnvVar}
-          ${authEnvVar}="$(cat "${secretPath}")"
+          export ${authEnvVar}="$(cat "${secretPath}")"
         else
           echo "Warning: Secret file not found: ${secretPath}" >&2
         fi
