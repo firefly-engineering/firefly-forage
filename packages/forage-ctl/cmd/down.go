@@ -65,15 +65,21 @@ func runDown(cmd *cobra.Command, args []string) error {
 	// Remove secrets
 	secretsPath := filepath.Join(paths.SecretsDir, name)
 	logging.Debug("removing secrets", "path", secretsPath)
-	os.RemoveAll(secretsPath)
+	if err := os.RemoveAll(secretsPath); err != nil {
+		logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
+	}
 
 	// Remove skills file
 	skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
-	os.Remove(skillsPath)
+	if err := os.Remove(skillsPath); err != nil && !os.IsNotExist(err) {
+		logging.Warn("failed to remove skills file", "path", skillsPath, "error", err)
+	}
 
 	// Remove nix config file
 	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
-	os.Remove(configPath)
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		logging.Warn("failed to remove config file", "path", configPath, "error", err)
+	}
 
 	// Remove metadata
 	logging.Debug("removing metadata")

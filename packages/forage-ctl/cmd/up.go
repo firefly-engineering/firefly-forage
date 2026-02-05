@@ -329,23 +329,44 @@ func copySkillsToContainer(port int, content string) error {
 func cleanup(metadata *config.SandboxMetadata, paths *config.Paths, hostConfig *config.HostConfig, backend workspace.Backend) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
+	var cleanupErrors []string
+
 	// Clean up workspace if created via backend
 	if backend != nil && metadata.SourceRepo != "" && metadata.Workspace != "" {
 		logging.Debug("removing workspace", "backend", backend.Name(), "name", metadata.Name)
-		backend.Remove(metadata.SourceRepo, metadata.Name, metadata.Workspace)
+		if err := backend.Remove(metadata.SourceRepo, metadata.Name, metadata.Workspace); err != nil {
+			logging.Warn("failed to remove workspace", "error", err)
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("workspace: %v", err))
+		}
 	}
 
 	// Clean up secrets
 	secretsPath := filepath.Join(paths.SecretsDir, metadata.Name)
-	os.RemoveAll(secretsPath)
+	if err := os.RemoveAll(secretsPath); err != nil {
+		logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("secrets: %v", err))
+	}
 
 	// Clean up config file
 	configPath := filepath.Join(paths.SandboxesDir, metadata.Name+".nix")
-	os.Remove(configPath)
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		logging.Warn("failed to remove config file", "path", configPath, "error", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("config: %v", err))
+	}
 
 	// Clean up metadata
-	config.DeleteSandboxMetadata(paths.SandboxesDir, metadata.Name)
+	if err := config.DeleteSandboxMetadata(paths.SandboxesDir, metadata.Name); err != nil {
+		logging.Warn("failed to remove metadata", "name", metadata.Name, "error", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("metadata: %v", err))
+	}
 
 	// Try to destroy container if it was created
-	runtime.Destroy(metadata.Name)
+	if err := runtime.Destroy(metadata.Name); err != nil {
+		logging.Debug("container destroy during cleanup", "error", err)
+		// Don't add to errors - container may not have been created
+	}
+
+	if len(cleanupErrors) > 0 {
+		logging.Warn("cleanup completed with errors", "count", len(cleanupErrors))
+	}
 }
