@@ -740,11 +740,12 @@ forage-ctl up agent-b --template claude --git-worktree ~/projects/myrepo
 
 Abstract the container backend to support multiple platforms.
 
-- [ ] Define container runtime interface (create, destroy, exec, status)
-- [ ] systemd-nspawn backend (NixOS, current implementation)
+- [x] Define container runtime interface (create, destroy, exec, status)
+- [x] systemd-nspawn backend (NixOS, current implementation)
+- [x] Docker/Podman backend (universal fallback)
+- [x] Runtime auto-detection based on platform
+- [ ] Migrate commands to use runtime interface
 - [ ] Apple Container backend (macOS via github.com/apple/container)
-- [ ] Docker/Podman backend (universal fallback)
-- [ ] Runtime auto-detection based on platform
 - [ ] Consistent bind mount semantics across runtimes
 - [ ] Platform-specific nix store sharing strategies
 
