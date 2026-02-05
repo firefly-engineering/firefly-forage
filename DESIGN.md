@@ -300,6 +300,7 @@ Each sandbox runs the agent inside a tmux session for better terminal handling a
 - **Multiple windows**: Agent in one window, shell in another
 - **Scrollback**: Review agent's previous output
 - **Resilience**: Survives network interruptions
+- **Sub-agent support**: Compatible with tools like opencode extensions that spawn sub-agents in tmux panes
 
 **CLI integration:**
 ```bash
