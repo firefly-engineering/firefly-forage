@@ -42,8 +42,8 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| TEST-004 | Create `app/app_test.go` | [ ] | Test dependency injection container |
-| TEST-005 | Create `logging/logging_test.go` | [ ] | Test logger configuration |
+| TEST-004 | Create `app/app_test.go` | [x] | Test dependency injection container |
+| TEST-005 | Create `logging/logging_test.go` | [x] | Test logger configuration |
 | TEST-006 | Create `tui/picker_test.go` | [ ] | Test with mocked terminal |
 
 ### P3 - Integration & CI
@@ -105,4 +105,7 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | SEC-004: Added path traversal protection | - |
 | 2026-02-05 | SEC-005: Added ADR for SSH host key verification | - |
 | 2026-02-05 | TEST-001: Added sandbox creator tests | - |
+| 2026-02-05 | TEST-002: Added gateway server tests | - |
+| 2026-02-05 | TEST-004: Added app package tests | - |
+| 2026-02-05 | TEST-005: Added logging package tests | - |
 
