@@ -15,6 +15,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/jj"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/port"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/skills"
 	"github.com/spf13/cobra"
 )
 
@@ -216,8 +217,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 		logWarning("SSH not ready after 30 seconds, sandbox may still be starting")
 	}
 
-	// Inject skills file
-	skillsContent := generator.GenerateSkills(metadata, template)
+	// Analyze project and inject skills file
+	logging.Debug("analyzing workspace for project-aware skills", "path", effectiveWorkspace)
+	analyzer := skills.NewAnalyzer(effectiveWorkspace)
+	projectInfo := analyzer.Analyze()
+	logging.Debug("project analysis complete",
+		"type", projectInfo.Type,
+		"buildSystem", projectInfo.BuildSystem,
+		"frameworks", projectInfo.Frameworks)
+
+	skillsContent := skills.GenerateSkills(metadata, template, projectInfo)
 	skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
 	if err := os.WriteFile(skillsPath, []byte(skillsContent), 0644); err != nil {
 		logging.Warn("failed to save skills file", "error", err)

@@ -670,9 +670,9 @@ forage-ctl/
 
 Features deferred from Phase 3 that benefit from Go rewrite:
 
-- [ ] Gateway service with sandbox selector (single port access)
-- [ ] TUI picker for sandbox selection (bubbletea)
-- [ ] Advanced skill injection (project analysis)
+- [x] Gateway service with sandbox selector (single port access)
+- [x] TUI picker for sandbox selection (bubbletea)
+- [x] Advanced skill injection (project analysis)
 
 ### Phase 6: Network Isolation
 
