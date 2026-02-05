@@ -89,7 +89,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| MAINT-005 | Add golangci-lint config | [ ] | Enforce code standards |
+| MAINT-005 | Add golangci-lint config | [x] | .golangci.yml with standard linters |
 | MAINT-006 | Document config file formats | [ ] | Full schema documentation |
 
 ---
@@ -109,4 +109,9 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | TEST-004: Added app package tests | - |
 | 2026-02-05 | TEST-005: Added logging package tests | - |
 | 2026-02-05 | MAINT-001: Extracted command helpers | - |
+| 2026-02-05 | TEST-003: Added runtime implementation tests | - |
+| 2026-02-05 | ARCH-001: Made health checks runtime-agnostic | - |
+| 2026-02-05 | MAINT-002: Unified cleanup logic | - |
+| 2026-02-05 | MAINT-003: Added example config files | - |
+| 2026-02-05 | MAINT-005: Added golangci-lint config | - |
 

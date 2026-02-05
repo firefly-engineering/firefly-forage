@@ -1,0 +1,62 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - unparam
+    - gosec
+    - prealloc
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Too strict for this codebase
+
+  gosec:
+    excludes:
+      - G104  # Unhandled errors (too noisy)
+      - G304  # File path from variable (intentional in this codebase)
+
+  misspell:
+    locale: US
+
+  goimports:
+    local-prefixes: github.com/firefly-engineering/firefly-forage
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Ignore long lines in test files
+    - path: _test\.go
+      linters:
+        - lll
+
+    # Ignore unused params in interface implementations
+    - linters:
+        - unparam
+      text: "always receives"
+
+    # Allow os.Exit in main
+    - path: main\.go
+      linters:
+        - gocritic
+      text: "exitAfterDefer"
