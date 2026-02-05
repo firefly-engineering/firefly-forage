@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
@@ -15,6 +14,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -321,7 +321,7 @@ func waitForSSH(port int, timeoutSeconds int) bool {
 
 func copySkillsToContainer(port int, content string) error {
 	// Use SSH to write the file
-	_, err := container.ExecSSHWithOutput(port, "bash", "-c",
+	_, err := ssh.ExecWithOutput(port, "bash", "-c",
 		fmt.Sprintf("cat > /workspace/CLAUDE.md << 'SKILLS_EOF'\n%s\nSKILLS_EOF", content))
 	return err
 }

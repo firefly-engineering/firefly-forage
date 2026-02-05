@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/container"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
 
 // Status represents the health status of a sandbox
@@ -32,28 +32,18 @@ type CheckResult struct {
 
 // CheckSSH checks if SSH is reachable
 func CheckSSH(port int) bool {
-	args := []string{
-		"-p", fmt.Sprintf("%d", port),
-		"-o", "ConnectTimeout=2",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"agent@localhost", "true",
-	}
-	cmd := exec.Command("ssh", args...)
-	return cmd.Run() == nil
+	return ssh.CheckConnection(port)
 }
 
 // CheckTmux checks if the tmux session exists
 func CheckTmux(port int) bool {
-	output, err := container.ExecSSHWithOutput(port, "tmux", "has-session", "-t", "forage")
-	_ = output
+	_, err := ssh.ExecWithOutput(port, "tmux", "has-session", "-t", "forage")
 	return err == nil
 }
 
 // GetTmuxWindows returns the list of tmux windows
 func GetTmuxWindows(port int) []string {
-	output, err := container.ExecSSHWithOutput(port, "tmux", "list-windows", "-t", "forage", "-F", "#{window_index}:#{window_name}")
+	output, err := ssh.ExecWithOutput(port, "tmux", "list-windows", "-t", "forage", "-F", "#{window_index}:#{window_name}")
 	if err != nil {
 		return nil
 	}
