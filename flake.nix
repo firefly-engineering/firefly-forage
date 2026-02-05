@@ -37,7 +37,7 @@
           pkgs = pkgsFor system;
         in
         {
-          forage-ctl = pkgs.callPackage ./packages/forage-ctl-go { };
+          forage-ctl = pkgs.callPackage ./packages/forage-ctl { };
           docs = pkgs.stdenvNoCC.mkDerivation {
             pname = "firefly-forage-docs";
             version = "0.1.0";
