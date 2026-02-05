@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
@@ -22,16 +23,17 @@ type NspawnRuntime struct {
 	// ContainerPrefix is prepended to sandbox names to form container names
 	ContainerPrefix string
 
-	// sandboxPorts tracks SSH ports for each sandbox
-	sandboxPorts map[string]int
+	// SandboxesDir is the directory containing sandbox metadata files
+	// Used for looking up SSH ports from persisted metadata
+	SandboxesDir string
 }
 
 // NewNspawnRuntime creates a new nspawn runtime with the given configuration
-func NewNspawnRuntime(extraContainerPath, containerPrefix string) *NspawnRuntime {
+func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir string) *NspawnRuntime {
 	return &NspawnRuntime{
 		ExtraContainerPath: extraContainerPath,
 		ContainerPrefix:    containerPrefix,
-		sandboxPorts:       make(map[string]int),
+		SandboxesDir:       sandboxesDir,
 	}
 }
 
@@ -63,11 +65,7 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		return fmt.Errorf("extra-container create failed: %w", err)
 	}
 
-	// Track SSH port if provided
-	if opts.SSHPort > 0 {
-		r.sandboxPorts[opts.Name] = opts.SSHPort
-	}
-
+	// SSH port is persisted in sandbox metadata by the caller
 	return nil
 }
 
@@ -274,13 +272,22 @@ func (r *NspawnRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 	return containers, nil
 }
 
-// SSHPort returns the SSH port for a container
+// SSHPort returns the SSH port for a container by loading it from metadata
 func (r *NspawnRuntime) SSHPort(ctx context.Context, name string) (int, error) {
-	port, ok := r.sandboxPorts[name]
-	if !ok {
-		return 0, fmt.Errorf("SSH port not found for sandbox %s (may need to reload from metadata)", name)
+	if r.SandboxesDir == "" {
+		return 0, fmt.Errorf("sandboxes directory not configured")
 	}
-	return port, nil
+
+	metadata, err := config.LoadSandboxMetadata(r.SandboxesDir, name)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load sandbox metadata: %w", err)
+	}
+
+	if metadata.Port == 0 {
+		return 0, fmt.Errorf("no SSH port configured for sandbox %s", name)
+	}
+
+	return metadata.Port, nil
 }
 
 // SSHExec executes a command via SSH
@@ -343,13 +350,6 @@ func (r *NspawnRuntime) SSHInteractive(ctx context.Context, name string, command
 // SSHInteractiveWithPort starts an interactive SSH session with a specific port
 func (r *NspawnRuntime) SSHInteractiveWithPort(port int, command string) error {
 	return ssh.ReplaceWithSession(port, command)
-}
-
-// RegisterPort registers an SSH port for a sandbox.
-// This is useful for registering ports of existing sandboxes
-// when the runtime is initialized (e.g., from metadata).
-func (r *NspawnRuntime) RegisterPort(name string, port int) {
-	r.sandboxPorts[name] = port
 }
 
 // Ensure NspawnRuntime implements Runtime

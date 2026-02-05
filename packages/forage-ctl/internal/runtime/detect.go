@@ -30,6 +30,10 @@ type Config struct {
 
 	// ExtraContainerPath is the path to extra-container binary (nspawn only)
 	ExtraContainerPath string
+
+	// SandboxesDir is the directory containing sandbox metadata files
+	// Used by nspawn runtime to look up SSH ports from persisted metadata
+	SandboxesDir string
 }
 
 // DefaultConfig returns the default runtime configuration
@@ -159,7 +163,7 @@ func New(cfg *Config) (Runtime, error) {
 				path = "/run/current-system/sw/bin/extra-container"
 			}
 		}
-		return NewNspawnRuntime(path, cfg.ContainerPrefix), nil
+		return NewNspawnRuntime(path, cfg.ContainerPrefix, cfg.SandboxesDir), nil
 
 	case RuntimeDocker, RuntimePodman:
 		return NewDockerRuntime(cfg.ContainerPrefix)
