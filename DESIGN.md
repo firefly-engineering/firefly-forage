@@ -641,9 +641,10 @@ The bash implementation is reaching its limits (~1500 lines). Rewrite in Go for:
 - Foundation for gateway service (HTTP server)
 - Easier contributor onboarding
 
-- [ ] Project structure with cobra CLI framework
-- [ ] Port existing commands (up, down, ps, status, ssh, exec, etc.)
-- [ ] Container runtime abstraction (prep for Phase 8)
+- [x] Project structure with cobra CLI framework
+- [x] Port existing commands (up, down, ps, status, ssh, logs, start, shell, templates)
+- [x] exec and reset commands
+- [ ] Container runtime abstraction (prep for Phase 9)
 - [ ] Structured logging with slog
 - [ ] Unit tests for core logic
 - [ ] Integration tests

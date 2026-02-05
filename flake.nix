@@ -40,6 +40,7 @@
           forage-ctl = pkgs.callPackage ./packages/forage-ctl {
             extra-container = extra-container.packages.${system}.default;
           };
+          forage-ctl-go = pkgs.callPackage ./packages/forage-ctl-go { };
           docs = pkgs.stdenvNoCC.mkDerivation {
             pname = "firefly-forage-docs";
             version = "0.1.0";

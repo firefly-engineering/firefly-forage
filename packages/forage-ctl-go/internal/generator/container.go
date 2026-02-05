@@ -1,0 +1,207 @@
+package generator
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl-go/internal/config"
+)
+
+// ContainerConfig holds the configuration for generating a container
+type ContainerConfig struct {
+	Name            string
+	Port            int
+	NetworkSlot     int
+	Workspace       string
+	SecretsPath     string
+	AuthorizedKeys  []string
+	Template        *config.Template
+	HostConfig      *config.HostConfig
+	WorkspaceMode   string
+	SourceRepo      string
+	NixpkgsRev      string
+}
+
+// GenerateNixConfig generates the nix configuration for the container
+func GenerateNixConfig(cfg *ContainerConfig) string {
+	containerName := config.ContainerName(cfg.Name)
+
+	// Build bind mounts
+	bindMounts := fmt.Sprintf(`
+      "/nix/store" = { hostPath = "/nix/store"; isReadOnly = true; };
+      "/workspace" = { hostPath = "%s"; isReadOnly = false; };
+      "/run/secrets" = { hostPath = "%s"; isReadOnly = true; };`,
+		cfg.Workspace, cfg.SecretsPath)
+
+	// Add source repo .jj mount for jj mode
+	if cfg.WorkspaceMode == "jj" && cfg.SourceRepo != "" {
+		jjPath := filepath.Join(cfg.SourceRepo, ".jj")
+		bindMounts += fmt.Sprintf(`
+      "%s" = { hostPath = "%s"; isReadOnly = false; };`,
+			jjPath, jjPath)
+	}
+
+	// Build authorized keys
+	authKeys := ""
+	for _, key := range cfg.AuthorizedKeys {
+		authKeys += fmt.Sprintf("        %q\n", key)
+	}
+
+	// Build network config
+	networkConfig := buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot)
+
+	// Build agent packages and environment
+	agentConfig := buildAgentConfig(cfg.Template.Agents)
+
+	// Build registry config for nix pinning
+	registryConfig := ""
+	if cfg.NixpkgsRev != "" && cfg.NixpkgsRev != "unknown" {
+		registryConfig = fmt.Sprintf(`
+    environment.etc."nix/registry.json".text = builtins.toJSON {
+      version = 2;
+      flakes = [{
+        exact = true;
+        from = { id = "nixpkgs"; type = "indirect"; };
+        to = { type = "github"; owner = "NixOS"; repo = "nixpkgs"; rev = "%s"; };
+      }];
+    };`, cfg.NixpkgsRev)
+	}
+
+	return fmt.Sprintf(`{ pkgs, ... }: {
+  containers.%s = {
+    autoStart = true;
+    ephemeral = true;
+    privateNetwork = true;
+    hostAddress = "10.100.%d.1";
+    localAddress = "10.100.%d.2";
+
+    bindMounts = {%s
+    };
+
+    config = { pkgs, ... }: {
+      system.stateVersion = "24.05";
+      %s
+      users.users.agent = {
+        isNormalUser = true;
+        home = "/home/agent";
+        extraGroups = [ "wheel" ];
+        openssh.authorizedKeys.keys = [
+%s      ];
+      };
+
+      security.sudo.wheelNeedsPassword = false;
+
+      services.openssh = {
+        enable = true;
+        ports = [ 22 ];
+        settings = {
+          PasswordAuthentication = false;
+          PermitRootLogin = "no";
+        };
+      };
+
+      environment.systemPackages = with pkgs; [
+        git
+        jujutsu
+        tmux
+        neovim
+        ripgrep
+        fd
+        %s
+      ];
+
+      %s
+      %s
+
+      networking.firewall.allowedTCPPorts = [ 22 ];
+
+      systemd.services.forage-init = {
+        description = "Forage Sandbox Initialization";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "network.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          User = "agent";
+          WorkingDirectory = "/workspace";
+          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage || true'";
+        };
+      };
+    };
+
+    forwardPorts = [
+      { containerPort = 22; hostPort = %d; protocol = "tcp"; }
+    ];
+  };
+}
+`,
+		containerName,
+		cfg.NetworkSlot, cfg.NetworkSlot,
+		bindMounts,
+		networkConfig,
+		authKeys,
+		agentConfig.packages,
+		agentConfig.environment,
+		registryConfig,
+		cfg.Port,
+	)
+}
+
+type agentConfigResult struct {
+	packages    string
+	environment string
+}
+
+func buildAgentConfig(agents map[string]config.AgentConfig) agentConfigResult {
+	var packages []string
+	var envVars []string
+
+	for _, agent := range agents {
+		if agent.PackagePath != "" {
+			packages = append(packages, agent.PackagePath)
+		}
+		if agent.AuthEnvVar != "" && agent.SecretName != "" {
+			envVars = append(envVars, fmt.Sprintf(`%s = "$(cat /run/secrets/%s 2>/dev/null || echo '')"`,
+				agent.AuthEnvVar, agent.SecretName))
+		}
+	}
+
+	envConfig := ""
+	if len(envVars) > 0 {
+		envConfig = fmt.Sprintf(`
+      environment.sessionVariables = {
+        %s
+      };`, strings.Join(envVars, "\n        "))
+	}
+
+	return agentConfigResult{
+		packages:    strings.Join(packages, "\n        "),
+		environment: envConfig,
+	}
+}
+
+func buildNetworkConfig(network string, allowedHosts []string, slot int) string {
+	switch network {
+	case "none":
+		return `networking.nameservers = [];
+      networking.defaultGateway = null;`
+	case "restricted":
+		if len(allowedHosts) > 0 {
+			hosts := make([]string, len(allowedHosts))
+			for i, h := range allowedHosts {
+				hosts[i] = fmt.Sprintf("%q", h)
+			}
+			return fmt.Sprintf(`networking.firewall.extraCommands = ''
+        # Only allow connections to specific hosts
+        iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+        iptables -A OUTPUT -d 10.100.%d.1 -j ACCEPT
+        %s
+        iptables -A OUTPUT -j REJECT
+      '';`, slot, strings.Join(hosts, "\n        "))
+		}
+		return ""
+	default: // "full" or empty
+		return fmt.Sprintf(`networking.defaultGateway = "10.100.%d.1";
+      networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];`, slot)
+	}
+}
