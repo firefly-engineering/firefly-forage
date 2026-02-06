@@ -59,7 +59,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 	logInfo("Waiting for sandbox to be ready...")
 	ready := false
 	for i := 0; i < health.SSHReadyTimeoutSeconds; i++ {
-		if health.CheckSSH(metadata.Port) {
+		if health.CheckSSH(metadata.ContainerIP()) {
 			ready = true
 			break
 		}

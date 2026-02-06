@@ -52,13 +52,10 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 		t.Fatalf("failed to create README: %v", err)
 	}
 
-	// Test port allocation
-	allocatedPort, networkSlot, err := port.Allocate(env.HostConfig, nil)
+	// Test slot allocation
+	networkSlot, err := port.AllocateSlot(nil)
 	if err != nil {
-		t.Fatalf("port allocation failed: %v", err)
-	}
-	if allocatedPort < env.HostConfig.PortRange.From || allocatedPort > env.HostConfig.PortRange.To {
-		t.Errorf("allocated port %d outside range", allocatedPort)
+		t.Fatalf("slot allocation failed: %v", err)
 	}
 	if networkSlot < 1 || networkSlot > 254 {
 		t.Errorf("network slot %d outside valid range", networkSlot)
@@ -72,7 +69,6 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 
 	containerCfg := &generator.ContainerConfig{
 		Name:           "test-sandbox",
-		Port:           allocatedPort,
 		NetworkSlot:    networkSlot,
 		Workspace:      workspacePath,
 		SecretsPath:    filepath.Join(env.Paths.SecretsDir, "test-sandbox"),
@@ -104,7 +100,6 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:          "test-sandbox",
 		Template:      "test-template",
-		Port:          allocatedPort,
 		Workspace:     workspacePath,
 		NetworkSlot:   networkSlot,
 		WorkspaceMode: "direct",
@@ -120,41 +115,34 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load metadata: %v", err)
 	}
-	if loaded.Port != allocatedPort {
-		t.Errorf("loaded port = %d, want %d", loaded.Port, allocatedPort)
+	if loaded.NetworkSlot != networkSlot {
+		t.Errorf("loaded NetworkSlot = %d, want %d", loaded.NetworkSlot, networkSlot)
 	}
 }
 
-// TestWorkflow_MultipleSandboxesPortAllocation tests that port allocation
+// TestWorkflow_MultipleSandboxesSlotAllocation tests that slot allocation
 // works correctly across multiple sandboxes.
-func TestWorkflow_MultipleSandboxesPortAllocation(t *testing.T) {
+func TestWorkflow_MultipleSandboxesSlotAllocation(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	defer env.Cleanup()
 
-	// Use a small port range to test allocation
-	env.HostConfig.PortRange = config.PortRange{
-		From: 2200,
-		To:   2210,
-	}
-
-	// Create multiple sandboxes and track ports
+	// Create multiple sandboxes and track slots
 	var sandboxes []*config.SandboxMetadata
-	usedPorts := make(map[int]bool)
+	usedSlots := make(map[int]bool)
 
 	for i := 0; i < 5; i++ {
-		allocatedPort, slot, err := port.Allocate(env.HostConfig, sandboxes)
+		slot, err := port.AllocateSlot(sandboxes)
 		if err != nil {
 			t.Fatalf("allocation %d failed: %v", i, err)
 		}
 
-		if usedPorts[allocatedPort] {
-			t.Errorf("port %d allocated twice", allocatedPort)
+		if usedSlots[slot] {
+			t.Errorf("slot %d allocated twice", slot)
 		}
-		usedPorts[allocatedPort] = true
+		usedSlots[slot] = true
 
 		meta := &config.SandboxMetadata{
 			Name:        "sandbox-" + string(rune('a'+i)),
-			Port:        allocatedPort,
 			NetworkSlot: slot,
 		}
 		sandboxes = append(sandboxes, meta)
@@ -278,7 +266,6 @@ func TestWorkflow_NetworkModeConfigs(t *testing.T) {
 
 			cfg := &generator.ContainerConfig{
 				Name:           "test",
-				Port:           2222,
 				NetworkSlot:    1,
 				Workspace:      "/workspace",
 				SecretsPath:    "/secrets",
@@ -463,7 +450,6 @@ func TestWorkflow_JJModeConfig(t *testing.T) {
 
 	cfg := &generator.ContainerConfig{
 		Name:           "jj-sandbox",
-		Port:           2222,
 		NetworkSlot:    1,
 		Workspace:      filepath.Join(env.TmpDir, "workspaces", "jj-sandbox"),
 		SecretsPath:    filepath.Join(env.Paths.SecretsDir, "jj-sandbox"),
@@ -501,7 +487,6 @@ func TestWorkflow_ProxyModeConfig(t *testing.T) {
 
 	cfg := &generator.ContainerConfig{
 		Name:           "proxy-sandbox",
-		Port:           2222,
 		NetworkSlot:    1,
 		Workspace:      "/workspace",
 		SecretsPath:    "/secrets",

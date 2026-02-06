@@ -83,9 +83,13 @@ func TestCreator_Create_ValidName(t *testing.T) {
 		t.Errorf("Name = %q, want %q", result.Name, "myproject")
 	}
 
-	if result.Port < env.HostConfig.PortRange.From || result.Port > env.HostConfig.PortRange.To {
-		t.Errorf("Port %d not in range [%d, %d]",
-			result.Port, env.HostConfig.PortRange.From, env.HostConfig.PortRange.To)
+	// Verify ContainerIP is derived from NetworkSlot
+	if result.ContainerIP == "" {
+		t.Error("ContainerIP should not be empty")
+	}
+	if result.Metadata.NetworkSlot < 1 || result.Metadata.NetworkSlot > 254 {
+		t.Errorf("NetworkSlot %d not in valid range [1, 254]",
+			result.Metadata.NetworkSlot)
 	}
 
 	// Verify sandbox metadata was saved
@@ -107,9 +111,9 @@ func TestCreator_Create_DuplicateName(t *testing.T) {
 
 	// Create an existing sandbox
 	env.AddSandbox(&config.SandboxMetadata{
-		Name:     "existing",
-		Template: "test",
-		Port:     2200,
+		Name:        "existing",
+		Template:    "test",
+		NetworkSlot: 1,
 	})
 
 	workspacePath := env.CreateWorkspace("existing")
@@ -265,10 +269,10 @@ func TestCreator_cleanup(t *testing.T) {
 
 	// Create some resources that cleanup should remove
 	metadata := &config.SandboxMetadata{
-		Name:      "cleanup-test",
-		Template:  "test",
-		Port:      2200,
-		Workspace: filepath.Join(env.TmpDir, "workspace"),
+		Name:        "cleanup-test",
+		Template:    "test",
+		NetworkSlot: 1,
+		Workspace:   filepath.Join(env.TmpDir, "workspace"),
 	}
 
 	// Save metadata

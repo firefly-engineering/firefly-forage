@@ -70,7 +70,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	logSuccess("Sandbox %s created", name)
-	fmt.Printf("  Port: %d\n", result.Port)
+	fmt.Printf("  IP: %s\n", result.ContainerIP)
 	fmt.Printf("  Workspace: %s\n", result.Workspace)
 	fmt.Printf("  Connect: forage-ctl ssh %s\n", name)
 

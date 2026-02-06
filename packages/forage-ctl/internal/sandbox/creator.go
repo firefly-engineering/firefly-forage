@@ -88,7 +88,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Phase 7: Create and start container
-	if err := c.startContainer(opts.Name, configPath, resources.port); err != nil {
+	if err := c.startContainer(opts.Name, configPath); err != nil {
 		cleanup()
 		return nil, err
 	}
@@ -103,17 +103,16 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	c.postCreationSetup(metadata, resources.template, ws.effectivePath)
 
 	return &CreateResult{
-		Name:      opts.Name,
-		Port:      resources.port,
-		Workspace: ws.effectivePath,
-		Metadata:  metadata,
+		Name:        opts.Name,
+		ContainerIP: metadata.ContainerIP(),
+		Workspace:   ws.effectivePath,
+		Metadata:    metadata,
 	}, nil
 }
 
-// resourceAllocation holds loaded resources and allocated ports.
+// resourceAllocation holds loaded resources and allocated network slot.
 type resourceAllocation struct {
 	template    *config.Template
-	port        int
 	networkSlot int
 }
 
@@ -130,7 +129,7 @@ func (c *Creator) validateInputs(opts CreateOptions) error {
 	return nil
 }
 
-// loadResources loads the template and allocates ports.
+// loadResources loads the template and allocates network slot.
 func (c *Creator) loadResources(opts CreateOptions) (*resourceAllocation, error) {
 	template, err := config.LoadTemplate(c.paths.TemplatesDir, opts.Template)
 	if err != nil {
@@ -143,15 +142,14 @@ func (c *Creator) loadResources(opts CreateOptions) (*resourceAllocation, error)
 		sandboxes = []*config.SandboxMetadata{}
 	}
 
-	allocatedPort, networkSlot, err := port.Allocate(c.hostConfig, sandboxes)
+	networkSlot, err := port.AllocateSlot(sandboxes)
 	if err != nil {
-		return nil, fmt.Errorf("port allocation failed: %w", err)
+		return nil, fmt.Errorf("slot allocation failed: %w", err)
 	}
-	logging.Debug("port allocated", "port", allocatedPort, "slot", networkSlot)
+	logging.Debug("network slot allocated", "slot", networkSlot)
 
 	return &resourceAllocation{
 		template:    template,
-		port:        allocatedPort,
 		networkSlot: networkSlot,
 	}, nil
 }
@@ -161,7 +159,6 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 	return &config.SandboxMetadata{
 		Name:            opts.Name,
 		Template:        opts.Template,
-		Port:            resources.port,
 		Workspace:       ws.effectivePath,
 		NetworkSlot:     resources.networkSlot,
 		CreatedAt:       time.Now().Format(time.RFC3339),
@@ -182,7 +179,6 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 
 	containerCfg := &generator.ContainerConfig{
 		Name:           opts.Name,
-		Port:           resources.port,
 		NetworkSlot:    resources.networkSlot,
 		Workspace:      ws.effectivePath,
 		SecretsPath:    secretsPath,
@@ -212,13 +208,12 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 }
 
 // startContainer creates and starts the container via the runtime.
-func (c *Creator) startContainer(name, configPath string, sshPort int) error {
+func (c *Creator) startContainer(name, configPath string) error {
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
 	if err := runtime.Create(runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,
-		SSHPort:    sshPort,
 	}); err != nil {
 		return fmt.Errorf("container creation failed: %w", err)
 	}
@@ -227,8 +222,9 @@ func (c *Creator) startContainer(name, configPath string, sshPort int) error {
 
 // postCreationSetup performs post-creation setup (SSH wait, skills injection).
 func (c *Creator) postCreationSetup(metadata *config.SandboxMetadata, template *config.Template, workspacePath string) {
-	logging.Debug("waiting for SSH", "port", metadata.Port, "timeout", health.SSHReadyTimeoutSeconds)
-	c.waitForSSH(metadata.Port, health.SSHReadyTimeoutSeconds)
+	containerIP := metadata.ContainerIP()
+	logging.Debug("waiting for SSH", "host", containerIP, "timeout", health.SSHReadyTimeoutSeconds)
+	c.waitForSSH(containerIP, health.SSHReadyTimeoutSeconds)
 
 	c.injectSkills(metadata.Name, workspacePath, metadata, template)
 }
@@ -333,10 +329,10 @@ func (c *Creator) setupSecrets(secretsPath string, template *config.Template) er
 	return nil
 }
 
-// waitForSSH waits for SSH to be ready on the given port.
-func (c *Creator) waitForSSH(port int, timeoutSeconds int) bool {
+// waitForSSH waits for SSH to be ready on the given host.
+func (c *Creator) waitForSSH(host string, timeoutSeconds int) bool {
 	for i := 0; i < timeoutSeconds; i++ {
-		if health.CheckSSH(port) {
+		if health.CheckSSH(host) {
 			logging.Debug("SSH ready", "attempt", i+1)
 			return true
 		}
@@ -364,7 +360,7 @@ func (c *Creator) injectSkills(name, workspacePath string, metadata *config.Sand
 
 	// Copy skills to container workspace
 	logging.Debug("injecting skills into container")
-	if err := copySkillsToContainer(metadata.Port, skillsContent); err != nil {
+	if err := copySkillsToContainer(metadata.ContainerIP(), skillsContent); err != nil {
 		logging.Warn("failed to inject skills", "error", err)
 	}
 }
@@ -380,10 +376,10 @@ func (c *Creator) cleanup(metadata *config.SandboxMetadata) {
 // copySkillsToContainer copies skills content into the container.
 // Uses stdin piping to safely transfer content without shell injection risks.
 // The content is passed via stdin to avoid any shell interpolation or heredoc escaping issues.
-func copySkillsToContainer(port int, content string) error {
+func copySkillsToContainer(host string, content string) error {
 	// Pass content via stdin to sh, which writes it to the file.
 	// This is safe because content never appears in the command string.
-	return ssh.ExecWithStdin(port, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
+	return ssh.ExecWithStdin(host, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
 }
 
 // resolveSSHKeys returns SSH keys to use, in order of priority:

@@ -141,20 +141,6 @@ in
       description = "SSH public keys authorized to access sandboxes";
     };
 
-    portRange = {
-      from = mkOption {
-        type = types.port;
-        default = 2200;
-        description = "Start of port range for sandbox SSH";
-      };
-
-      to = mkOption {
-        type = types.port;
-        default = 2299;
-        description = "End of port range for sandbox SSH";
-      };
-    };
-
     secrets = mkOption {
       type = types.attrsOf types.path;
       default = { };
@@ -199,14 +185,6 @@ in
         assertion = cfg.user != "";
         message = "services.firefly-forage.user must be specified";
       }
-      {
-        assertion = cfg.portRange.from <= cfg.portRange.to;
-        message = "services.firefly-forage.portRange.from (${toString cfg.portRange.from}) must be <= portRange.to (${toString cfg.portRange.to})";
-      }
-      {
-        assertion = cfg.portRange.to - cfg.portRange.from >= 9;
-        message = "services.firefly-forage.portRange must allow at least 10 ports";
-      }
     ] ++ lib.flatten (lib.mapAttrsToList (
       templateName: template:
         lib.mapAttrsToList (
@@ -246,10 +224,6 @@ in
         "firefly-forage/config.json" = {
           text = builtins.toJSON {
             user = cfg.user;
-            portRange = {
-              from = cfg.portRange.from;
-              to = cfg.portRange.to;
-            };
             authorizedKeys = cfg.authorizedKeys;
             secrets = cfg.secrets;
             stateDir = cfg.stateDir;

@@ -111,7 +111,7 @@ type Model struct {
 func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) Model {
 	items := make([]list.Item, len(sandboxes))
 	for i, sb := range sandboxes {
-		status := health.GetSummary(sb.Name, sb.Port, rt)
+		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
 		uptime := "stopped"
 		if status != health.StatusStopped {
 			uptime = health.GetUptime(sb.Name, rt)
@@ -247,7 +247,7 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt r
 	}
 
 	for i, sandbox := range sandboxes {
-		status := health.GetSummary(sandbox.Name, sandbox.Port, rt)
+		status := health.GetSummary(sandbox.Name, sandbox.ContainerIP(), rt)
 		statusIcon := "●"
 		switch status {
 		case health.StatusHealthy:
@@ -260,8 +260,8 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt r
 
 		sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n",
 			i+1, statusIcon, sandbox.Name, sandbox.Template))
-		sb.WriteString(fmt.Sprintf("   Port: %d | Workspace: %s\n\n",
-			sandbox.Port, truncatePath(sandbox.Workspace, 40)))
+		sb.WriteString(fmt.Sprintf("   IP: %s | Workspace: %s\n\n",
+			sandbox.ContainerIP(), truncatePath(sandbox.Workspace, 40)))
 	}
 
 	return sb.String()

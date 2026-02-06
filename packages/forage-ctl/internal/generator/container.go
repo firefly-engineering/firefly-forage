@@ -106,12 +106,19 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		})
 	}
 
-	// Add source repo .jj mount for jj mode
+	// Add source repo .jj and .git mounts for jj mode
+	// jj needs both: .jj for jj state and .git for the git backend
 	if cfg.WorkspaceMode == "jj" && cfg.SourceRepo != "" {
 		jjPath := filepath.Join(cfg.SourceRepo, ".jj")
 		data.BindMounts = append(data.BindMounts, BindMount{
 			Path:     jjPath,
 			HostPath: jjPath,
+			ReadOnly: false,
+		})
+		gitPath := filepath.Join(cfg.SourceRepo, ".git")
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     gitPath,
+			HostPath: gitPath,
 			ReadOnly: false,
 		})
 	}

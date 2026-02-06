@@ -115,9 +115,9 @@ func TestSandboxItemStatusIcons(t *testing.T) {
 
 func TestModelKeyHandling(t *testing.T) {
 	meta := &config.SandboxMetadata{
-		Name:     "test-sandbox",
-		Template: "claude",
-		Port:     2222,
+		Name:        "test-sandbox",
+		Template:    "claude",
+		NetworkSlot: 1,
 	}
 
 	paths := &config.Paths{
@@ -276,16 +276,16 @@ func TestSimplePicker(t *testing.T) {
 	t.Run("with sandboxes", func(t *testing.T) {
 		sandboxes := []*config.SandboxMetadata{
 			{
-				Name:      "sandbox1",
-				Template:  "claude",
-				Port:      2222,
-				Workspace: "/home/user/project1",
+				Name:        "sandbox1",
+				Template:    "claude",
+				NetworkSlot: 1,
+				Workspace:   "/home/user/project1",
 			},
 			{
-				Name:      "sandbox2",
-				Template:  "aider",
-				Port:      2223,
-				Workspace: "/home/user/project2",
+				Name:        "sandbox2",
+				Template:    "aider",
+				NetworkSlot: 2,
+				Workspace:   "/home/user/project2",
 			},
 		}
 
@@ -303,8 +303,8 @@ func TestSimplePicker(t *testing.T) {
 		if !strings.Contains(output, "claude") {
 			t.Error("Should contain template name")
 		}
-		if !strings.Contains(output, "2222") {
-			t.Error("Should contain port number")
+		if !strings.Contains(output, "10.100.1.2") {
+			t.Error("Should contain container IP")
 		}
 	})
 }

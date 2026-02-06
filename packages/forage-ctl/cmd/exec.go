@@ -58,7 +58,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use SSH options builder
-	opts := ssh.DefaultOptions(metadata.Port)
+	opts := ssh.DefaultOptions(metadata.ContainerIP())
 	sshArgs := opts.BuildArgsWithArgv(cmdStr)
 
 	return syscall.Exec(sshPath, sshArgs, os.Environ())

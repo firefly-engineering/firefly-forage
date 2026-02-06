@@ -1,9 +1,5 @@
 {
   "user": "testuser",
-  "portRange": {
-    "from": 2200,
-    "to": 2299
-  },
   "authorizedKeys": [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample test@example.com"
   ],

@@ -28,11 +28,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result := health.Check(name, metadata.Port, getRuntime())
+	result := health.Check(name, metadata.ContainerIP(), getRuntime())
 
 	fmt.Printf("Sandbox: %s\n", metadata.Name)
 	fmt.Printf("Template: %s\n", metadata.Template)
-	fmt.Printf("Port: %d\n", metadata.Port)
+	fmt.Printf("IP: %s\n", metadata.ContainerIP())
 	fmt.Printf("Workspace: %s\n", metadata.Workspace)
 
 	mode := metadata.WorkspaceMode

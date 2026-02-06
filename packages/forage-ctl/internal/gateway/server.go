@@ -5,13 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
-	"syscall"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 )
 
@@ -126,27 +125,13 @@ func (s *Server) ConnectToSandbox(name string) error {
 		}
 	}
 
-	logging.Debug("connecting to sandbox", "name", name, "port", metadata.Port)
+	containerIP := metadata.ContainerIP()
+	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP)
 
-	// Find ssh binary
-	sshPath, err := exec.LookPath("ssh")
-	if err != nil {
-		return fmt.Errorf("ssh not found: %w", err)
-	}
-
-	// Build SSH command to connect to sandbox
-	sshArgs := []string{
-		"ssh",
-		"-p", fmt.Sprintf("%d", metadata.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-t", "agent@localhost",
-		fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s",
-			config.TmuxSessionName, config.TmuxSessionName),
-	}
-
-	// Replace current process with SSH
-	return syscall.Exec(sshPath, sshArgs, os.Environ())
+	// Use SSH to connect to sandbox
+	command := fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace",
+		config.TmuxSessionName, config.TmuxSessionName)
+	return ssh.ReplaceWithSession(containerIP, command)
 }
 
 // ListSandboxes returns a formatted list of sandboxes

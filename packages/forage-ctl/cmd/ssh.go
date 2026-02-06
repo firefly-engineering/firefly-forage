@@ -29,7 +29,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	}
 
 	// Replace current process with ssh session attached to tmux
-	tmuxCmd := fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s",
+	tmuxCmd := fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace",
 		config.TmuxSessionName, config.TmuxSessionName)
-	return ssh.ReplaceWithSession(metadata.Port, tmuxCmd)
+	return ssh.ReplaceWithSession(metadata.ContainerIP(), tmuxCmd)
 }

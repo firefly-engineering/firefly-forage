@@ -35,8 +35,8 @@ func runPs(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTEMPLATE\tPORT\tMODE\tWORKSPACE\tSTATUS")
-	fmt.Fprintln(w, "----\t--------\t----\t----\t---------\t------")
+	fmt.Fprintln(w, "NAME\tTEMPLATE\tIP\tMODE\tWORKSPACE\tSTATUS")
+	fmt.Fprintln(w, "----\t--------\t--\t----\t---------\t------")
 
 	for _, sb := range sandboxes {
 		mode := sb.WorkspaceMode
@@ -44,11 +44,11 @@ func runPs(cmd *cobra.Command, args []string) error {
 			mode = "dir"
 		}
 
-		status := health.GetSummary(sb.Name, sb.Port, rt)
+		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
 		statusStr := formatStatus(status)
 
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n",
-			sb.Name, sb.Template, sb.Port, mode, sb.Workspace, statusStr)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			sb.Name, sb.Template, sb.ContainerIP(), mode, sb.Workspace, statusStr)
 	}
 
 	_ = p // keep paths() call for consistency

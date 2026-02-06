@@ -47,8 +47,8 @@ type CreateResult struct {
 	// Name is the sandbox name
 	Name string
 
-	// Port is the allocated SSH port
-	Port int
+	// ContainerIP is the container's IP address for SSH access
+	ContainerIP string
 
 	// Workspace is the effective workspace path
 	Workspace string

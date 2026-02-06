@@ -13,12 +13,6 @@ func TestLoadValidHostConfig(t *testing.T) {
 	if cfg.User != "testuser" {
 		t.Errorf("User = %q, want %q", cfg.User, "testuser")
 	}
-	if cfg.PortRange.From != 2200 {
-		t.Errorf("PortRange.From = %d, want 2200", cfg.PortRange.From)
-	}
-	if cfg.PortRange.To != 2299 {
-		t.Errorf("PortRange.To = %d, want 2299", cfg.PortRange.To)
-	}
 	if len(cfg.AuthorizedKeys) == 0 {
 		t.Error("AuthorizedKeys should not be empty")
 	}
@@ -78,8 +72,8 @@ func TestLoadValidSandboxMetadata(t *testing.T) {
 	if meta.Template != "claude" {
 		t.Errorf("Template = %q, want %q", meta.Template, "claude")
 	}
-	if meta.Port != 2200 {
-		t.Errorf("Port = %d, want 2200", meta.Port)
+	if meta.NetworkSlot != 1 {
+		t.Errorf("NetworkSlot = %d, want 1", meta.NetworkSlot)
 	}
 	if meta.WorkspaceMode != "jj" {
 		t.Errorf("WorkspaceMode = %q, want %q", meta.WorkspaceMode, "jj")

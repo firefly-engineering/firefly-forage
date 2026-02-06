@@ -121,7 +121,7 @@ const containerTemplateText = `{ pkgs, ... }: {
           Type = "oneshot";
           User = "agent";
           WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s {{.TmuxSession}} || true'";
+          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s {{.TmuxSession}} -c /workspace || true'";
         };
       };
     };

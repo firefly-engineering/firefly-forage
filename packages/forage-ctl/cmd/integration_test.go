@@ -66,7 +66,6 @@ func TestSandboxMetadata_Lifecycle(t *testing.T) {
 	meta := &config.SandboxMetadata{
 		Name:          "test-sandbox",
 		Template:      "claude",
-		Port:          2200,
 		Workspace:     "/home/user/project",
 		NetworkSlot:   1,
 		CreatedAt:     "2024-01-01T00:00:00Z",
@@ -92,8 +91,8 @@ func TestSandboxMetadata_Lifecycle(t *testing.T) {
 	if loaded.Name != meta.Name {
 		t.Errorf("Name = %q, want %q", loaded.Name, meta.Name)
 	}
-	if loaded.Port != meta.Port {
-		t.Errorf("Port = %d, want %d", loaded.Port, meta.Port)
+	if loaded.NetworkSlot != meta.NetworkSlot {
+		t.Errorf("NetworkSlot = %d, want %d", loaded.NetworkSlot, meta.NetworkSlot)
 	}
 
 	// Delete
@@ -114,7 +113,6 @@ func TestSandboxMetadata_JJMode(t *testing.T) {
 	meta := &config.SandboxMetadata{
 		Name:            "jj-sandbox",
 		Template:        "claude",
-		Port:            2201,
 		Workspace:       "/var/lib/forage/workspaces/jj-sandbox",
 		NetworkSlot:     2,
 		CreatedAt:       "2024-01-01T00:00:00Z",
@@ -149,9 +147,9 @@ func TestListSandboxes_MultipleStates(t *testing.T) {
 
 	// Create multiple sandboxes
 	sandboxes := []*config.SandboxMetadata{
-		{Name: "sandbox-1", Template: "claude", Port: 2200, NetworkSlot: 1},
-		{Name: "sandbox-2", Template: "multi", Port: 2201, NetworkSlot: 2},
-		{Name: "sandbox-3", Template: "claude", Port: 2202, NetworkSlot: 3},
+		{Name: "sandbox-1", Template: "claude", NetworkSlot: 1},
+		{Name: "sandbox-2", Template: "multi", NetworkSlot: 2},
+		{Name: "sandbox-3", Template: "claude", NetworkSlot: 3},
 	}
 
 	for _, sb := range sandboxes {
@@ -181,14 +179,6 @@ func TestHostConfig_Loading(t *testing.T) {
 
 	if cfg.User != "testuser" {
 		t.Errorf("User = %q, want %q", cfg.User, "testuser")
-	}
-
-	if cfg.PortRange.From != 2200 {
-		t.Errorf("PortRange.From = %d, want %d", cfg.PortRange.From, 2200)
-	}
-
-	if cfg.PortRange.To != 2299 {
-		t.Errorf("PortRange.To = %d, want %d", cfg.PortRange.To, 2299)
 	}
 
 	if cfg.NixpkgsRev != "test123" {
@@ -473,7 +463,6 @@ func TestSandboxMetadata_JSON_Format(t *testing.T) {
 	meta := &config.SandboxMetadata{
 		Name:          "json-test",
 		Template:      "claude",
-		Port:          2200,
 		Workspace:     "/workspace",
 		NetworkSlot:   1,
 		CreatedAt:     "2024-01-01T00:00:00Z",
@@ -502,8 +491,8 @@ func TestSandboxMetadata_JSON_Format(t *testing.T) {
 		t.Errorf("name = %v, want %q", raw["name"], "json-test")
 	}
 
-	// Port should be a number
-	if port, ok := raw["port"].(float64); !ok || int(port) != 2200 {
-		t.Errorf("port = %v, want 2200", raw["port"])
+	// NetworkSlot should be a number
+	if slot, ok := raw["networkSlot"].(float64); !ok || int(slot) != 1 {
+		t.Errorf("networkSlot = %v, want 1", raw["networkSlot"])
 	}
 }

@@ -88,7 +88,7 @@ func attachToSandbox(metadata *config.SandboxMetadata, paths *config.Paths) erro
 			metadata.Name, metadata.Name)
 	}
 
-	logging.Debug("attaching to sandbox", "name", metadata.Name, "port", metadata.Port)
+	logging.Debug("attaching to sandbox", "name", metadata.Name, "ip", metadata.ContainerIP())
 
 	// Use the ssh command logic
 	return connectToSandbox(metadata.Name, paths)

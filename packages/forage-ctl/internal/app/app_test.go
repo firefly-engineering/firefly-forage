@@ -52,10 +52,6 @@ func TestNew_WithRuntime(t *testing.T) {
 func TestNew_WithHostConfig(t *testing.T) {
 	customConfig := &config.HostConfig{
 		User: "testuser",
-		PortRange: config.PortRange{
-			From: 3000,
-			To:   3100,
-		},
 	}
 
 	app := New(WithHostConfig(customConfig))

@@ -155,7 +155,7 @@ func (h *TestHarness) CreateWorkspace(name string) string {
 }
 
 // WaitForSSH waits for SSH to be ready on a sandbox.
-func (h *TestHarness) WaitForSSH(port int, timeout time.Duration) error {
+func (h *TestHarness) WaitForSSH(host string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -167,7 +167,7 @@ func (h *TestHarness) WaitForSSH(port int, timeout time.Duration) error {
 		case <-ctx.Done():
 			return fmt.Errorf("SSH not ready after %v", timeout)
 		case <-ticker.C:
-			if health.CheckSSH(port) {
+			if health.CheckSSH(host) {
 				return nil
 			}
 		}

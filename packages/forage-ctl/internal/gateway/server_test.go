@@ -65,9 +65,9 @@ func TestServer_ConnectToSandbox_NotRunning(t *testing.T) {
 
 	// Add sandbox metadata but don't mark it as running
 	env.AddSandbox(&config.SandboxMetadata{
-		Name:     "stopped-sandbox",
-		Template: "test",
-		Port:     2200,
+		Name:        "stopped-sandbox",
+		Template:    "test",
+		NetworkSlot: 1,
 	})
 
 	// Mark as stopped in runtime
@@ -117,14 +117,14 @@ func TestServer_ListSandboxes_WithSandboxes(t *testing.T) {
 
 	// Add some sandboxes
 	env.AddSandbox(&config.SandboxMetadata{
-		Name:     "sandbox1",
-		Template: "test",
-		Port:     2200,
+		Name:        "sandbox1",
+		Template:    "test",
+		NetworkSlot: 1,
 	})
 	env.AddSandbox(&config.SandboxMetadata{
-		Name:     "sandbox2",
-		Template: "test",
-		Port:     2201,
+		Name:        "sandbox2",
+		Template:    "test",
+		NetworkSlot: 2,
 	})
 
 	server := NewServer(env.Paths, env.Runtime)

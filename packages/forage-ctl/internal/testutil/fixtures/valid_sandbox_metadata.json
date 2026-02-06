@@ -1,7 +1,6 @@
 {
   "name": "test-sandbox",
   "template": "claude",
-  "port": 2200,
   "workspace": "/var/lib/firefly-forage/workspaces/test-sandbox",
   "networkSlot": 1,
   "createdAt": "2025-01-15T10:30:00Z",

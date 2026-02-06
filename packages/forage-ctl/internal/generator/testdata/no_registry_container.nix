@@ -60,7 +60,7 @@
           Type = "oneshot";
           User = "agent";
           WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage || true'";
+          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage -c /workspace || true'";
         };
       };
     };

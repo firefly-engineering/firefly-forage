@@ -11,6 +11,7 @@
       "/workspace" = { hostPath = "/var/lib/forage/workspaces/test-sandbox"; isReadOnly = false; };
       "/run/secrets" = { hostPath = "/run/secrets/test-sandbox"; isReadOnly = true; };
       "/home/user/myrepo/.jj" = { hostPath = "/home/user/myrepo/.jj"; isReadOnly = false; };
+      "/home/user/myrepo/.git" = { hostPath = "/home/user/myrepo/.git"; isReadOnly = false; };
     };
 
     config = { pkgs, ... }: {
@@ -70,7 +71,7 @@
           Type = "oneshot";
           User = "agent";
           WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage || true'";
+          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage -c /workspace || true'";
         };
       };
     };

@@ -53,11 +53,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 
 	hostConfig := &config.HostConfig{
-		User: "testuser",
-		PortRange: config.PortRange{
-			From: 2200,
-			To:   2299,
-		},
+		User:               "testuser",
 		AuthorizedKeys:     []string{"ssh-rsa AAAA... test@test"},
 		Secrets:            map[string]string{"anthropic": "sk-test-key"},
 		StateDir:           paths.StateDir,
@@ -133,7 +129,7 @@ func (e *TestEnv) AddSandbox(metadata *config.SandboxMetadata) {
 	}
 
 	// Also add to mock runtime if running
-	if metadata.Port > 0 {
+	if metadata.NetworkSlot > 0 {
 		e.Runtime.AddContainer(metadata.Name, runtime.StatusRunning)
 	}
 }

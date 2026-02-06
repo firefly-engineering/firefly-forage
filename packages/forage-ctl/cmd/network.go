@@ -110,7 +110,6 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 
 	containerCfg := &generator.ContainerConfig{
 		Name:           name,
-		Port:           metadata.Port,
 		NetworkSlot:    metadata.NetworkSlot,
 		Workspace:      metadata.Workspace,
 		SecretsPath:    filepath.Join(paths.SecretsDir, name),
