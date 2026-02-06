@@ -27,9 +27,9 @@ test-docker:
 # Run all tests including docker integration
 test-all: test test-docker
 
-# Run NixOS VM integration test (uses actual nixosModule)
+# Run NixOS VM integration test (uses actual nixosModule, Linux only)
 test-vm:
-    nix build .#checks.x86_64-linux.vm-integration
+    nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').vm-integration
 
 # Format all code
 fmt:
