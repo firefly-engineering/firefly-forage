@@ -397,7 +397,8 @@ func generateRestrictedConfig(cfg *Config) string {
 func generateFullConfig(slot int) string {
 	return fmt.Sprintf(`# Full network access
       networking.defaultGateway = "10.100.%d.1";
-      networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];`, slot)
+      networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
+      networking.firewall.allowedTCPPorts = [ 22 ];`, slot)
 }
 
 func formatNixList(items []string) string {

@@ -165,8 +165,6 @@ func GenerateNixConfig(cfg *ContainerConfig) (string, error) {
       %s
       %s
 
-      networking.firewall.allowedTCPPorts = [ 22 ];
-
       systemd.services.forage-init = {
         description = "Forage Sandbox Initialization";
         wantedBy = [ "multi-user.target" ];
@@ -215,16 +213,16 @@ func buildAgentConfig(agents map[string]config.AgentConfig, sandboxName string, 
 		}
 		// When using proxy, don't inject secrets directly - the proxy will inject them
 		if proxyURL == "" && agent.AuthEnvVar != "" && agent.SecretName != "" {
-			envVars = append(envVars, fmt.Sprintf(`%s = "$(cat /run/secrets/%s 2>/dev/null || echo '')"`,
+			envVars = append(envVars, fmt.Sprintf(`%s = "$(cat /run/secrets/%s 2>/dev/null || echo '')";`,
 				agent.AuthEnvVar, agent.SecretName))
 		}
 	}
 
 	// Add proxy configuration if enabled
 	if proxyURL != "" {
-		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_BASE_URL = %q`, proxyURL))
+		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_BASE_URL = %q;`, proxyURL))
 		// Add custom header to identify the sandbox
-		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_CUSTOM_HEADERS = "X-Forage-Sandbox: %s"`, sandboxName))
+		envVars = append(envVars, fmt.Sprintf(`ANTHROPIC_CUSTOM_HEADERS = "X-Forage-Sandbox: %s";`, sandboxName))
 	}
 
 	envConfig := ""
