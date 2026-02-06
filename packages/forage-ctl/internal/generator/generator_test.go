@@ -350,11 +350,7 @@ func TestContainerConfig_Validate(t *testing.T) {
 			modify:  func(c *ContainerConfig) { c.Workspace = "" },
 			wantErr: "workspace path is required",
 		},
-		{
-			name:    "missing secrets path",
-			modify:  func(c *ContainerConfig) { c.SecretsPath = "" },
-			wantErr: "secrets path is required",
-		},
+		// SecretsPath is optional - no validation test needed
 		{
 			name:    "missing authorized keys",
 			modify:  func(c *ContainerConfig) { c.AuthorizedKeys = nil },

@@ -70,11 +70,14 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		c.cleanup(metadata)
 	}
 
-	// Phase 5: Set up secrets
-	secretsPath := filepath.Join(c.paths.SecretsDir, opts.Name)
-	if err = c.setupSecrets(secretsPath, resources.template); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to setup secrets: %w", err)
+	// Phase 5: Set up secrets (only if any agent uses secrets)
+	var secretsPath string
+	if c.templateHasSecrets(resources.template) {
+		secretsPath = filepath.Join(c.paths.SecretsDir, opts.Name)
+		if err = c.setupSecrets(secretsPath, resources.template); err != nil {
+			cleanup()
+			return nil, fmt.Errorf("failed to setup secrets: %w", err)
+		}
 	}
 
 	// Phase 6: Generate and write container config
@@ -291,6 +294,16 @@ func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
 	}
 
 	return ws, nil
+}
+
+// templateHasSecrets returns true if any agent in the template uses secrets.
+func (c *Creator) templateHasSecrets(template *config.Template) bool {
+	for _, agent := range template.Agents {
+		if agent.SecretName != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // setupSecrets copies secrets to the sandbox secrets directory.

@@ -42,9 +42,7 @@ func (c *ContainerConfig) Validate() error {
 	if c.Workspace == "" {
 		return fmt.Errorf("workspace path is required")
 	}
-	if c.SecretsPath == "" {
-		return fmt.Errorf("secrets path is required")
-	}
+	// SecretsPath is optional - only needed if agents use secrets
 	if len(c.AuthorizedKeys) == 0 {
 		return fmt.Errorf("at least one authorized key is required")
 	}
@@ -102,7 +100,15 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 	data.BindMounts = []BindMount{
 		{Path: "/nix/store", HostPath: "/nix/store", ReadOnly: true},
 		{Path: "/workspace", HostPath: cfg.Workspace, ReadOnly: false},
-		{Path: "/run/secrets", HostPath: cfg.SecretsPath, ReadOnly: true},
+	}
+
+	// Add secrets mount only if secrets are configured
+	if cfg.SecretsPath != "" {
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     "/run/secrets",
+			HostPath: cfg.SecretsPath,
+			ReadOnly: true,
+		})
 	}
 
 	// Add source repo .jj mount for jj mode
