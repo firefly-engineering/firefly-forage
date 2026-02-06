@@ -13,7 +13,6 @@ import (
 func validTestConfig() *ContainerConfig {
 	return &ContainerConfig{
 		Name:        "test-sandbox",
-		Port:        2200,
 		NetworkSlot: 1,
 		Workspace:   "/home/user/project",
 		SecretsPath: "/run/secrets/test-sandbox",
@@ -53,9 +52,9 @@ func TestGenerateNixConfig(t *testing.T) {
 		t.Error("Config should contain container name with prefix")
 	}
 
-	// Check port forwarding
-	if !strings.Contains(result, "hostPort = 2200") {
-		t.Error("Config should contain port forwarding")
+	// Check NO port forwarding (we use direct container IP access now)
+	if strings.Contains(result, "forwardPorts") {
+		t.Error("Config should NOT contain forwardPorts (using direct IP access)")
 	}
 
 	// Check network address
@@ -326,16 +325,6 @@ func TestContainerConfig_Validate(t *testing.T) {
 			wantErr: "container name is required",
 		},
 		{
-			name:    "invalid port (zero)",
-			modify:  func(c *ContainerConfig) { c.Port = 0 },
-			wantErr: "invalid port",
-		},
-		{
-			name:    "invalid port (too high)",
-			modify:  func(c *ContainerConfig) { c.Port = 70000 },
-			wantErr: "invalid port",
-		},
-		{
 			name:    "invalid network slot (zero)",
 			modify:  func(c *ContainerConfig) { c.NetworkSlot = 0 },
 			wantErr: "invalid network slot",
@@ -537,7 +526,6 @@ func TestGenerateSkills_WithAgents(t *testing.T) {
 func goldenTestConfig() *ContainerConfig {
 	return &ContainerConfig{
 		Name:        "test-sandbox",
-		Port:        2200,
 		NetworkSlot: 1,
 		Workspace:   "/home/user/project",
 		SecretsPath: "/run/secrets/test-sandbox",

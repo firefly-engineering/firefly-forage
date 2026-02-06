@@ -15,7 +15,6 @@ const NixOSStateVersion = "24.05"
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
 	Name           string
-	Port           int
 	NetworkSlot    int
 	Workspace      string
 	SecretsPath    string
@@ -32,9 +31,6 @@ type ContainerConfig struct {
 func (c *ContainerConfig) Validate() error {
 	if c.Name == "" {
 		return fmt.Errorf("container name is required")
-	}
-	if c.Port <= 0 || c.Port > 65535 {
-		return fmt.Errorf("invalid port: %d (must be 1-65535)", c.Port)
 	}
 	if c.NetworkSlot < 1 || c.NetworkSlot > 254 {
 		return fmt.Errorf("invalid network slot: %d (must be 1-254)", c.NetworkSlot)
@@ -89,7 +85,6 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 	data := &TemplateData{
 		ContainerName:  config.ContainerName(cfg.Name),
 		NetworkSlot:    cfg.NetworkSlot,
-		Port:           cfg.Port,
 		StateVersion:   NixOSStateVersion,
 		AuthorizedKeys: cfg.AuthorizedKeys,
 		NetworkConfig:  buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot),

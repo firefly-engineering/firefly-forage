@@ -8,7 +8,6 @@ import (
 type TemplateData struct {
 	ContainerName  string
 	NetworkSlot    int
-	Port           int
 	StateVersion   string
 	BindMounts     []BindMount
 	AuthorizedKeys []string
@@ -126,10 +125,6 @@ const containerTemplateText = `{ pkgs, ... }: {
         };
       };
     };
-
-    forwardPorts = [
-      { containerPort = 22; hostPort = {{.Port}}; protocol = "tcp"; }
-    ];
   };
 }
 `

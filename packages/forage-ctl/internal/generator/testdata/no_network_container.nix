@@ -86,9 +86,5 @@
         };
       };
     };
-
-    forwardPorts = [
-      { containerPort = 22; hostPort = 2200; protocol = "tcp"; }
-    ];
   };
 }
