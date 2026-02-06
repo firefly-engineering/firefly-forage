@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -442,5 +444,140 @@ func TestGenerateSkills_WithAgents(t *testing.T) {
 	}
 	if !strings.Contains(result, "opencode") {
 		t.Error("Skills should list opencode agent")
+	}
+}
+
+// Golden test configuration helpers
+
+func goldenTestConfig() *ContainerConfig {
+	return &ContainerConfig{
+		Name:        "test-sandbox",
+		Port:        2200,
+		NetworkSlot: 1,
+		Workspace:   "/home/user/project",
+		SecretsPath: "/run/secrets/test-sandbox",
+		AuthorizedKeys: []string{
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample user@host",
+		},
+		Template: &config.Template{
+			Name:        "claude",
+			Description: "Claude sandbox",
+			Network:     "full",
+			Agents: map[string]config.AgentConfig{
+				"claude": {
+					PackagePath: "pkgs.claude-code",
+					SecretName:  "anthropic",
+					AuthEnvVar:  "ANTHROPIC_API_KEY",
+				},
+			},
+		},
+		HostConfig: &config.HostConfig{
+			User: "testuser",
+		},
+		WorkspaceMode: "direct",
+		NixpkgsRev:    "abc123def456",
+	}
+}
+
+func readGoldenFile(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join("testdata", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read golden file %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func TestGenerateNixConfig_Golden(t *testing.T) {
+	tests := []struct {
+		name       string
+		modifyFunc func(*ContainerConfig)
+		goldenFile string
+	}{
+		{
+			name:       "basic",
+			modifyFunc: func(c *ContainerConfig) {},
+			goldenFile: "basic_container.nix",
+		},
+		{
+			name: "jj_mode",
+			modifyFunc: func(c *ContainerConfig) {
+				c.Workspace = "/var/lib/forage/workspaces/test-sandbox"
+				c.WorkspaceMode = "jj"
+				c.SourceRepo = "/home/user/myrepo"
+			},
+			goldenFile: "jj_mode_container.nix",
+		},
+		{
+			name: "proxy_mode",
+			modifyFunc: func(c *ContainerConfig) {
+				c.ProxyURL = "http://10.100.1.1:8080"
+			},
+			goldenFile: "proxy_mode_container.nix",
+		},
+		{
+			name: "no_network",
+			modifyFunc: func(c *ContainerConfig) {
+				c.Template.Network = "none"
+			},
+			goldenFile: "no_network_container.nix",
+		},
+		{
+			name: "no_registry",
+			modifyFunc: func(c *ContainerConfig) {
+				c.NixpkgsRev = ""
+			},
+			goldenFile: "no_registry_container.nix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goldenTestConfig()
+			tt.modifyFunc(cfg)
+
+			result, err := GenerateNixConfig(cfg)
+			if err != nil {
+				t.Fatalf("GenerateNixConfig failed: %v", err)
+			}
+
+			golden := readGoldenFile(t, tt.goldenFile)
+			if result != golden {
+				t.Errorf("Generated config does not match golden file %s.\nGot:\n%s\nWant:\n%s", tt.goldenFile, result, golden)
+			}
+		})
+	}
+}
+
+// TestGenerateNixConfig_RestrictedNetwork tests restricted network mode separately
+// because it involves DNS resolution which produces dynamic IP addresses.
+func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {
+	cfg := goldenTestConfig()
+	cfg.Template.Network = "restricted"
+	cfg.Template.AllowedHosts = []string{"api.anthropic.com", "github.com"}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Check for key structural elements (IPs may vary due to DNS resolution)
+	required := []string{
+		"containers.forage-test-sandbox",
+		"nftables",
+		"dnsmasq",
+		"allowed_ipv4",
+		"allowed_ipv6",
+		"api.anthropic.com",
+		"github.com",
+		"server=/api.anthropic.com/1.1.1.1",
+		"server=/github.com/1.1.1.1",
+	}
+
+	for _, s := range required {
+		if !strings.Contains(result, s) {
+			t.Errorf("Restricted network config should contain %q", s)
+		}
 	}
 }
