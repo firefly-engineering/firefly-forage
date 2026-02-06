@@ -8,7 +8,7 @@
     "ssh-ed25519 AAAA... user@host"
   ],
   "secrets": {
-    "anthropic": "sk-ant-api03-..."
+    "anthropic": "/run/secrets/anthropic-api-key"
   },
   "stateDir": "/var/lib/firefly-forage",
   "extraContainerPath": "/nix/store/.../bin/extra-container",
