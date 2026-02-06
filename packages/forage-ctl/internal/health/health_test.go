@@ -89,25 +89,25 @@ func TestCheckResult(t *testing.T) {
 }
 
 func TestCheckSSH_NoConnection(t *testing.T) {
-	// Test with a port that definitely won't have SSH running
-	result := CheckSSH(65432)
+	// Test with an IP that definitely won't have SSH running
+	result := CheckSSH("192.0.2.1") // TEST-NET-1 address
 	if result {
-		t.Error("CheckSSH should return false for non-existent SSH server")
+		t.Error("CheckSSH should return false for unreachable host")
 	}
 }
 
 func TestCheckTmux_NoConnection(t *testing.T) {
-	// Test with a port that definitely won't have SSH running
-	result := CheckTmux(65432)
+	// Test with an IP that definitely won't have SSH running
+	result := CheckTmux("192.0.2.1") // TEST-NET-1 address
 	if result {
-		t.Error("CheckTmux should return false for non-existent SSH server")
+		t.Error("CheckTmux should return false for unreachable host")
 	}
 }
 
 func TestGetTmuxWindows_NoConnection(t *testing.T) {
-	// Test with a port that definitely won't have SSH running
-	windows := GetTmuxWindows(65432)
+	// Test with an IP that definitely won't have SSH running
+	windows := GetTmuxWindows("192.0.2.1") // TEST-NET-1 address
 	if windows != nil {
-		t.Error("GetTmuxWindows should return nil for non-existent SSH server")
+		t.Error("GetTmuxWindows should return nil for unreachable host")
 	}
 }

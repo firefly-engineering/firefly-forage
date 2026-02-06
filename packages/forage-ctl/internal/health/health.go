@@ -39,19 +39,19 @@ type CheckResult struct {
 }
 
 // CheckSSH checks if SSH is reachable
-func CheckSSH(port int) bool {
-	return ssh.CheckConnection(port)
+func CheckSSH(host string) bool {
+	return ssh.CheckConnection(host)
 }
 
 // CheckTmux checks if the tmux session exists
-func CheckTmux(port int) bool {
-	_, err := ssh.ExecWithOutput(port, "tmux", "has-session", "-t", config.TmuxSessionName)
+func CheckTmux(host string) bool {
+	_, err := ssh.ExecWithOutput(host, "tmux", "has-session", "-t", config.TmuxSessionName)
 	return err == nil
 }
 
 // GetTmuxWindows returns the list of tmux windows
-func GetTmuxWindows(port int) []string {
-	output, err := ssh.ExecWithOutput(port, "tmux", "list-windows", "-t", config.TmuxSessionName, "-F", "#{window_index}:#{window_name}")
+func GetTmuxWindows(host string) []string {
+	output, err := ssh.ExecWithOutput(host, "tmux", "list-windows", "-t", config.TmuxSessionName, "-F", "#{window_index}:#{window_name}")
 	if err != nil {
 		return nil
 	}
@@ -123,7 +123,7 @@ func formatDuration(d time.Duration) string {
 
 // Check performs all health checks for a sandbox.
 // The rt parameter is optional; if nil, container running check returns false.
-func Check(sandboxName string, port int, rt runtime.Runtime) *CheckResult {
+func Check(sandboxName string, host string, rt runtime.Runtime) *CheckResult {
 	result := &CheckResult{}
 
 	// Check container
@@ -138,15 +138,15 @@ func Check(sandboxName string, port int, rt runtime.Runtime) *CheckResult {
 	result.Uptime = GetUptime(sandboxName, rt)
 
 	// Check SSH
-	result.SSHReachable = CheckSSH(port)
+	result.SSHReachable = CheckSSH(host)
 	if !result.SSHReachable {
 		return result
 	}
 
 	// Check tmux
-	result.TmuxActive = CheckTmux(port)
+	result.TmuxActive = CheckTmux(host)
 	if result.TmuxActive {
-		result.TmuxWindows = GetTmuxWindows(port)
+		result.TmuxWindows = GetTmuxWindows(host)
 	}
 
 	return result
@@ -154,7 +154,7 @@ func Check(sandboxName string, port int, rt runtime.Runtime) *CheckResult {
 
 // GetSummary returns a summary health status.
 // The rt parameter is optional; if nil, returns StatusStopped.
-func GetSummary(sandboxName string, port int, rt runtime.Runtime) Status {
+func GetSummary(sandboxName string, host string, rt runtime.Runtime) Status {
 	if rt == nil {
 		return StatusStopped
 	}
@@ -162,10 +162,10 @@ func GetSummary(sandboxName string, port int, rt runtime.Runtime) Status {
 	if !running {
 		return StatusStopped
 	}
-	if !CheckSSH(port) {
+	if !CheckSSH(host) {
 		return StatusUnhealthy
 	}
-	if !CheckTmux(port) {
+	if !CheckTmux(host) {
 		return StatusNoTmux
 	}
 	return StatusHealthy
