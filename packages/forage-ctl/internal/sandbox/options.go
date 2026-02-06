@@ -22,6 +22,10 @@ type CreateOptions struct {
 
 	// RepoPath is the repository path for jj/git-worktree modes
 	RepoPath string
+
+	// SSHKeys are explicit SSH public keys for sandbox access (optional)
+	// If empty, keys are resolved from config or ~/.ssh/*.pub
+	SSHKeys []string
 }
 
 // WorkspaceMode specifies the workspace setup strategy.
