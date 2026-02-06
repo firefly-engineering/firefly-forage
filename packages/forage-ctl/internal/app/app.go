@@ -60,8 +60,9 @@ func New(opts ...Option) *App {
 	// Initialize runtime if not provided
 	if app.Runtime == nil {
 		cfg := &runtime.Config{
-			Type:         runtime.RuntimeAuto,
-			SandboxesDir: app.Paths.SandboxesDir,
+			Type:            runtime.RuntimeAuto,
+			ContainerPrefix: config.ContainerPrefix,
+			SandboxesDir:    app.Paths.SandboxesDir,
 		}
 		rt, err := runtime.New(cfg)
 		if err != nil {
