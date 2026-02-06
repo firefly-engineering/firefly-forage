@@ -19,6 +19,69 @@
           vendorHash = "sha256-hoXlgAidu3eEhY5GBx/YDxzThdBIKfQtmA9bQ21eIzU=";
           env.CGO_ENABLED = "0";
         };
+
+        # NixOS VM integration test
+        vmTest = pkgs.testers.runNixOSTest {
+          name = "forage-ctl-integration";
+
+          nodes.machine = { config, pkgs, ... }: {
+            boot.enableContainers = true;
+            systemd.services.systemd-machined.enable = true;
+
+            systemd.tmpfiles.rules = [
+              "d /var/lib/firefly-forage 0755 root root -"
+              "d /var/lib/firefly-forage/sandboxes 0755 root root -"
+              "d /etc/firefly-forage 0755 root root -"
+              "d /etc/firefly-forage/templates 0755 root root -"
+            ];
+
+            environment.systemPackages = [ forage-ctl pkgs.jq ];
+
+            virtualisation = {
+              memorySize = 2048;
+              cores = 2;
+            };
+
+            environment.etc."firefly-forage/templates/test.json".text = builtins.toJSON {
+              name = "test";
+              description = "Test template";
+              network = "full";
+              agents.test-agent = {
+                packagePath = "pkgs.hello";
+                secretName = "test-secret";
+                authEnvVar = "TEST_KEY";
+              };
+            };
+
+            environment.etc."firefly-forage/config.json".text = builtins.toJSON {
+              runtime = "nspawn";
+              hostAddress = "10.250.0.1";
+              containerSubnet = "10.250.0.0/16";
+              portRange = { from = 2200; to = 2299; };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("systemd-machined.service")
+
+            # Verify forage-ctl runs
+            machine.succeed("forage-ctl --version")
+
+            # Verify config files exist
+            machine.succeed("test -f /etc/firefly-forage/config.json")
+            machine.succeed("test -f /etc/firefly-forage/templates/test.json")
+
+            # Verify systemd-machined is active
+            machine.succeed("systemctl is-active systemd-machined")
+            machine.succeed("machinectl list")
+
+            # Verify template is loadable
+            machine.succeed("forage-ctl templates 2>&1 | grep -q test")
+
+            print("All VM integration tests passed!")
+          '';
+        };
       in
       {
         packages = {
@@ -28,96 +91,38 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            # Go development
-            go
-            gopls
-            golangci-lint
-            delve
-
-            # Container runtimes for testing
-            docker-client
-
-            # SSH tools for gateway testing
-            openssh
-
-            # Testing tools
-            go-junit-report
+            go gopls golangci-lint delve
+            docker-client openssh go-junit-report
           ];
 
           shellHook = ''
             echo "Firefly Forage development shell"
             echo ""
             echo "Commands:"
-            echo "  go test ./...                          - Run unit tests"
-            echo "  FORAGE_INTEGRATION_TESTS=1 go test ./... - Run all tests including integration"
-            echo "  FORAGE_RUNTIME=docker go test ./...    - Use docker runtime for tests"
+            echo "  go test ./...                                    - Run unit tests"
+            echo "  FORAGE_INTEGRATION_TESTS=1 go test ./...         - Run all tests"
+            echo "  FORAGE_RUNTIME=docker go test ./...              - Use docker runtime"
+            echo "  nix build .#checks.x86_64-linux.vm-integration   - Run VM tests"
             echo ""
           '';
 
-          # Make docker runtime the default for integration tests
           FORAGE_RUNTIME = "docker";
         };
 
-        # Docker-based integration test
-        checks.docker-integration = pkgs.runCommand "docker-integration-test" {
-          buildInputs = [ pkgs.go pkgs.docker-client ];
-          src = ./.;
-        } ''
-          cd $src
-          export HOME=$(mktemp -d)
-          export GOPATH=$HOME/go
-          export GOCACHE=$HOME/.cache/go-build
-
-          # Run tests with docker runtime
-          export FORAGE_RUNTIME=docker
-          export FORAGE_INTEGRATION_TESTS=1
-
-          go test -v ./internal/integration/... 2>&1 | tee $out
-        '';
+        checks = {
+          unit-tests = pkgs.runCommand "unit-tests" {
+            nativeBuildInputs = [ pkgs.go ];
+            src = ./.;
+          } ''
+            export HOME=$(mktemp -d)
+            export GOPATH=$HOME/go
+            export GOCACHE=$HOME/.cache/go-build
+            cd $src
+            go test ./... -short 2>&1 | tee $out
+          '';
+        } // (if system == "x86_64-linux" then {
+          vm-integration = vmTest;
+        } else {});
       }
-    ) // {
-      # NixOS VM test for full container testing with actual nspawn
-      # This tests the real container infrastructure
-      nixosConfigurations.integration-test-vm = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          ({ pkgs, ... }: {
-            # VM configuration for testing
-            virtualisation = {
-              memorySize = 2048;
-              cores = 2;
-              diskSize = 4096;
-            };
-
-            # Enable container support
-            boot.enableContainers = true;
-
-            # Install forage-ctl and dependencies
-            environment.systemPackages = with pkgs; [
-              self.packages.x86_64-linux.forage-ctl
-              go
-              openssh
-            ];
-
-            # Enable SSH for testing gateway
-            services.openssh.enable = true;
-
-            # Test user
-            users.users.test = {
-              isNormalUser = true;
-              extraGroups = [ "systemd-journal" ];
-              password = "test";
-            };
-
-            # Create test directories
-            systemd.tmpfiles.rules = [
-              "d /var/lib/firefly-forage 0755 root root -"
-              "d /var/lib/firefly-forage/sandboxes 0755 root root -"
-              "d /etc/firefly-forage 0755 root root -"
-              "d /etc/firefly-forage/templates 0755 root root -"
-            ];
-          })
-        ];
-      };
-    };
+    );
 }
