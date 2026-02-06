@@ -136,9 +136,12 @@ type Template struct {
 }
 
 type AgentConfig struct {
-	PackagePath string `json:"packagePath"`
-	SecretName  string `json:"secretName"`
-	AuthEnvVar  string `json:"authEnvVar"`
+	PackagePath           string `json:"packagePath"`
+	SecretName            string `json:"secretName"`
+	AuthEnvVar            string `json:"authEnvVar"`
+	HostConfigDir         string `json:"hostConfigDir,omitempty"`
+	ContainerConfigDir    string `json:"containerConfigDir,omitempty"`
+	HostConfigDirReadOnly bool   `json:"hostConfigDirReadOnly,omitempty"`
 }
 
 // Validate checks that the Template is valid.
@@ -175,6 +178,22 @@ func (a *AgentConfig) Validate() error {
 	}
 	if a.AuthEnvVar == "" {
 		return fmt.Errorf("authEnvVar is required")
+	}
+
+	// Validate host config directory paths if specified
+	if a.HostConfigDir != "" {
+		if !filepath.IsAbs(a.HostConfigDir) {
+			return fmt.Errorf("hostConfigDir must be an absolute path (got %q)", a.HostConfigDir)
+		}
+	}
+	if a.ContainerConfigDir != "" {
+		if !filepath.IsAbs(a.ContainerConfigDir) {
+			return fmt.Errorf("containerConfigDir must be an absolute path (got %q)", a.ContainerConfigDir)
+		}
+	}
+	// If hostConfigDir is set, containerConfigDir should also be set (NixOS module does this)
+	if a.HostConfigDir != "" && a.ContainerConfigDir == "" {
+		return fmt.Errorf("containerConfigDir is required when hostConfigDir is set")
 	}
 	return nil
 }

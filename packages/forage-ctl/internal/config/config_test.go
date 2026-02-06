@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -382,6 +383,120 @@ func TestLoadSandboxMetadata_PathTraversal(t *testing.T) {
 	_, err := LoadSandboxMetadata(tmpDir, "../../../etc/passwd")
 	if err == nil {
 		t.Error("Expected error for path traversal, got nil")
+	}
+}
+
+func TestAgentConfigValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		agent   AgentConfig
+		wantErr string
+	}{
+		{
+			name: "valid basic config",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid with host config dir",
+			agent: AgentConfig{
+				PackagePath:        "/nix/store/abc-claude",
+				SecretName:         "anthropic",
+				AuthEnvVar:         "ANTHROPIC_API_KEY",
+				HostConfigDir:      "/home/user/.claude",
+				ContainerConfigDir: "/home/agent/.claude",
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid with read-only config dir",
+			agent: AgentConfig{
+				PackagePath:           "/nix/store/abc-claude",
+				SecretName:            "anthropic",
+				AuthEnvVar:            "ANTHROPIC_API_KEY",
+				HostConfigDir:         "/home/user/.claude",
+				ContainerConfigDir:    "/home/agent/.claude",
+				HostConfigDirReadOnly: true,
+			},
+			wantErr: "",
+		},
+		{
+			name: "missing packagePath",
+			agent: AgentConfig{
+				SecretName: "anthropic",
+				AuthEnvVar: "ANTHROPIC_API_KEY",
+			},
+			wantErr: "packagePath is required",
+		},
+		{
+			name: "missing secretName",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+			wantErr: "secretName is required",
+		},
+		{
+			name: "missing authEnvVar",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+			},
+			wantErr: "authEnvVar is required",
+		},
+		{
+			name: "relative hostConfigDir",
+			agent: AgentConfig{
+				PackagePath:        "/nix/store/abc-claude",
+				SecretName:         "anthropic",
+				AuthEnvVar:         "ANTHROPIC_API_KEY",
+				HostConfigDir:      ".claude",
+				ContainerConfigDir: "/home/agent/.claude",
+			},
+			wantErr: "hostConfigDir must be an absolute path",
+		},
+		{
+			name: "relative containerConfigDir",
+			agent: AgentConfig{
+				PackagePath:        "/nix/store/abc-claude",
+				SecretName:         "anthropic",
+				AuthEnvVar:         "ANTHROPIC_API_KEY",
+				HostConfigDir:      "/home/user/.claude",
+				ContainerConfigDir: ".claude",
+			},
+			wantErr: "containerConfigDir must be an absolute path",
+		},
+		{
+			name: "hostConfigDir without containerConfigDir",
+			agent: AgentConfig{
+				PackagePath:   "/nix/store/abc-claude",
+				SecretName:    "anthropic",
+				AuthEnvVar:    "ANTHROPIC_API_KEY",
+				HostConfigDir: "/home/user/.claude",
+			},
+			wantErr: "containerConfigDir is required when hostConfigDir is set",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.agent.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("Validate() unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("Validate() expected error containing %q, got nil", tt.wantErr)
+				} else if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("Validate() error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+			}
+		})
 	}
 }
 
