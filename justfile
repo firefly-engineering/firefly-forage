@@ -4,28 +4,29 @@
 default:
     @just --list
 
-# Build forage-ctl
+# Build forage-ctl with nix
 build:
     nix build .#forage-ctl
 
-# Run all Go tests (unit + workflow)
+# Run all Go tests
 test:
-    cd packages/forage-ctl && go test ./...
+    @just packages/forage-ctl/test
 
 # Run Go tests with verbose output
-test-verbose:
-    cd packages/forage-ctl && go test -v ./...
+test-v:
+    @just packages/forage-ctl/test-v
 
 # Run a specific test package
 test-pkg pkg:
-    cd packages/forage-ctl && go test -v ./internal/{{pkg}}/...
+    @just packages/forage-ctl/test-pkg {{pkg}}
 
 # Run docker integration tests (requires docker daemon)
 test-docker:
-    cd packages/forage-ctl && go test -tags=integration,docker -v ./internal/integration/...
+    @just packages/forage-ctl/test-docker
 
-# Run all tests including docker integration
-test-all: test test-docker
+# Run all Go tests including docker integration
+test-all:
+    @just packages/forage-ctl/test-all
 
 # Run NixOS VM integration test (uses actual nixosModule, Linux only)
 test-vm:
@@ -34,15 +35,15 @@ test-vm:
 # Format all code
 fmt:
     nix fmt
-    cd packages/forage-ctl && go fmt ./...
+    @just packages/forage-ctl/fmt
 
-# Run Go linter (golangci-lint)
+# Run Go linter
 lint:
-    cd packages/forage-ctl && golangci-lint run
+    @just packages/forage-ctl/lint
 
-# Run Go linter with auto-fix
+# Fix Go linter issues
 lint-fix:
-    cd packages/forage-ctl && golangci-lint run --fix
+    @just packages/forage-ctl/lint-fix
 
 # Build documentation
 docs:
@@ -58,11 +59,11 @@ check: fmt lint test build
 # Clean build artifacts
 clean:
     rm -rf result
-    cd packages/forage-ctl && go clean
+    @just packages/forage-ctl/clean
 
 # Update Go dependencies
 update-deps:
-    cd packages/forage-ctl && go get -u ./... && go mod tidy
+    @just packages/forage-ctl/update-deps
 
 # Show flake outputs
 outputs:

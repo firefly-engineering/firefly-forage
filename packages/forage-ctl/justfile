@@ -4,7 +4,7 @@
 default:
     @just --list
 
-# Run all tests (unit + workflow, no containers)
+# Run all tests
 test:
     go test ./...
 
@@ -12,9 +12,13 @@ test:
 test-v:
     go test -v ./...
 
-# Run only unit tests (fast)
+# Run only unit tests (fast, skips long-running tests)
 test-unit:
     go test -short ./...
+
+# Run a specific test package
+test-pkg pkg:
+    go test -v ./internal/{{pkg}}/...
 
 # Run docker integration tests (requires docker)
 test-docker:
@@ -22,15 +26,6 @@ test-docker:
 
 # Run all tests including docker integration
 test-all: test test-docker
-
-# Run NixOS VM integration test
-test-vm:
-    nix build .#checks.x86_64-linux.vm-integration
-
-# Run NixOS VM interactively (for debugging)
-test-vm-interactive:
-    nix build .#checks.x86_64-linux.vm-integration.driverInteractive
-    ./result/bin/nixos-test-driver
 
 # Run linter
 lint:
@@ -40,25 +35,22 @@ lint:
 lint-fix:
     golangci-lint run --fix
 
+# Format code
+fmt:
+    go fmt ./...
+
 # Build the binary
 build:
     go build -o forage-ctl .
 
-# Build with nix
-build-nix:
-    nix build
-
-# Enter development shell
-dev:
-    nix develop
-
 # Clean build artifacts
 clean:
     rm -f forage-ctl
-    rm -rf result
+    go clean
 
-# Run all checks (test + lint)
-check: test lint
+# Update dependencies
+update-deps:
+    go get -u ./... && go mod tidy
 
-# Run all checks including docker tests
-check-all: test-all lint
+# Run all checks (fmt, lint, test)
+check: fmt lint test
