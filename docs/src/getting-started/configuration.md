@@ -163,6 +163,41 @@ services.firefly-forage.templates.multi = {
 };
 ```
 
+#### Host Config Directory Mounting
+
+Mount host configuration directories into sandboxes for persistent authentication. This is useful for agents like Claude Code that store credentials in `~/.claude/`:
+
+```nix
+services.firefly-forage.templates.claude = {
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+    hostConfigDir = "~/.claude";  # mounts to /home/agent/.claude
+  };
+};
+```
+
+Options:
+- `hostConfigDir` - Host directory to mount (supports `~` expansion)
+- `containerConfigDir` - Override the container mount point (default: `/home/agent/.<dirname>`)
+- `hostConfigDirReadOnly` - Mount as read-only (default: `false` to allow token refresh)
+
+Example with all options:
+
+```nix
+services.firefly-forage.templates.claude = {
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+    hostConfigDir = "~/.claude";
+    containerConfigDir = "/home/agent/.claude";  # explicit path
+    hostConfigDirReadOnly = false;  # allow writing (default)
+  };
+};
+```
+
 #### Network Modes
 
 Control network access for sandboxes:
