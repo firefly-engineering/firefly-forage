@@ -67,7 +67,7 @@
             machine.wait_for_unit("multi-user.target")
 
             # Verify forage-ctl runs
-            machine.succeed("forage-ctl --version")
+            machine.succeed("forage-ctl --help")
 
             # Verify config files exist
             machine.succeed("test -f /etc/firefly-forage/config.json")
