@@ -189,6 +189,8 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		SourceRepo:     ws.sourceRepo,
 		NixpkgsRev:     c.hostConfig.NixpkgsRev,
 		ProxyURL:       proxyURL,
+		UID:            c.hostConfig.UID,
+		GID:            c.hostConfig.GID,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)

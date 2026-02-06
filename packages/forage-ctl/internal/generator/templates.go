@@ -16,6 +16,8 @@ type TemplateData struct {
 	EnvVars        []EnvVar
 	RegistryConfig RegistryConfig
 	TmuxSession    string
+	UID            int // Host user's UID for the container agent user
+	GID            int // Host user's GID for the container agent user
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -66,6 +68,8 @@ const containerTemplateText = `{ pkgs, ... }: {
       users.users.agent = {
         isNormalUser = true;
         home = "/home/agent";
+        uid = {{.UID}};
+        group = "users";
         extraGroups = [ "wheel" ];
         openssh.authorizedKeys.keys = [
 {{- range .AuthorizedKeys}}
@@ -73,6 +77,7 @@ const containerTemplateText = `{ pkgs, ... }: {
 {{- end}}
         ];
       };
+      users.groups.users.gid = {{.GID}};
 
       security.sudo.wheelNeedsPassword = false;
 

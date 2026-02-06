@@ -23,11 +23,14 @@
       users.users.agent = {
         isNormalUser = true;
         home = "/home/agent";
+        uid = 1000;
+        group = "users";
         extraGroups = [ "wheel" ];
         openssh.authorizedKeys.keys = [
           "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample user@host"
         ];
       };
+      users.groups.users.gid = 100;
 
       security.sudo.wheelNeedsPassword = false;
 

@@ -224,6 +224,8 @@ in
         "firefly-forage/config.json" = {
           text = builtins.toJSON {
             user = cfg.user;
+            uid = config.users.users.${cfg.user}.uid;
+            gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
             authorizedKeys = cfg.authorizedKeys;
             secrets = cfg.secrets;
             stateDir = cfg.stateDir;

@@ -77,6 +77,8 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 		HostConfig:     env.HostConfig,
 		WorkspaceMode:  "direct",
 		NixpkgsRev:     "abc123",
+		UID:            env.HostConfig.UID,
+		GID:            env.HostConfig.GID,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -271,8 +273,10 @@ func TestWorkflow_NetworkModeConfigs(t *testing.T) {
 				SecretsPath:    "/secrets",
 				AuthorizedKeys: []string{"ssh-rsa AAAA..."},
 				Template:       template,
-				HostConfig:     &config.HostConfig{},
+				HostConfig:     &config.HostConfig{UID: 1000, GID: 100},
 				WorkspaceMode:  "direct",
+				UID:            1000,
+				GID:            100,
 			}
 
 			result, err := generator.GenerateNixConfig(cfg)
@@ -458,6 +462,8 @@ func TestWorkflow_JJModeConfig(t *testing.T) {
 		HostConfig:     env.HostConfig,
 		WorkspaceMode:  "jj",
 		SourceRepo:     repoPath,
+		UID:            env.HostConfig.UID,
+		GID:            env.HostConfig.GID,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(cfg)
@@ -492,9 +498,11 @@ func TestWorkflow_ProxyModeConfig(t *testing.T) {
 		SecretsPath:    "/secrets",
 		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
 		Template:       template,
-		HostConfig:     &config.HostConfig{},
+		HostConfig:     &config.HostConfig{UID: 1000, GID: 100},
 		WorkspaceMode:  "direct",
 		ProxyURL:       "http://10.100.1.1:8080",
+		UID:            1000,
+		GID:            100,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(cfg)

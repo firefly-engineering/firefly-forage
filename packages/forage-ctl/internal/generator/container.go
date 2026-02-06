@@ -25,6 +25,8 @@ type ContainerConfig struct {
 	SourceRepo     string
 	NixpkgsRev     string
 	ProxyURL       string // URL of the forage-proxy server (if using proxy mode)
+	UID            int    // Host user's UID for the container agent user
+	GID            int    // Host user's GID for the container agent user
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -89,6 +91,8 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		AuthorizedKeys: cfg.AuthorizedKeys,
 		NetworkConfig:  buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot),
 		TmuxSession:    config.TmuxSessionName,
+		UID:            cfg.UID,
+		GID:            cfg.GID,
 	}
 
 	// Build bind mounts

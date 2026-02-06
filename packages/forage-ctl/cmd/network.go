@@ -119,6 +119,8 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 		WorkspaceMode:  metadata.WorkspaceMode,
 		SourceRepo:     metadata.SourceRepo,
 		NixpkgsRev:     hostConfig.NixpkgsRev,
+		UID:            hostConfig.UID,
+		GID:            hostConfig.GID,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)

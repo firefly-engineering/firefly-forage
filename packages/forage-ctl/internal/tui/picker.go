@@ -60,12 +60,17 @@ func (i sandboxItem) Description() string {
 		statusIcon = "●"
 	}
 
-	return fmt.Sprintf("%s %s | %s | %s | %s",
+	// Show source repo for jj/git-worktree modes, workspace otherwise
+	location := i.metadata.Workspace
+	if i.metadata.SourceRepo != "" {
+		location = i.metadata.SourceRepo
+	}
+
+	return fmt.Sprintf("%s %s | %s | %s",
 		statusIcon,
 		i.metadata.Template,
 		mode,
-		i.uptime,
-		truncatePath(i.metadata.Workspace, 30),
+		truncatePath(location, 40),
 	)
 }
 
@@ -258,10 +263,16 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt r
 			statusIcon = "○"
 		}
 
+		// Show source repo for jj/git-worktree modes, workspace otherwise
+		location := sandbox.Workspace
+		if sandbox.SourceRepo != "" {
+			location = sandbox.SourceRepo
+		}
+
 		sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n",
 			i+1, statusIcon, sandbox.Name, sandbox.Template))
-		sb.WriteString(fmt.Sprintf("   IP: %s | Workspace: %s\n\n",
-			sandbox.ContainerIP(), truncatePath(sandbox.Workspace, 40)))
+		sb.WriteString(fmt.Sprintf("   IP: %s | %s\n\n",
+			sandbox.ContainerIP(), truncatePath(location, 40)))
 	}
 
 	return sb.String()

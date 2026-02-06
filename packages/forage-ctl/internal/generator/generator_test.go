@@ -33,9 +33,13 @@ func validTestConfig() *ContainerConfig {
 		},
 		HostConfig: &config.HostConfig{
 			User: "testuser",
+			UID:  1000,
+			GID:  100,
 		},
 		WorkspaceMode: "direct",
 		NixpkgsRev:    "abc123def",
+		UID:           1000,
+		GID:           100,
 	}
 }
 
@@ -546,9 +550,13 @@ func goldenTestConfig() *ContainerConfig {
 		},
 		HostConfig: &config.HostConfig{
 			User: "testuser",
+			UID:  1000,
+			GID:  100,
 		},
 		WorkspaceMode: "direct",
 		NixpkgsRev:    "abc123def456",
+		UID:           1000,
+		GID:           100,
 	}
 }
 

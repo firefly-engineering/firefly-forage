@@ -80,6 +80,8 @@ const (
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
+	UID                int               `json:"uid"`                // Host user's UID
+	GID                int               `json:"gid"`                // Host user's GID
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
 	Secrets            map[string]string `json:"secrets"`
 	StateDir           string            `json:"stateDir"`

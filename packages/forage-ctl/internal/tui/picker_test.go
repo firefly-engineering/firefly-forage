@@ -70,8 +70,8 @@ func TestSandboxItemMethods(t *testing.T) {
 		if !strings.Contains(desc, "jj") {
 			t.Error("Description should contain workspace mode")
 		}
-		if !strings.Contains(desc, "2h30m") {
-			t.Error("Description should contain uptime")
+		if !strings.Contains(desc, "/home/user/workspace") {
+			t.Error("Description should contain workspace path")
 		}
 	})
 

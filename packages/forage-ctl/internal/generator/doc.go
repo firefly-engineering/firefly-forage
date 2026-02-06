@@ -10,13 +10,14 @@
 //
 //	cfg := &generator.ContainerConfig{
 //	    Name:           "my-sandbox",
-//	    Port:           2200,
 //	    NetworkSlot:    1,
 //	    Workspace:      "/path/to/workspace",
 //	    SecretsPath:    "/run/secrets/my-sandbox",
 //	    AuthorizedKeys: []string{"ssh-ed25519 ..."},
 //	    Template:       template,
 //	    HostConfig:     hostConfig,
+//	    UID:            1000,
+//	    GID:            100,
 //	}
 //
 //	nixExpr := generator.GenerateNixConfig(cfg)
