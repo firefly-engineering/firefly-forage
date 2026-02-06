@@ -1,0 +1,64 @@
+# Firefly Forage CLI - Development Tasks
+
+# Default recipe: show available commands
+default:
+    @just --list
+
+# Run all tests (unit + workflow, no containers)
+test:
+    go test ./...
+
+# Run tests with verbose output
+test-v:
+    go test -v ./...
+
+# Run only unit tests (fast)
+test-unit:
+    go test -short ./...
+
+# Run docker integration tests (requires docker)
+test-docker:
+    FORAGE_INTEGRATION_TESTS=1 FORAGE_RUNTIME=docker go test -v ./internal/integration/...
+
+# Run all tests including docker integration
+test-all: test test-docker
+
+# Run NixOS VM integration test
+test-vm:
+    nix build .#checks.x86_64-linux.vm-integration
+
+# Run NixOS VM interactively (for debugging)
+test-vm-interactive:
+    nix build .#checks.x86_64-linux.vm-integration.driverInteractive
+    ./result/bin/nixos-test-driver
+
+# Run linter
+lint:
+    golangci-lint run
+
+# Fix linter issues
+lint-fix:
+    golangci-lint run --fix
+
+# Build the binary
+build:
+    go build -o forage-ctl .
+
+# Build with nix
+build-nix:
+    nix build
+
+# Enter development shell
+dev:
+    nix develop
+
+# Clean build artifacts
+clean:
+    rm -f forage-ctl
+    rm -rf result
+
+# Run all checks (test + lint)
+check: test lint
+
+# Run all checks including docker tests
+check-all: test-all lint
