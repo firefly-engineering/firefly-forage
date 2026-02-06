@@ -57,11 +57,7 @@ func TestLoadHostConfig(t *testing.T) {
 
 	// Create a test config file
 	config := HostConfig{
-		User: "testuser",
-		PortRange: PortRange{
-			From: 2200,
-			To:   2299,
-		},
+		User:               "testuser",
 		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
 		Secrets:            map[string]string{"anthropic": "sk-test"},
 		StateDir:           "/var/lib/forage",
@@ -87,12 +83,6 @@ func TestLoadHostConfig(t *testing.T) {
 
 	if loaded.User != config.User {
 		t.Errorf("User = %q, want %q", loaded.User, config.User)
-	}
-	if loaded.PortRange.From != config.PortRange.From {
-		t.Errorf("PortRange.From = %d, want %d", loaded.PortRange.From, config.PortRange.From)
-	}
-	if loaded.PortRange.To != config.PortRange.To {
-		t.Errorf("PortRange.To = %d, want %d", loaded.PortRange.To, config.PortRange.To)
 	}
 	if loaded.NixpkgsRev != config.NixpkgsRev {
 		t.Errorf("NixpkgsRev = %q, want %q", loaded.NixpkgsRev, config.NixpkgsRev)
@@ -224,7 +214,6 @@ func TestSandboxMetadata(t *testing.T) {
 	metadata := &SandboxMetadata{
 		Name:            "test-sandbox",
 		Template:        "claude",
-		Port:            2200,
 		Workspace:       "/home/user/project",
 		NetworkSlot:     1,
 		CreatedAt:       "2024-01-01T00:00:00Z",
@@ -253,11 +242,17 @@ func TestSandboxMetadata(t *testing.T) {
 	if loaded.Name != metadata.Name {
 		t.Errorf("Name = %q, want %q", loaded.Name, metadata.Name)
 	}
-	if loaded.Port != metadata.Port {
-		t.Errorf("Port = %d, want %d", loaded.Port, metadata.Port)
+	if loaded.NetworkSlot != metadata.NetworkSlot {
+		t.Errorf("NetworkSlot = %d, want %d", loaded.NetworkSlot, metadata.NetworkSlot)
 	}
 	if loaded.WorkspaceMode != metadata.WorkspaceMode {
 		t.Errorf("WorkspaceMode = %q, want %q", loaded.WorkspaceMode, metadata.WorkspaceMode)
+	}
+
+	// Test ContainerIP
+	expectedIP := "10.100.1.2"
+	if loaded.ContainerIP() != expectedIP {
+		t.Errorf("ContainerIP() = %q, want %q", loaded.ContainerIP(), expectedIP)
 	}
 
 	// Test exists
@@ -282,7 +277,7 @@ func TestLoadSandboxMetadata_DefaultWorkspaceMode(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create metadata without WorkspaceMode (simulating old format)
-	data := `{"name": "old-sandbox", "template": "claude", "port": 2200}`
+	data := `{"name": "old-sandbox", "template": "claude", "networkSlot": 1}`
 	metaPath := filepath.Join(tmpDir, "old-sandbox.json")
 	if err := os.WriteFile(metaPath, []byte(data), 0644); err != nil {
 		t.Fatalf("Failed to write metadata: %v", err)
@@ -303,8 +298,8 @@ func TestListSandboxes(t *testing.T) {
 
 	// Create some sandbox metadata
 	sandboxes := []*SandboxMetadata{
-		{Name: "sandbox-1", Template: "claude", Port: 2200},
-		{Name: "sandbox-2", Template: "multi", Port: 2201},
+		{Name: "sandbox-1", Template: "claude", NetworkSlot: 1},
+		{Name: "sandbox-2", Template: "multi", NetworkSlot: 2},
 	}
 
 	for _, sb := range sandboxes {

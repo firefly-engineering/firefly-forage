@@ -12,40 +12,28 @@ const (
 	NetworkSlotMax = 254 // 255 is broadcast, 0 is network address
 )
 
-// Allocate finds the next available port and network slot
-func Allocate(hostConfig *config.HostConfig, sandboxes []*config.SandboxMetadata) (port int, slot int, err error) {
-	usedPorts := make(map[int]bool)
+// AllocateSlot finds the next available network slot.
+// Each sandbox gets a unique network slot for its private network (10.100.X.0/24).
+func AllocateSlot(sandboxes []*config.SandboxMetadata) (slot int, err error) {
 	usedSlots := make(map[int]bool)
 
 	for _, sb := range sandboxes {
-		usedPorts[sb.Port] = true
 		usedSlots[sb.NetworkSlot] = true
-	}
-
-	// Find available port
-	for p := hostConfig.PortRange.From; p <= hostConfig.PortRange.To; p++ {
-		if !usedPorts[p] {
-			port = p
-			break
-		}
-	}
-
-	if port == 0 {
-		return 0, 0, fmt.Errorf("no available ports in range %d-%d",
-			hostConfig.PortRange.From, hostConfig.PortRange.To)
 	}
 
 	// Find available network slot
 	for s := NetworkSlotMin; s <= NetworkSlotMax; s++ {
 		if !usedSlots[s] {
-			slot = s
-			break
+			return s, nil
 		}
 	}
 
-	if slot == 0 {
-		return 0, 0, fmt.Errorf("no available network slots")
-	}
+	return 0, fmt.Errorf("no available network slots (max %d sandboxes)", NetworkSlotMax)
+}
 
-	return port, slot, nil
+// ContainerIP returns the container IP address for a given network slot.
+// Containers use the 10.100.X.0/24 network where X is the slot.
+// The container gets .2 (host gets .1).
+func ContainerIP(slot int) string {
+	return fmt.Sprintf("10.100.%d.2", slot)
 }

@@ -80,7 +80,6 @@ const (
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
-	PortRange          PortRange         `json:"portRange"`
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
 	Secrets            map[string]string `json:"secrets"`
 	StateDir           string            `json:"stateDir"`
@@ -89,38 +88,12 @@ type HostConfig struct {
 	ProxyURL           string            `json:"proxyUrl,omitempty"` // URL of the forage-proxy server
 }
 
-type PortRange struct {
-	From int `json:"from"`
-	To   int `json:"to"`
-}
-
 // Validate checks that the HostConfig is valid.
 func (c *HostConfig) Validate() error {
 	if c.User == "" {
 		return fmt.Errorf("user is required")
 	}
 
-	if err := c.PortRange.Validate(); err != nil {
-		return fmt.Errorf("portRange: %w", err)
-	}
-
-	return nil
-}
-
-// Validate checks that the PortRange is valid.
-func (p *PortRange) Validate() error {
-	if p.From <= 0 {
-		return fmt.Errorf("from must be positive (got %d)", p.From)
-	}
-	if p.To <= 0 {
-		return fmt.Errorf("to must be positive (got %d)", p.To)
-	}
-	if p.From > p.To {
-		return fmt.Errorf("from (%d) must be <= to (%d)", p.From, p.To)
-	}
-	if p.From > 65535 || p.To > 65535 {
-		return fmt.Errorf("ports must be <= 65535")
-	}
 	return nil
 }
 
@@ -209,7 +182,6 @@ func (a *AgentConfig) Validate() error {
 type SandboxMetadata struct {
 	Name            string `json:"name"`
 	Template        string `json:"template"`
-	Port            int    `json:"port"`
 	Workspace       string `json:"workspace"`
 	NetworkSlot     int    `json:"networkSlot"`
 	CreatedAt       string `json:"createdAt"`
@@ -217,6 +189,13 @@ type SandboxMetadata struct {
 	SourceRepo      string `json:"sourceRepo,omitempty"`      // Source repo path for jj/git-worktree
 	JJWorkspaceName string `json:"jjWorkspaceName,omitempty"` // JJ workspace name
 	GitBranch       string `json:"gitBranch,omitempty"`       // Git branch name for worktree
+}
+
+// ContainerIP returns the container's IP address based on its network slot.
+// Containers use the 10.100.X.0/24 network where X is the NetworkSlot.
+// The container gets .2 (host gets .1).
+func (m *SandboxMetadata) ContainerIP() string {
+	return fmt.Sprintf("10.100.%d.2", m.NetworkSlot)
 }
 
 // Validate checks that the SandboxMetadata is valid.
@@ -227,8 +206,8 @@ func (m *SandboxMetadata) Validate() error {
 	if m.Template == "" {
 		return fmt.Errorf("template is required")
 	}
-	if m.Port <= 0 || m.Port > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535 (got %d)", m.Port)
+	if m.NetworkSlot < 1 || m.NetworkSlot > 254 {
+		return fmt.Errorf("networkSlot must be between 1 and 254 (got %d)", m.NetworkSlot)
 	}
 	if m.Workspace == "" {
 		return fmt.Errorf("workspace is required")
