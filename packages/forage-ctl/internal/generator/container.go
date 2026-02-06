@@ -115,6 +115,17 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		})
 	}
 
+	// Add host config directory mounts for agents
+	for _, agent := range cfg.Template.Agents {
+		if agent.HostConfigDir != "" && agent.ContainerConfigDir != "" {
+			data.BindMounts = append(data.BindMounts, BindMount{
+				Path:     agent.ContainerConfigDir,
+				HostPath: agent.HostConfigDir,
+				ReadOnly: agent.HostConfigDirReadOnly,
+			})
+		}
+	}
+
 	// Build agent packages and environment variables
 	for _, agent := range cfg.Template.Agents {
 		if agent.PackagePath != "" {

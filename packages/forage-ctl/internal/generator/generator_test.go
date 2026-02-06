@@ -93,6 +93,95 @@ func TestGenerateNixConfig(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_HostConfigDir(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Agents["claude"] = config.AgentConfig{
+		PackagePath:        "pkgs.claude-code",
+		SecretName:         "anthropic",
+		AuthEnvVar:         "ANTHROPIC_API_KEY",
+		HostConfigDir:      "/home/user/.claude",
+		ContainerConfigDir: "/home/agent/.claude",
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Check that the bind mount is present
+	if !strings.Contains(result, "/home/agent/.claude") {
+		t.Error("Config should contain container config dir path")
+	}
+	if !strings.Contains(result, "/home/user/.claude") {
+		t.Error("Config should contain host config dir path")
+	}
+}
+
+func TestGenerateNixConfig_HostConfigDirReadOnly(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Agents["claude"] = config.AgentConfig{
+		PackagePath:           "pkgs.claude-code",
+		SecretName:            "anthropic",
+		AuthEnvVar:            "ANTHROPIC_API_KEY",
+		HostConfigDir:         "/home/user/.claude",
+		ContainerConfigDir:    "/home/agent/.claude",
+		HostConfigDirReadOnly: true,
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Check that the bind mount is present with read-only flag
+	if !strings.Contains(result, "/home/agent/.claude") {
+		t.Error("Config should contain container config dir path")
+	}
+	// The mount should be read-only - look for isReadOnly = true pattern near our mount
+	if !strings.Contains(result, "isReadOnly = true") {
+		t.Error("Config should have at least one read-only mount")
+	}
+}
+
+func TestGenerateNixConfig_MultipleAgentsWithConfigDirs(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Agents = map[string]config.AgentConfig{
+		"claude": {
+			PackagePath:        "pkgs.claude-code",
+			SecretName:         "anthropic",
+			AuthEnvVar:         "ANTHROPIC_API_KEY",
+			HostConfigDir:      "/home/user/.claude",
+			ContainerConfigDir: "/home/agent/.claude",
+		},
+		"aider": {
+			PackagePath:        "pkgs.aider",
+			SecretName:         "openai",
+			AuthEnvVar:         "OPENAI_API_KEY",
+			HostConfigDir:      "/home/user/.aider",
+			ContainerConfigDir: "/home/agent/.aider",
+		},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Check both agent config dirs are mounted
+	if !strings.Contains(result, "/home/agent/.claude") {
+		t.Error("Config should contain claude container config dir path")
+	}
+	if !strings.Contains(result, "/home/user/.claude") {
+		t.Error("Config should contain claude host config dir path")
+	}
+	if !strings.Contains(result, "/home/agent/.aider") {
+		t.Error("Config should contain aider container config dir path")
+	}
+	if !strings.Contains(result, "/home/user/.aider") {
+		t.Error("Config should contain aider host config dir path")
+	}
+}
+
 func TestGenerateNixConfig_JJMode(t *testing.T) {
 	cfg := validTestConfig()
 	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
