@@ -26,7 +26,9 @@
 
           nodes.machine = { config, pkgs, ... }: {
             boot.enableContainers = true;
-            systemd.services.systemd-machined.enable = true;
+
+            # Ensure machined socket is enabled (service is socket-activated)
+            systemd.sockets.systemd-machined.wantedBy = [ "sockets.target" ];
 
             systemd.tmpfiles.rules = [
               "d /var/lib/firefly-forage 0755 root root -"
@@ -63,7 +65,6 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("systemd-machined.service")
 
             # Verify forage-ctl runs
             machine.succeed("forage-ctl --version")
@@ -72,8 +73,7 @@
             machine.succeed("test -f /etc/firefly-forage/config.json")
             machine.succeed("test -f /etc/firefly-forage/templates/test.json")
 
-            # Verify systemd-machined is active
-            machine.succeed("systemctl is-active systemd-machined")
+            # machinectl triggers systemd-machined via socket activation
             machine.succeed("machinectl list")
 
             # Verify template is loadable
