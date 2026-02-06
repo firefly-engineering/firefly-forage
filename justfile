@@ -27,9 +27,9 @@ test-docker:
 # Run all tests including docker integration
 test-all: test test-docker
 
-# Run NixOS VM integration test (full nspawn environment)
+# Run NixOS VM integration test (uses actual nixosModule)
 test-vm:
-    cd packages/forage-ctl && nix build .#checks.x86_64-linux.vm-integration
+    nix build .#checks.x86_64-linux.vm-integration
 
 # Format all code
 fmt:
