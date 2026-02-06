@@ -50,7 +50,7 @@ This document tracks the implementation of security fixes, test coverage improve
 
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| TEST-007 | Add end-to-end integration tests | [ ] | Full sandbox lifecycle |
+| TEST-007 | Add end-to-end integration tests | [x] | Docker-based lifecycle tests + workflow tests |
 | TEST-008 | Configure GitHub Actions CI | [x] | Run tests on PR |
 
 ---
@@ -123,4 +123,5 @@ This document tracks the implementation of security fixes, test coverage improve
 | 2026-02-05 | ARCH-004: Added Nix config validation | - |
 | 2026-02-05 | ARCH-002: Decomposed sandbox.Creator.Create() | - |
 | 2026-02-05 | ARCH-005: Replaced global runtime with injected dependencies | - |
+| 2026-02-06 | TEST-007: Added docker-based integration tests and flake.nix | - |
 
