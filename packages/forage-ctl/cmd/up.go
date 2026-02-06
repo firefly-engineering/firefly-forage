@@ -24,6 +24,7 @@ var (
 	upWorkspace   string
 	upRepo        string
 	upGitWorktree string
+	upSSHKeys     []string
 )
 
 func init() {
@@ -31,6 +32,7 @@ func init() {
 	upCmd.Flags().StringVarP(&upWorkspace, "workspace", "w", "", "Workspace directory to mount")
 	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "JJ repository (creates isolated workspace)")
 	upCmd.Flags().StringVarP(&upGitWorktree, "git-worktree", "g", "", "Git repository (creates isolated worktree)")
+	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
 	if err := upCmd.MarkFlagRequired("template"); err != nil {
 		panic(err)
 	}
@@ -80,6 +82,7 @@ func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
 	opts := sandbox.CreateOptions{
 		Name:     name,
 		Template: upTemplate,
+		SSHKeys:  upSSHKeys,
 	}
 
 	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified
