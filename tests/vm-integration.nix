@@ -6,6 +6,7 @@
 
 pkgs.testers.runNixOSTest {
   name = "firefly-forage-integration";
+  hostPkgs = pkgs;
 
   nodes.machine = { config, pkgs, ... }: {
     imports = [ self.nixosModules.host ];
