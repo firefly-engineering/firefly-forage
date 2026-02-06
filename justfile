@@ -22,7 +22,7 @@ test-pkg pkg:
 
 # Run docker integration tests (requires docker daemon)
 test-docker:
-    cd packages/forage-ctl && FORAGE_INTEGRATION_TESTS=1 FORAGE_RUNTIME=docker go test -v ./internal/integration/...
+    cd packages/forage-ctl && go test -tags=integration,docker -v ./internal/integration/...
 
 # Run all tests including docker integration
 test-all: test test-docker

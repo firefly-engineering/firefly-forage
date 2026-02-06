@@ -1,11 +1,12 @@
+//go:build integration && docker
+
 // Package integration provides integration tests that exercise complete code paths.
 //
 // Docker integration tests require:
 // - Docker daemon running
 // - User in docker group (or docker accessible)
-// - FORAGE_INTEGRATION_TESTS=1 and FORAGE_RUNTIME=docker environment variables
 //
-// Run with: FORAGE_INTEGRATION_TESTS=1 FORAGE_RUNTIME=docker go test -v ./internal/integration/...
+// Run with: go test -tags=integration -v ./internal/integration/...
 package integration
 
 import (
@@ -17,17 +18,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
-// skipUnlessDockerEnabled skips the test unless docker integration is enabled
-func skipUnlessDockerEnabled(t *testing.T) {
+// skipUnlessDockerAvailable skips the test if docker is not accessible
+func skipUnlessDockerAvailable(t *testing.T) {
 	t.Helper()
-
-	if os.Getenv("FORAGE_INTEGRATION_TESTS") != "1" {
-		t.Skip("integration tests disabled (set FORAGE_INTEGRATION_TESTS=1)")
-	}
-
-	if os.Getenv("FORAGE_RUNTIME") != "docker" {
-		t.Skip("docker runtime not selected (set FORAGE_RUNTIME=docker)")
-	}
 
 	// Verify docker is available
 	rt, err := runtime.NewDockerRuntime("forage-test-")
@@ -47,7 +40,7 @@ func skipUnlessDockerEnabled(t *testing.T) {
 
 // TestDocker_ContainerLifecycle tests the complete container lifecycle with Docker
 func TestDocker_ContainerLifecycle(t *testing.T) {
-	skipUnlessDockerEnabled(t)
+	skipUnlessDockerAvailable(t)
 
 	rt, err := runtime.NewDockerRuntime("forage-test-")
 	if err != nil {
@@ -146,7 +139,7 @@ func TestDocker_ContainerLifecycle(t *testing.T) {
 
 // TestDocker_List tests listing containers
 func TestDocker_List(t *testing.T) {
-	skipUnlessDockerEnabled(t)
+	skipUnlessDockerAvailable(t)
 
 	rt, err := runtime.NewDockerRuntime("forage-test-")
 	if err != nil {
@@ -195,7 +188,7 @@ func TestDocker_List(t *testing.T) {
 
 // TestDocker_BindMounts tests container bind mounts
 func TestDocker_BindMounts(t *testing.T) {
-	skipUnlessDockerEnabled(t)
+	skipUnlessDockerAvailable(t)
 
 	rt, err := runtime.NewDockerRuntime("forage-test-")
 	if err != nil {
@@ -242,7 +235,7 @@ func TestDocker_BindMounts(t *testing.T) {
 
 // TestDocker_ExecWithOptions tests exec with various options
 func TestDocker_ExecWithOptions(t *testing.T) {
-	skipUnlessDockerEnabled(t)
+	skipUnlessDockerAvailable(t)
 
 	rt, err := runtime.NewDockerRuntime("forage-test-")
 	if err != nil {
