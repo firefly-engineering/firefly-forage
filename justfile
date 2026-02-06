@@ -8,7 +8,7 @@ default:
 build:
     nix build .#forage-ctl
 
-# Run all Go tests
+# Run all Go tests (unit + workflow)
 test:
     cd packages/forage-ctl && go test ./...
 
@@ -19,6 +19,17 @@ test-verbose:
 # Run a specific test package
 test-pkg pkg:
     cd packages/forage-ctl && go test -v ./internal/{{pkg}}/...
+
+# Run docker integration tests (requires docker daemon)
+test-docker:
+    cd packages/forage-ctl && FORAGE_INTEGRATION_TESTS=1 FORAGE_RUNTIME=docker go test -v ./internal/integration/...
+
+# Run all tests including docker integration
+test-all: test test-docker
+
+# Run NixOS VM integration test (full nspawn environment)
+test-vm:
+    cd packages/forage-ctl && nix build .#checks.x86_64-linux.vm-integration
 
 # Format all code
 fmt:
