@@ -3,6 +3,8 @@ package generator
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"os/user"
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
@@ -138,19 +140,63 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
-	// Add tmux config mount if configured
-	if cfg.HostConfig != nil && cfg.HostConfig.HostTmuxConfig != "" {
-		// Determine container path based on host path
-		// If it's a .conf file, mount as ~/.tmux.conf, otherwise as ~/.config/tmux
-		containerPath := "/home/agent/.config/tmux"
-		if filepath.Ext(cfg.HostConfig.HostTmuxConfig) == ".conf" {
-			containerPath = "/home/agent/.tmux.conf"
+	// Detect and mount host dotfiles (tmux config, shell config)
+	if cfg.HostConfig != nil {
+		homeDir := resolveUserHome(cfg.HostConfig.User)
+		if homeDir != "" {
+			// Tmux config: prefer ~/.config/tmux dir, fall back to ~/.tmux.conf
+			tmuxConfigDir := filepath.Join(homeDir, ".config", "tmux")
+			tmuxConfFile := filepath.Join(homeDir, ".tmux.conf")
+			if info, err := os.Stat(tmuxConfigDir); err == nil && info.IsDir() {
+				data.BindMounts = append(data.BindMounts, BindMount{
+					Path:     "/home/agent/.config/tmux",
+					HostPath: tmuxConfigDir,
+					ReadOnly: true,
+				})
+			} else if _, err := os.Stat(tmuxConfFile); err == nil {
+				data.BindMounts = append(data.BindMounts, BindMount{
+					Path:     "/home/agent/.tmux.conf",
+					HostPath: tmuxConfFile,
+					ReadOnly: true,
+				})
+			}
+
+			// Shell config: mount relevant dotfiles based on detected shell
+			shell := cfg.HostConfig.UserShell
+			switch shell {
+			case "zsh":
+				for _, dotfile := range []string{".zshrc", ".zshenv"} {
+					hostPath := filepath.Join(homeDir, dotfile)
+					if _, err := os.Stat(hostPath); err == nil {
+						data.BindMounts = append(data.BindMounts, BindMount{
+							Path:     filepath.Join("/home/agent", dotfile),
+							HostPath: hostPath,
+							ReadOnly: true,
+						})
+					}
+				}
+			case "bash":
+				hostPath := filepath.Join(homeDir, ".bashrc")
+				if _, err := os.Stat(hostPath); err == nil {
+					data.BindMounts = append(data.BindMounts, BindMount{
+						Path:     "/home/agent/.bashrc",
+						HostPath: hostPath,
+						ReadOnly: true,
+					})
+				}
+			case "fish":
+				fishConfigDir := filepath.Join(homeDir, ".config", "fish")
+				if info, err := os.Stat(fishConfigDir); err == nil && info.IsDir() {
+					data.BindMounts = append(data.BindMounts, BindMount{
+						Path:     "/home/agent/.config/fish",
+						HostPath: fishConfigDir,
+						ReadOnly: true,
+					})
+				}
+			}
+
+			data.UserShell = shell
 		}
-		data.BindMounts = append(data.BindMounts, BindMount{
-			Path:     containerPath,
-			HostPath: cfg.HostConfig.HostTmuxConfig,
-			ReadOnly: true,
-		})
 	}
 
 	// Build agent packages and environment variables
@@ -188,6 +234,16 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 	}
 
 	return data
+}
+
+// resolveUserHome returns the home directory for the given username.
+// Returns empty string if the user cannot be looked up.
+func resolveUserHome(username string) string {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return ""
+	}
+	return u.HomeDir
 }
 
 func buildNetworkConfig(networkMode string, allowedHosts []string, slot int) string {

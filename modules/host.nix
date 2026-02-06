@@ -173,13 +173,6 @@ in
       '';
       example = "eth0";
     };
-
-    hostTmuxConfig = mkOption {
-      type = types.nullOr types.str;
-      default = "~/.config/tmux";
-      description = "Host tmux config directory to mount in sandboxes (supports ~ expansion). Set to null to disable.";
-      example = "~/.tmux.conf";
-    };
   };
 
   # Import extra-container module at the module level
@@ -240,8 +233,6 @@ in
             extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
             # Nixpkgs revision for registry pinning
             nixpkgsRev = nixpkgs.rev or "unknown";
-            # Host tmux config to mount in containers
-            hostTmuxConfig = resolveTilde cfg.hostTmuxConfig;
           };
         };
       }
