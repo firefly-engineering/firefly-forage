@@ -46,13 +46,15 @@ let
       };
 
       secretName = mkOption {
-        type = types.str;
-        description = "Name of the secret (key in services.firefly-forage.secrets)";
+        type = types.nullOr types.str;
+        default = null;
+        description = "Name of the secret (key in services.firefly-forage.secrets). Optional if using hostConfigDir for credentials.";
       };
 
       authEnvVar = mkOption {
-        type = types.str;
-        description = "Environment variable name for the auth token";
+        type = types.nullOr types.str;
+        default = null;
+        description = "Environment variable name for the auth token. Optional if using hostConfigDir for credentials.";
         example = "ANTHROPIC_API_KEY";
       };
 
@@ -208,10 +210,12 @@ in
     ] ++ lib.flatten (lib.mapAttrsToList (
       templateName: template:
         lib.mapAttrsToList (
-          agentName: agent: {
-            assertion = cfg.secrets ? ${agent.secretName};
-            message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
-          }
+          agentName: agent:
+            # Only validate secret reference if secretName is specified
+            lib.optional (agent.secretName != null) {
+              assertion = cfg.secrets ? ${agent.secretName};
+              message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
+            }
         ) template.agents
     ) cfg.templates);
 

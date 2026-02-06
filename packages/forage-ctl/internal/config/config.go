@@ -173,11 +173,18 @@ func (a *AgentConfig) Validate() error {
 	if a.PackagePath == "" {
 		return fmt.Errorf("packagePath is required")
 	}
-	if a.SecretName == "" {
-		return fmt.Errorf("secretName is required")
+
+	// If one of secretName/authEnvVar is set, both must be set
+	if (a.SecretName != "") != (a.AuthEnvVar != "") {
+		return fmt.Errorf("secretName and authEnvVar must both be set or both be empty")
 	}
-	if a.AuthEnvVar == "" {
-		return fmt.Errorf("authEnvVar is required")
+
+	// Either secret-based auth OR credential mount is required
+	hasSecretAuth := a.SecretName != "" && a.AuthEnvVar != ""
+	hasCredentialMount := a.HostConfigDir != ""
+
+	if !hasSecretAuth && !hasCredentialMount {
+		return fmt.Errorf("either secretName/authEnvVar or hostConfigDir is required")
 	}
 
 	// Validate host config directory paths if specified

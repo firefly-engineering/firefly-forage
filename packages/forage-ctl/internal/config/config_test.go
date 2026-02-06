@@ -425,6 +425,15 @@ func TestAgentConfigValidate(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid credential mount only (no secret)",
+			agent: AgentConfig{
+				PackagePath:        "/nix/store/abc-claude",
+				HostConfigDir:      "/home/user/.claude",
+				ContainerConfigDir: "/home/agent/.claude",
+			},
+			wantErr: "",
+		},
+		{
 			name: "missing packagePath",
 			agent: AgentConfig{
 				SecretName: "anthropic",
@@ -433,20 +442,27 @@ func TestAgentConfigValidate(t *testing.T) {
 			wantErr: "packagePath is required",
 		},
 		{
-			name: "missing secretName",
+			name: "no auth method",
 			agent: AgentConfig{
 				PackagePath: "/nix/store/abc-claude",
-				AuthEnvVar:  "ANTHROPIC_API_KEY",
 			},
-			wantErr: "secretName is required",
+			wantErr: "either secretName/authEnvVar or hostConfigDir is required",
 		},
 		{
-			name: "missing authEnvVar",
+			name: "secretName without authEnvVar",
 			agent: AgentConfig{
 				PackagePath: "/nix/store/abc-claude",
 				SecretName:  "anthropic",
 			},
-			wantErr: "authEnvVar is required",
+			wantErr: "secretName and authEnvVar must both be set or both be empty",
+		},
+		{
+			name: "authEnvVar without secretName",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+			wantErr: "secretName and authEnvVar must both be set or both be empty",
 		},
 		{
 			name: "relative hostConfigDir",
