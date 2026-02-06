@@ -61,7 +61,6 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		StateDir:           paths.StateDir,
 		ExtraContainerPath: "/nix/store/fake/extra-container",
 		NixpkgsRev:         "abc123",
-		UserShell:          "bash",
 	}
 
 	// Write host config

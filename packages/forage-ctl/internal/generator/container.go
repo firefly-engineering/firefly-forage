@@ -140,7 +140,7 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
-	// Detect and mount host dotfiles (tmux config, shell config)
+	// Detect and mount host tmux config
 	if cfg.HostConfig != nil {
 		homeDir := resolveUserHome(cfg.HostConfig.User)
 		if homeDir != "" {
@@ -160,42 +160,6 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 					ReadOnly: true,
 				})
 			}
-
-			// Shell config: mount relevant dotfiles based on detected shell
-			shell := cfg.HostConfig.UserShell
-			switch shell {
-			case "zsh":
-				for _, dotfile := range []string{".zshrc", ".zshenv"} {
-					hostPath := filepath.Join(homeDir, dotfile)
-					if _, err := os.Stat(hostPath); err == nil {
-						data.BindMounts = append(data.BindMounts, BindMount{
-							Path:     filepath.Join("/home/agent", dotfile),
-							HostPath: hostPath,
-							ReadOnly: true,
-						})
-					}
-				}
-			case "bash":
-				hostPath := filepath.Join(homeDir, ".bashrc")
-				if _, err := os.Stat(hostPath); err == nil {
-					data.BindMounts = append(data.BindMounts, BindMount{
-						Path:     "/home/agent/.bashrc",
-						HostPath: hostPath,
-						ReadOnly: true,
-					})
-				}
-			case "fish":
-				fishConfigDir := filepath.Join(homeDir, ".config", "fish")
-				if info, err := os.Stat(fishConfigDir); err == nil && info.IsDir() {
-					data.BindMounts = append(data.BindMounts, BindMount{
-						Path:     "/home/agent/.config/fish",
-						HostPath: fishConfigDir,
-						ReadOnly: true,
-					})
-				}
-			}
-
-			data.UserShell = shell
 		}
 	}
 

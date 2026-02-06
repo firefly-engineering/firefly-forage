@@ -17,8 +17,7 @@ type TemplateData struct {
 	RegistryConfig RegistryConfig
 	TmuxSession    string
 	UID            int    // Host user's UID for the container agent user
-	GID            int    // Host user's GID for the container agent user
-	UserShell      string // User's shell (e.g., "zsh", "bash")
+	GID            int // Host user's GID for the container agent user
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -72,9 +71,6 @@ const containerTemplateText = `{ pkgs, ... }: {
         uid = {{.UID}};
         group = "users";
         extraGroups = [ "wheel" ];
-{{- if and .UserShell (ne .UserShell "bash")}}
-        shell = pkgs.{{.UserShell}};
-{{- end}}
         openssh.authorizedKeys.keys = [
 {{- range .AuthorizedKeys}}
           {{. | printf "%q"}}
@@ -84,12 +80,6 @@ const containerTemplateText = `{ pkgs, ... }: {
       users.groups.users.gid = {{.GID}};
 
       security.sudo.wheelNeedsPassword = false;
-{{- if eq .UserShell "zsh"}}
-      programs.zsh.enable = true;
-{{- end}}
-{{- if eq .UserShell "fish"}}
-      programs.fish.enable = true;
-{{- end}}
 
       services.openssh = {
         enable = true;
@@ -107,9 +97,6 @@ const containerTemplateText = `{ pkgs, ... }: {
         neovim
         ripgrep
         fd
-{{- if and .UserShell (ne .UserShell "bash")}}
-        {{.UserShell}}
-{{- end}}
 {{- range .AgentPackages}}
         {{.}}
 {{- end}}
@@ -131,6 +118,11 @@ const containerTemplateText = `{ pkgs, ... }: {
         }];
       };
 {{end}}
+      # Ensure ~/.config is owned by agent (bind mounts may create it as root)
+      systemd.tmpfiles.rules = [
+        "d /home/agent/.config 0755 agent users -"
+      ];
+
       systemd.services.forage-init = {
         description = "Forage Sandbox Initialization";
         wantedBy = [ "multi-user.target" ];

@@ -90,7 +90,6 @@ type HostConfig struct {
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
 	ProxyURL           string            `json:"proxyUrl,omitempty"`       // URL of the forage-proxy server
-	UserShell          string            `json:"-"`                        // Resolved at runtime from $SHELL
 }
 
 // resolveUID looks up the UID/GID from the OS for the configured user
@@ -122,16 +121,6 @@ func (c *HostConfig) resolveUID() error {
 	}
 
 	return nil
-}
-
-// resolveShell sets UserShell from $SHELL, falling back to "bash".
-func (c *HostConfig) resolveShell() {
-	shell := os.Getenv("SHELL")
-	if shell != "" {
-		c.UserShell = filepath.Base(shell)
-	} else {
-		c.UserShell = "bash"
-	}
 }
 
 // Validate checks that the HostConfig is valid.
@@ -311,9 +300,6 @@ func LoadHostConfig(configDir string) (*HostConfig, error) {
 	if err := config.resolveUID(); err != nil {
 		return nil, fmt.Errorf("failed to resolve user IDs: %w", err)
 	}
-
-	// Resolve user's shell from $SHELL
-	config.resolveShell()
 
 	return &config, nil
 }

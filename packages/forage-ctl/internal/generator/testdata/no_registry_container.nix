@@ -55,6 +55,11 @@
         ANTHROPIC_API_KEY = "$(cat /run/secrets/anthropic 2>/dev/null || echo '')";
       };
 
+      # Ensure ~/.config is owned by agent (bind mounts may create it as root)
+      systemd.tmpfiles.rules = [
+        "d /home/agent/.config 0755 agent users -"
+      ];
+
       systemd.services.forage-init = {
         description = "Forage Sandbox Initialization";
         wantedBy = [ "multi-user.target" ];
