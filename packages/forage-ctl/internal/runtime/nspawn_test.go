@@ -79,7 +79,7 @@ func TestNspawnRuntime_SSHRuntime_Interface(t *testing.T) {
 	var _ SSHRuntime = (*NspawnRuntime)(nil)
 }
 
-func TestNspawnRuntime_SSHPort_FromMetadata(t *testing.T) {
+func TestNspawnRuntime_SSHHost_FromMetadata(t *testing.T) {
 	// Create temp directory for sandbox metadata
 	tmpDir, err := os.MkdirTemp("", "nspawn-test-*")
 	if err != nil {
@@ -87,11 +87,11 @@ func TestNspawnRuntime_SSHPort_FromMetadata(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Create sandbox metadata with port
+	// Create sandbox metadata with network slot
 	metadata := &config.SandboxMetadata{
-		Name:     "test-sandbox",
-		Port:     2200,
-		Template: "test",
+		Name:        "test-sandbox",
+		NetworkSlot: 5,
+		Template:    "test",
 	}
 	if err = config.SaveSandboxMetadata(tmpDir, metadata); err != nil {
 		t.Fatalf("Failed to save sandbox metadata: %v", err)
@@ -100,16 +100,16 @@ func TestNspawnRuntime_SSHPort_FromMetadata(t *testing.T) {
 	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir)
 	ctx := context.Background()
 
-	// Verify SSHPort loads from metadata
-	port, err := rt.SSHPort(ctx, "test-sandbox")
+	// Verify SSHHost loads from metadata and returns container IP
+	host, err := rt.SSHHost(ctx, "test-sandbox")
 	if err != nil {
-		t.Errorf("SSHPort() error: %v", err)
-	} else if port != 2200 {
-		t.Errorf("SSHPort() = %d, want %d", port, 2200)
+		t.Errorf("SSHHost() error: %v", err)
+	} else if host != "10.100.5.2" {
+		t.Errorf("SSHHost() = %q, want %q", host, "10.100.5.2")
 	}
 }
 
-func TestNspawnRuntime_SSHPort_NotFound(t *testing.T) {
+func TestNspawnRuntime_SSHHost_NotFound(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "nspawn-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -119,20 +119,20 @@ func TestNspawnRuntime_SSHPort_NotFound(t *testing.T) {
 	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir)
 	ctx := context.Background()
 
-	// Verify SSHPort returns error for unknown sandbox
-	if _, err := rt.SSHPort(ctx, "unknown"); err == nil {
-		t.Error("SSHPort(unknown) should return error")
+	// Verify SSHHost returns error for unknown sandbox
+	if _, err := rt.SSHHost(ctx, "unknown"); err == nil {
+		t.Error("SSHHost(unknown) should return error")
 	}
 }
 
-func TestNspawnRuntime_SSHPort_NoSandboxesDir(t *testing.T) {
+func TestNspawnRuntime_SSHHost_NoSandboxesDir(t *testing.T) {
 	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", "")
 	ctx := context.Background()
 
-	// Verify SSHPort returns error when sandboxes dir not configured
-	_, err := rt.SSHPort(ctx, "test")
+	// Verify SSHHost returns error when sandboxes dir not configured
+	_, err := rt.SSHHost(ctx, "test")
 	if err == nil {
-		t.Error("SSHPort should return error when sandboxes dir not configured")
+		t.Error("SSHHost should return error when sandboxes dir not configured")
 	}
 }
 
@@ -146,9 +146,9 @@ func TestNspawnRuntime_SSHExec(t *testing.T) {
 
 	// Create sandbox metadata
 	metadata := &config.SandboxMetadata{
-		Name:     "test-sandbox",
-		Port:     2200,
-		Template: "test",
+		Name:        "test-sandbox",
+		NetworkSlot: 1,
+		Template:    "test",
 	}
 	if err = config.SaveSandboxMetadata(tmpDir, metadata); err != nil {
 		t.Fatalf("Failed to save sandbox metadata: %v", err)
@@ -158,9 +158,9 @@ func TestNspawnRuntime_SSHExec(t *testing.T) {
 	ctx := context.Background()
 
 	// SSHExec will fail because SSH isn't actually running,
-	// but it should get the port correctly from metadata
+	// but it should get the host correctly from metadata
 	_, err = rt.SSHExec(ctx, "test-sandbox", []string{"echo", "test"}, ExecOptions{})
-	// We expect an error since SSH isn't running, but it shouldn't be about port lookup
+	// We expect an error since SSH isn't running, but it shouldn't be about metadata lookup
 	if err != nil && err.Error() == "failed to load sandbox metadata: no sandbox named \"test-sandbox\" found" {
 		t.Errorf("SSHExec failed to load metadata: %v", err)
 	}

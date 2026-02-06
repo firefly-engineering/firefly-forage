@@ -41,7 +41,6 @@ type CreateOptions struct {
 	BindMounts   map[string]string // host path -> container path
 	ForwardPorts map[int]int       // host port -> container port
 	NetworkSlot  int               // For private networking
-	SSHPort      int               // SSH port for this container (if applicable)
 	ExtraArgs    []string          // Backend-specific arguments
 }
 
@@ -94,8 +93,8 @@ type Runtime interface {
 type SSHRuntime interface {
 	Runtime
 
-	// SSHPort returns the SSH port for a container
-	SSHPort(ctx context.Context, name string) (int, error)
+	// SSHHost returns the SSH host (container IP) for a container
+	SSHHost(ctx context.Context, name string) (string, error)
 
 	// SSHExec executes a command via SSH
 	SSHExec(ctx context.Context, name string, command []string, opts ExecOptions) (*ExecResult, error)

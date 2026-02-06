@@ -272,37 +272,38 @@ func (r *NspawnRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 	return containers, nil
 }
 
-// SSHPort returns the SSH port for a container by loading it from metadata
-func (r *NspawnRuntime) SSHPort(ctx context.Context, name string) (int, error) {
+// SSHHost returns the container IP address for SSH connections.
+// The container IP is derived from the network slot in the metadata.
+func (r *NspawnRuntime) SSHHost(ctx context.Context, name string) (string, error) {
 	if r.SandboxesDir == "" {
-		return 0, fmt.Errorf("sandboxes directory not configured")
+		return "", fmt.Errorf("sandboxes directory not configured")
 	}
 
 	metadata, err := config.LoadSandboxMetadata(r.SandboxesDir, name)
 	if err != nil {
-		return 0, fmt.Errorf("failed to load sandbox metadata: %w", err)
+		return "", fmt.Errorf("failed to load sandbox metadata: %w", err)
 	}
 
-	if metadata.Port == 0 {
-		return 0, fmt.Errorf("no SSH port configured for sandbox %s", name)
+	if metadata.NetworkSlot == 0 {
+		return "", fmt.Errorf("no network slot configured for sandbox %s", name)
 	}
 
-	return metadata.Port, nil
+	return metadata.ContainerIP(), nil
 }
 
 // SSHExec executes a command via SSH
 func (r *NspawnRuntime) SSHExec(ctx context.Context, name string, command []string, opts ExecOptions) (*ExecResult, error) {
-	port, err := r.SSHPort(ctx, name)
+	host, err := r.SSHHost(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return r.SSHExecWithPort(ctx, port, command, opts)
+	return r.SSHExecWithHost(ctx, host, command, opts)
 }
 
-// SSHExecWithPort executes a command via SSH with a specific port
-func (r *NspawnRuntime) SSHExecWithPort(ctx context.Context, port int, command []string, opts ExecOptions) (*ExecResult, error) {
+// SSHExecWithHost executes a command via SSH with a specific host
+func (r *NspawnRuntime) SSHExecWithHost(ctx context.Context, host string, command []string, opts ExecOptions) (*ExecResult, error) {
 	// Build SSH options using the builder
-	sshOpts := ssh.DefaultOptions(port).WithBatchMode()
+	sshOpts := ssh.DefaultOptions(host).WithBatchMode()
 
 	// Override user if specified
 	if opts.User != "" {
@@ -340,16 +341,16 @@ func (r *NspawnRuntime) SSHExecWithPort(ctx context.Context, port int, command [
 
 // SSHInteractive starts an interactive SSH session
 func (r *NspawnRuntime) SSHInteractive(ctx context.Context, name string, command string) error {
-	port, err := r.SSHPort(ctx, name)
+	host, err := r.SSHHost(ctx, name)
 	if err != nil {
 		return err
 	}
-	return r.SSHInteractiveWithPort(port, command)
+	return r.SSHInteractiveWithHost(host, command)
 }
 
-// SSHInteractiveWithPort starts an interactive SSH session with a specific port
-func (r *NspawnRuntime) SSHInteractiveWithPort(port int, command string) error {
-	return ssh.ReplaceWithSession(port, command)
+// SSHInteractiveWithHost starts an interactive SSH session with a specific host
+func (r *NspawnRuntime) SSHInteractiveWithHost(host string, command string) error {
+	return ssh.ReplaceWithSession(host, command)
 }
 
 // Ensure NspawnRuntime implements Runtime
