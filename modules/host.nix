@@ -14,7 +14,28 @@ let
     types
     mkIf
     mapAttrs
+    replaceStrings
+    hasPrefix
     ;
+
+  # Resolve ~ to the configured user's home directory
+  userHome = config.users.users.${cfg.user}.home or "/home/${cfg.user}";
+  resolveTilde = path:
+    if path == null then null
+    else if hasPrefix "~/" path then
+      userHome + (builtins.substring 1 (builtins.stringLength path - 1) path)
+    else if path == "~" then
+      userHome
+    else
+      path;
+
+  # Derive container config dir from host path if not specified
+  # e.g., ~/.claude -> /home/agent/.claude
+  deriveContainerPath = hostPath:
+    let
+      baseName = baseNameOf hostPath;
+    in
+      "/home/agent/${baseName}";
 
   # Agent definition type
   agentType = types.submodule {
@@ -33,6 +54,26 @@ let
         type = types.str;
         description = "Environment variable name for the auth token";
         example = "ANTHROPIC_API_KEY";
+      };
+
+      hostConfigDir = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Host directory to mount for persistent agent configuration (supports ~ expansion)";
+        example = "~/.claude";
+      };
+
+      containerConfigDir = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Override container mount point (default: /home/agent/.<dirname>)";
+        example = "/home/agent/.claude";
+      };
+
+      hostConfigDirReadOnly = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Mount the config directory as read-only (default: false to allow token refresh)";
       };
     };
   };
@@ -225,9 +266,18 @@ in
               allowedHosts
               ;
             agents = mapAttrs (
-              agentName: agent: {
-                inherit (agent) secretName authEnvVar;
+              agentName: agent:
+              let
+                resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
+                resolvedContainerConfigDir =
+                  if agent.containerConfigDir != null then agent.containerConfigDir
+                  else if resolvedHostConfigDir != null then deriveContainerPath resolvedHostConfigDir
+                  else null;
+              in {
+                inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
                 packagePath = agent.package.outPath;
+                hostConfigDir = resolvedHostConfigDir;
+                containerConfigDir = resolvedContainerConfigDir;
               }
             ) template.agents;
             extraPackages = map (p: p.outPath) template.extraPackages;
