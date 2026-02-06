@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -80,14 +82,46 @@ const (
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
-	UID                int               `json:"uid"`                // Host user's UID
-	GID                int               `json:"gid"`                // Host user's GID
+	UID                int               `json:"uid"`                      // Host user's UID
+	GID                int               `json:"gid"`                      // Host user's GID
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
 	Secrets            map[string]string `json:"secrets"`
 	StateDir           string            `json:"stateDir"`
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
-	ProxyURL           string            `json:"proxyUrl,omitempty"` // URL of the forage-proxy server
+	ProxyURL           string            `json:"proxyUrl,omitempty"`       // URL of the forage-proxy server
+	HostTmuxConfig     string            `json:"hostTmuxConfig,omitempty"` // Host tmux config file to mount
+}
+
+// resolveUID looks up the UID/GID from the OS for the configured user
+// when they weren't explicitly set in the NixOS config (i.e., null/0 in JSON).
+func (c *HostConfig) resolveUID() error {
+	if c.UID != 0 && c.GID != 0 {
+		return nil
+	}
+
+	u, err := user.Lookup(c.User)
+	if err != nil {
+		return fmt.Errorf("failed to look up user %q: %w", c.User, err)
+	}
+
+	if c.UID == 0 {
+		uid, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			return fmt.Errorf("failed to parse UID for user %q: %w", c.User, err)
+		}
+		c.UID = uid
+	}
+
+	if c.GID == 0 {
+		gid, err := strconv.Atoi(u.Gid)
+		if err != nil {
+			return fmt.Errorf("failed to parse GID for user %q: %w", c.User, err)
+		}
+		c.GID = gid
+	}
+
+	return nil
 }
 
 // Validate checks that the HostConfig is valid.
@@ -261,6 +295,11 @@ func LoadHostConfig(configDir string) (*HostConfig, error) {
 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid host config: %w", err)
+	}
+
+	// Resolve UID/GID from OS if not set in config (NixOS auto-assigns UIDs)
+	if err := config.resolveUID(); err != nil {
+		return nil, fmt.Errorf("failed to resolve user IDs: %w", err)
 	}
 
 	return &config, nil

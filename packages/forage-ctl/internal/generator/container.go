@@ -138,6 +138,21 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
+	// Add tmux config mount if configured
+	if cfg.HostConfig != nil && cfg.HostConfig.HostTmuxConfig != "" {
+		// Determine container path based on host path
+		// If it's a .conf file, mount as ~/.tmux.conf, otherwise as ~/.config/tmux
+		containerPath := "/home/agent/.config/tmux"
+		if filepath.Ext(cfg.HostConfig.HostTmuxConfig) == ".conf" {
+			containerPath = "/home/agent/.tmux.conf"
+		}
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     containerPath,
+			HostPath: cfg.HostConfig.HostTmuxConfig,
+			ReadOnly: true,
+		})
+	}
+
 	// Build agent packages and environment variables
 	for _, agent := range cfg.Template.Agents {
 		if agent.PackagePath != "" {

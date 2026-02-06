@@ -61,6 +61,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		StateDir:           paths.StateDir,
 		ExtraContainerPath: "/nix/store/fake/extra-container",
 		NixpkgsRev:         "abc123",
+		HostTmuxConfig:     "/home/testuser/.config/tmux",
 	}
 
 	// Write host config
