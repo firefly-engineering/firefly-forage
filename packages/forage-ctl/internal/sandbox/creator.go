@@ -186,7 +186,7 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		NetworkSlot:    resources.networkSlot,
 		Workspace:      ws.effectivePath,
 		SecretsPath:    secretsPath,
-		AuthorizedKeys: c.hostConfig.AuthorizedKeys,
+		AuthorizedKeys: c.resolveSSHKeys(opts),
 		Template:       resources.template,
 		HostConfig:     c.hostConfig,
 		WorkspaceMode:  string(opts.WorkspaceMode),
@@ -384,4 +384,112 @@ func copySkillsToContainer(port int, content string) error {
 	// Pass content via stdin to sh, which writes it to the file.
 	// This is safe because content never appears in the command string.
 	return ssh.ExecWithStdin(port, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
+}
+
+// resolveSSHKeys returns SSH keys to use, in order of priority:
+// 1. Explicit keys from CreateOptions
+// 2. Keys from host config
+// 3. Keys from ~/.ssh/*.pub
+func (c *Creator) resolveSSHKeys(opts CreateOptions) []string {
+	// 1. Explicit keys from options (highest priority)
+	if len(opts.SSHKeys) > 0 {
+		logging.Debug("using explicit SSH keys", "count", len(opts.SSHKeys))
+		return opts.SSHKeys
+	}
+
+	// 2. Keys from host config
+	if len(c.hostConfig.AuthorizedKeys) > 0 {
+		logging.Debug("using SSH keys from config", "count", len(c.hostConfig.AuthorizedKeys))
+		return c.hostConfig.AuthorizedKeys
+	}
+
+	// 3. Auto-detect from ~/.ssh/*.pub
+	keys := readSSHPublicKeys()
+	if len(keys) > 0 {
+		logging.Debug("using SSH keys from ~/.ssh", "count", len(keys))
+		return keys
+	}
+
+	logging.Warn("no SSH keys found")
+	return nil
+}
+
+// readSSHPublicKeys reads all SSH public keys from ~/.ssh/*.pub
+func readSSHPublicKeys() []string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		logging.Debug("failed to get home directory", "error", err)
+		return nil
+	}
+
+	sshDir := filepath.Join(homeDir, ".ssh")
+	entries, err := os.ReadDir(sshDir)
+	if err != nil {
+		logging.Debug("failed to read ~/.ssh directory", "error", err)
+		return nil
+	}
+
+	var keys []string
+	for _, entry := range entries {
+		if entry.IsDir() || !isPubKeyFile(entry.Name()) {
+			continue
+		}
+
+		keyPath := filepath.Join(sshDir, entry.Name())
+		content, err := os.ReadFile(keyPath)
+		if err != nil {
+			logging.Debug("failed to read key file", "path", keyPath, "error", err)
+			continue
+		}
+
+		// Trim whitespace and skip empty files
+		key := string(content)
+		key = trimKey(key)
+		if key != "" && isValidSSHKey(key) {
+			keys = append(keys, key)
+			logging.Debug("found SSH key", "file", entry.Name())
+		}
+	}
+
+	return keys
+}
+
+// isPubKeyFile returns true if the filename looks like a public key file
+func isPubKeyFile(name string) bool {
+	return filepath.Ext(name) == ".pub"
+}
+
+// trimKey removes leading/trailing whitespace and trailing newlines
+func trimKey(key string) string {
+	// Remove trailing newlines and whitespace
+	for len(key) > 0 && (key[len(key)-1] == '\n' || key[len(key)-1] == '\r' || key[len(key)-1] == ' ') {
+		key = key[:len(key)-1]
+	}
+	// Remove leading whitespace
+	for len(key) > 0 && (key[0] == ' ' || key[0] == '\t') {
+		key = key[1:]
+	}
+	return key
+}
+
+// isValidSSHKey checks if a string looks like a valid SSH public key
+func isValidSSHKey(key string) bool {
+	// Valid SSH keys start with a key type
+	validPrefixes := []string{
+		"ssh-rsa ",
+		"ssh-ed25519 ",
+		"ssh-dss ",
+		"ecdsa-sha2-nistp256 ",
+		"ecdsa-sha2-nistp384 ",
+		"ecdsa-sha2-nistp521 ",
+		"sk-ssh-ed25519@openssh.com ",
+		"sk-ecdsa-sha2-nistp256@openssh.com ",
+	}
+
+	for _, prefix := range validPrefixes {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			return true
+		}
+	}
+	return false
 }
