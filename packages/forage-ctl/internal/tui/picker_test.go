@@ -75,15 +75,15 @@ func TestSandboxItemMethods(t *testing.T) {
 		}
 	})
 
-	t.Run("Description with empty mode", func(t *testing.T) {
+	t.Run("Description with direct mode", func(t *testing.T) {
 		meta := &config.SandboxMetadata{
 			Name:          "test",
-			WorkspaceMode: "",
+			WorkspaceMode: "direct",
 		}
 		item := sandboxItem{metadata: meta, status: health.StatusStopped}
 		desc := item.Description()
-		if !strings.Contains(desc, "dir") {
-			t.Error("Description should default to 'dir' mode")
+		if !strings.Contains(desc, "direct") {
+			t.Error("Description should contain 'direct' mode")
 		}
 	})
 }
@@ -115,9 +115,11 @@ func TestSandboxItemStatusIcons(t *testing.T) {
 
 func TestModelKeyHandling(t *testing.T) {
 	meta := &config.SandboxMetadata{
-		Name:        "test-sandbox",
-		Template:    "claude",
-		NetworkSlot: 1,
+		Name:          "test-sandbox",
+		Template:      "claude",
+		NetworkSlot:   1,
+		WorkspaceMode: "direct",
+		Workspace:     "/home/user/project",
 	}
 
 	paths := &config.Paths{
@@ -126,8 +128,10 @@ func TestModelKeyHandling(t *testing.T) {
 		SandboxesDir: "/var/lib/firefly-forage/sandboxes",
 	}
 
+	opts := PickerOptions{}
+
 	t.Run("quit with q", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 		model := newModel.(Model)
 
@@ -143,7 +147,7 @@ func TestModelKeyHandling(t *testing.T) {
 	})
 
 	t.Run("quit with esc", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		model := newModel.(Model)
 
@@ -152,8 +156,8 @@ func TestModelKeyHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("new sandbox with n", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+	t.Run("new sandbox with n (AllowCreate=false)", func(t *testing.T) {
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := newModel.(Model)
 
@@ -162,8 +166,22 @@ func TestModelKeyHandling(t *testing.T) {
 		}
 	})
 
+	t.Run("new sandbox with n (AllowCreate=true) opens wizard", func(t *testing.T) {
+		createOpts := PickerOptions{AllowCreate: true}
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, createOpts)
+		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+		model := newModel.(Model)
+
+		if model.screen != screenWizard {
+			t.Error("Expected screen to be screenWizard")
+		}
+		if model.wizard == nil {
+			t.Error("Expected wizard to be initialized")
+		}
+	})
+
 	t.Run("window size update", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		newModel, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 		model := newModel.(Model)
 
@@ -189,16 +207,20 @@ func TestModelInit(t *testing.T) {
 
 func TestModelView(t *testing.T) {
 	meta := &config.SandboxMetadata{
-		Name:     "test-sandbox",
-		Template: "claude",
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "direct",
+		Workspace:     "/home/user/project",
 	}
 
 	paths := &config.Paths{
 		SandboxesDir: "/var/lib/firefly-forage/sandboxes",
 	}
 
+	opts := PickerOptions{}
+
 	t.Run("normal view contains help", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		view := m.View()
 
 		if !strings.Contains(view, "[enter] Attach") {
@@ -213,7 +235,7 @@ func TestModelView(t *testing.T) {
 	})
 
 	t.Run("quitting view is empty", func(t *testing.T) {
-		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil)
+		m := NewPicker([]*config.SandboxMetadata{meta}, paths, nil, opts)
 		m.quitting = true
 		view := m.View()
 
@@ -247,7 +269,7 @@ func TestRunPickerEmptySandboxes(t *testing.T) {
 		SandboxesDir: "/var/lib/firefly-forage/sandboxes",
 	}
 
-	result, err := RunPicker([]*config.SandboxMetadata{}, paths, nil)
+	result, err := RunPicker([]*config.SandboxMetadata{}, paths, nil, PickerOptions{})
 	if err != nil {
 		t.Fatalf("RunPicker with empty sandboxes failed: %v", err)
 	}
@@ -319,5 +341,53 @@ func TestActionConstants(t *testing.T) {
 			t.Errorf("Duplicate action value: %v", a)
 		}
 		seen[a] = true
+	}
+}
+
+func TestPickerResultWithCreateOptions(t *testing.T) {
+	result := PickerResult{
+		Action: ActionNew,
+		CreateOptions: &CreateOptions{
+			Name:     "test-sandbox",
+			Template: "claude",
+			RepoPath: "/home/user/project",
+			Direct:   true,
+		},
+	}
+
+	if result.CreateOptions == nil {
+		t.Fatal("CreateOptions should not be nil")
+	}
+	if result.CreateOptions.Name != "test-sandbox" {
+		t.Errorf("Name = %q, want %q", result.CreateOptions.Name, "test-sandbox")
+	}
+	if !result.CreateOptions.Direct {
+		t.Error("Direct should be true")
+	}
+}
+
+func TestGroupedListInPicker(t *testing.T) {
+	sandboxes := []*config.SandboxMetadata{
+		{Name: "sb1", Template: "claude", SourceRepo: "/home/user/repo-a", Workspace: "/var/lib/ws/sb1", WorkspaceMode: "jj"},
+		{Name: "sb2", Template: "aider", SourceRepo: "/home/user/repo-b", Workspace: "/var/lib/ws/sb2", WorkspaceMode: "jj"},
+		{Name: "sb3", Template: "claude", SourceRepo: "/home/user/repo-a", Workspace: "/var/lib/ws/sb3", WorkspaceMode: "jj"},
+	}
+
+	paths := &config.Paths{
+		SandboxesDir: "/var/lib/firefly-forage/sandboxes",
+	}
+
+	m := NewPicker(sandboxes, paths, nil, PickerOptions{})
+
+	// The list should have headers + sandbox items
+	items := m.list.Items()
+	if len(items) != 5 { // 2 headers + 3 sandboxes
+		t.Errorf("expected 5 items (2 headers + 3 sandboxes), got %d", len(items))
+	}
+
+	// Initial selection should skip the header
+	selected := m.list.SelectedItem()
+	if _, ok := selected.(headerItem); ok {
+		t.Error("initial selection should not be a headerItem")
 	}
 }

@@ -81,7 +81,7 @@ func (s *Server) ShowPicker() error {
 		return nil
 	}
 
-	result, err := tui.RunPicker(sandboxes, s.Paths, s.Runtime)
+	result, err := tui.RunPicker(sandboxes, s.Paths, s.Runtime, tui.PickerOptions{})
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}

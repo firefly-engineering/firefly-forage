@@ -25,10 +25,34 @@ const (
 	ActionQuit
 )
 
+// screen identifies which screen the picker is showing.
+type screen int
+
+const (
+	screenList   screen = iota
+	screenWizard
+)
+
+// PickerOptions configures the picker behavior.
+type PickerOptions struct {
+	AllowCreate  bool   // enables creation wizard (false for gateway)
+	TemplatesDir string // for loading templates in wizard
+}
+
+// CreateOptions holds wizard-collected values for sandbox creation.
+type CreateOptions struct {
+	Name         string
+	Template     string
+	RepoPath     string
+	Direct       bool
+	NoTmuxConfig bool
+}
+
 // PickerResult holds the result of the picker
 type PickerResult struct {
-	Action  Action
-	Sandbox *config.SandboxMetadata
+	Action        Action
+	Sandbox       *config.SandboxMetadata
+	CreateOptions *CreateOptions // non-nil when wizard completed
 }
 
 // sandboxItem implements list.Item for sandbox display
@@ -44,9 +68,6 @@ func (i sandboxItem) Title() string {
 
 func (i sandboxItem) Description() string {
 	mode := i.metadata.WorkspaceMode
-	if mode == "" {
-		mode = "dir"
-	}
 
 	statusIcon := "●"
 	switch i.status {
@@ -107,48 +128,55 @@ type Model struct {
 	result   PickerResult
 	quitting bool
 	paths    *config.Paths
+	options  PickerOptions
+	screen   screen
+	wizard   *wizardModel
 	width    int
 	height   int
 }
 
 // NewPicker creates a new sandbox picker.
 // The rt parameter is optional; if nil, all sandboxes will show as stopped.
-func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) Model {
-	items := make([]list.Item, len(sandboxes))
-	for i, sb := range sandboxes {
-		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
-		uptime := "stopped"
-		if status != health.StatusStopped {
-			uptime = health.GetUptime(sb.Name, rt)
-		}
-		items[i] = sandboxItem{
-			metadata: sb,
-			status:   status,
-			uptime:   uptime,
-		}
-	}
+func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) Model {
+	items := buildGroupedItems(sandboxes, rt)
 
-	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = selectedStyle
-	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-
+	delegate := newGroupedDelegate()
 	l := list.New(items, delegate, 80, 20)
 	l.Title = "Firefly Forage - Select Sandbox"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.Styles.Title = titleStyle
 
-	return Model{
-		list:  l,
-		paths: paths,
+	m := Model{
+		list:    l,
+		paths:   paths,
+		options: opts,
+		screen:  screenList,
 	}
+
+	// Skip initial header selection
+	skipHeaders(&m.list, 1)
+
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.screen == screenWizard && m.wizard != nil {
+		return m.wizard.Init()
+	}
 	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.screen {
+	case screenWizard:
+		return m.updateWizard(msg)
+	default:
+		return m.updateList(msg)
+	}
+}
+
+func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -174,6 +202,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "n":
+			if m.options.AllowCreate {
+				m.screen = screenWizard
+				w := newWizardModel(m.options.TemplatesDir)
+				m.wizard = &w
+				if m.width > 0 && m.height > 0 {
+					m.wizard.width = m.width
+					m.wizard.height = m.height
+				}
+				return m, m.wizard.Init()
+			}
 			m.result = PickerResult{Action: ActionNew}
 			m.quitting = true
 			return m, tea.Quit
@@ -195,14 +233,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	prevIdx := m.list.Index()
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
+
+	// Skip headers after navigation
+	if m.list.Index() != prevIdx {
+		dir := 1
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			dir = navigationDirection(keyMsg)
+		}
+		skipHeaders(&m.list, dir)
+	}
+
+	return m, cmd
+}
+
+func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.wizard == nil {
+		m.screen = screenList
+		return m, nil
+	}
+
+	// Handle window size for wizard
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = wsMsg.Width
+		m.height = wsMsg.Height
+		m.wizard.width = wsMsg.Width
+		m.wizard.height = wsMsg.Height
+	}
+
+	done, opts, cmd := m.wizard.Update(msg)
+	if done {
+		if opts != nil {
+			m.result = PickerResult{
+				Action:        ActionNew,
+				CreateOptions: opts,
+			}
+			m.quitting = true
+			return m, tea.Quit
+		}
+		// Wizard cancelled, return to list
+		m.screen = screenList
+		m.wizard = nil
+		return m, nil
+	}
 	return m, cmd
 }
 
 func (m Model) View() string {
 	if m.quitting {
 		return ""
+	}
+
+	switch m.screen {
+	case screenWizard:
+		if m.wizard != nil {
+			return m.wizard.View()
+		}
 	}
 
 	help := helpStyle.Render("[enter] Attach  [n] New  [d] Down  [/] Filter  [q] Quit")
@@ -217,12 +305,32 @@ func (m Model) Result() PickerResult {
 
 // RunPicker runs the interactive sandbox picker.
 // The rt parameter is optional; if nil, all sandboxes will show as stopped.
-func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) (PickerResult, error) {
+func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) (PickerResult, error) {
 	if len(sandboxes) == 0 {
+		if opts.AllowCreate {
+			// Go directly to wizard
+			w := newWizardModel(opts.TemplatesDir)
+			m := Model{
+				paths:   paths,
+				options: opts,
+				screen:  screenWizard,
+				wizard:  &w,
+			}
+			p := tea.NewProgram(m, tea.WithAltScreen())
+			finalModel, err := p.Run()
+			if err != nil {
+				return PickerResult{}, err
+			}
+			model, ok := finalModel.(Model)
+			if !ok {
+				return PickerResult{}, fmt.Errorf("unexpected model type")
+			}
+			return model.Result(), nil
+		}
 		return PickerResult{Action: ActionNew}, nil
 	}
 
-	m := NewPicker(sandboxes, paths, rt)
+	m := NewPicker(sandboxes, paths, rt, opts)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	finalModel, err := p.Run()

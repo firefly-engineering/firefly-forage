@@ -46,8 +46,8 @@ func runGateway(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list sandboxes: %w", err)
 	}
 
-	// Run interactive picker
-	result, err := tui.RunPicker(sandboxes, p, rt)
+	// Run interactive picker (no creation wizard in gateway mode)
+	result, err := tui.RunPicker(sandboxes, p, rt, tui.PickerOptions{})
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}

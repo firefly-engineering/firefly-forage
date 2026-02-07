@@ -5,14 +5,17 @@
 //
 // # Sandbox Picker
 //
-// The picker displays running sandboxes and allows selection:
+// The picker displays running sandboxes grouped by project and allows selection:
 //
-//	result, err := tui.RunPicker(sandboxes, paths, rt)
+//	opts := tui.PickerOptions{AllowCreate: true, TemplatesDir: paths.TemplatesDir}
+//	result, err := tui.RunPicker(sandboxes, paths, rt, opts)
 //	switch result.Action {
 //	case tui.ActionAttach:
 //	    // Connect to result.Sandbox
 //	case tui.ActionNew:
-//	    // Create new sandbox
+//	    if result.CreateOptions != nil {
+//	        // Create sandbox from wizard results
+//	    }
 //	case tui.ActionDown:
 //	    // Stop selected sandbox
 //	case tui.ActionQuit:
@@ -21,10 +24,11 @@
 //
 // # Picker Features
 //
-//   - Lists all sandboxes with health status and uptime
-//   - Keyboard navigation (j/k or arrows)
-//   - Quick actions: Enter (attach), n (new), d (down), q (quit)
+//   - Lists all sandboxes grouped by project (SourceRepo or Workspace)
+//   - Keyboard navigation (j/k or arrows), headers auto-skipped
+//   - Quick actions: Enter (attach), n (new/wizard), d (down), q (quit)
 //   - Color-coded status indicators
+//   - Creation wizard when AllowCreate is true (path, template, name, advanced)
 //
 // # Dependencies
 //
