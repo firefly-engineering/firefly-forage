@@ -28,6 +28,9 @@ type CleanupOptions struct {
 	// CleanupSkills if true, removes the skills markdown file.
 	CleanupSkills bool
 
+	// CleanupPermissions if true, removes agent permissions files (*-permissions.json).
+	CleanupPermissions bool
+
 	// CleanupMetadata if true, removes the sandbox metadata file.
 	CleanupMetadata bool
 }
@@ -35,12 +38,13 @@ type CleanupOptions struct {
 // DefaultCleanupOptions returns options that clean up everything.
 func DefaultCleanupOptions() CleanupOptions {
 	return CleanupOptions{
-		DestroyContainer: true,
-		CleanupWorkspace: true,
-		CleanupSecrets:   true,
-		CleanupConfig:    true,
-		CleanupSkills:    true,
-		CleanupMetadata:  true,
+		DestroyContainer:   true,
+		CleanupWorkspace:   true,
+		CleanupSecrets:     true,
+		CleanupConfig:      true,
+		CleanupSkills:      true,
+		CleanupPermissions: true,
+		CleanupMetadata:    true,
 	}
 }
 
@@ -95,6 +99,21 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 		skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
 		if err := os.Remove(skillsPath); err != nil && !os.IsNotExist(err) {
 			logging.Warn("failed to remove skills file", "path", skillsPath, "error", err)
+		}
+	}
+
+	// Remove permissions files (e.g. <name>.claude-permissions.json)
+	if opts.CleanupPermissions {
+		pattern := filepath.Join(paths.SandboxesDir, name+".*-permissions.json")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			logging.Warn("failed to glob permissions files", "pattern", pattern, "error", err)
+		}
+		for _, match := range matches {
+			logging.Debug("removing permissions file", "path", match)
+			if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
+				logging.Warn("failed to remove permissions file", "path", match, "error", err)
+			}
 		}
 	}
 
