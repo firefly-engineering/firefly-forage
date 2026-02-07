@@ -243,6 +243,37 @@ func TestGenerateNixConfig_ClaudeDirMount(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_NonClaudeAgent_NoClaudeDir(t *testing.T) {
+	// A non-claude agent should NOT get .claude/ mounted even if it exists
+	sourceRepo := t.TempDir()
+	claudeDir := filepath.Join(sourceRepo, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	cfg := validTestConfig()
+	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
+	cfg.WorkspaceMode = "jj"
+	cfg.SourceRepo = sourceRepo
+	// Replace claude agent with a non-claude agent
+	cfg.Template.Agents = map[string]config.AgentConfig{
+		"opencode": {
+			PackagePath: "pkgs.opencode",
+			SecretName:  "openai",
+			AuthEnvVar:  "OPENAI_API_KEY",
+		},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if strings.Contains(result, "/workspace/.claude") {
+		t.Error("should not mount .claude for non-claude agent")
+	}
+}
+
 func TestGenerateNixConfig_ClaudeDirMount_NoDir(t *testing.T) {
 	// Source repo exists but has no .claude/ directory — mount should not appear
 	sourceRepo := t.TempDir()
@@ -418,11 +449,6 @@ func TestContainerConfig_Validate(t *testing.T) {
 			name:    "invalid workspace mode",
 			modify:  func(c *ContainerConfig) { c.WorkspaceMode = "invalid" },
 			wantErr: "invalid workspace mode",
-		},
-		{
-			name:    "jj mode without source repo",
-			modify:  func(c *ContainerConfig) { c.WorkspaceMode = "jj"; c.SourceRepo = "" },
-			wantErr: "source repo is required for jj workspace mode",
 		},
 	}
 

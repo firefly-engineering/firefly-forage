@@ -14,6 +14,20 @@ import (
 // NixOSStateVersion is the NixOS state version used in generated container configs.
 const NixOSStateVersion = "24.05"
 
+// backendRepoMounts maps workspace modes to source repo directories
+// that must be mounted at their original paths for the VCS to function.
+var backendRepoMounts = map[string][]string{
+	"jj": {".jj", ".git"},
+	// git-worktree needs no extra mounts — .git file is in the worktree already
+}
+
+// agentProjectDirs maps agent names to source repo directories they need
+// mounted into /workspace. These are typically git-ignored directories that
+// don't appear in worktrees/workspaces.
+var agentProjectDirs = map[string][]string{
+	"claude": {".claude"},
+}
+
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
 	Name           string
@@ -58,11 +72,6 @@ func (c *ContainerConfig) Validate() error {
 	validModes := map[string]bool{"": true, "direct": true, "jj": true, "git-worktree": true}
 	if !validModes[c.WorkspaceMode] {
 		return fmt.Errorf("invalid workspace mode: %s", c.WorkspaceMode)
-	}
-
-	// jj mode requires source repo
-	if c.WorkspaceMode == "jj" && c.SourceRepo == "" {
-		return fmt.Errorf("source repo is required for jj workspace mode")
 	}
 
 	return nil
@@ -113,33 +122,36 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		})
 	}
 
-	// Add source repo .jj and .git mounts for jj mode
-	// jj needs both: .jj for jj state and .git for the git backend
-	if cfg.WorkspaceMode == "jj" && cfg.SourceRepo != "" {
-		jjPath := filepath.Join(cfg.SourceRepo, ".jj")
-		data.BindMounts = append(data.BindMounts, BindMount{
-			Path:     jjPath,
-			HostPath: jjPath,
-			ReadOnly: false,
-		})
-		gitPath := filepath.Join(cfg.SourceRepo, ".git")
-		data.BindMounts = append(data.BindMounts, BindMount{
-			Path:     gitPath,
-			HostPath: gitPath,
-			ReadOnly: false,
-		})
-	}
-
-	// Mount source repo .claude/ into workspace for jj/git-worktree modes
-	// This directory is typically git-ignored so it won't appear in worktrees
-	if (cfg.WorkspaceMode == "jj" || cfg.WorkspaceMode == "git-worktree") && cfg.SourceRepo != "" {
-		claudeDir := filepath.Join(cfg.SourceRepo, ".claude")
-		if info, err := os.Stat(claudeDir); err == nil && info.IsDir() {
+	// Mount VCS directories required by the workspace backend
+	if cfg.SourceRepo != "" {
+		for _, dir := range backendRepoMounts[cfg.WorkspaceMode] {
+			fullPath := filepath.Join(cfg.SourceRepo, dir)
 			data.BindMounts = append(data.BindMounts, BindMount{
-				Path:     "/workspace/.claude",
-				HostPath: claudeDir,
+				Path:     fullPath,
+				HostPath: fullPath,
 				ReadOnly: false,
 			})
+		}
+	}
+
+	// Mount agent-specific project directories from source repo
+	if (cfg.WorkspaceMode == "jj" || cfg.WorkspaceMode == "git-worktree") && cfg.SourceRepo != "" {
+		mounted := map[string]bool{}
+		for name := range cfg.Template.Agents {
+			for _, dir := range agentProjectDirs[name] {
+				if mounted[dir] {
+					continue
+				}
+				fullPath := filepath.Join(cfg.SourceRepo, dir)
+				if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+					data.BindMounts = append(data.BindMounts, BindMount{
+						Path:     filepath.Join("/workspace", dir),
+						HostPath: fullPath,
+						ReadOnly: false,
+					})
+					mounted[dir] = true
+				}
+			}
 		}
 	}
 
