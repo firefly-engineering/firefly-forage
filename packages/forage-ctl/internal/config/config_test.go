@@ -321,6 +321,59 @@ func TestListSandboxes(t *testing.T) {
 	}
 }
 
+func TestListSandboxes_SkipsPermissionsFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create valid sandbox metadata
+	SaveSandboxMetadata(tmpDir, &SandboxMetadata{
+		Name: "test", Template: "claude", NetworkSlot: 1, Workspace: "/w",
+	})
+
+	// Create permissions files that should be skipped
+	os.WriteFile(filepath.Join(tmpDir, "test.claude-permissions.json"), []byte(`{}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "test.copilot-permissions.json"), []byte(`{}`), 0644)
+
+	// Create another dotted JSON file that should be skipped
+	os.WriteFile(filepath.Join(tmpDir, "some.other.json"), []byte(`{}`), 0644)
+
+	loaded, err := ListSandboxes(tmpDir)
+	if err != nil {
+		t.Fatalf("ListSandboxes failed: %v", err)
+	}
+
+	if len(loaded) != 1 {
+		t.Errorf("len(loaded) = %d, want 1 (permissions files should be skipped)", len(loaded))
+	}
+	if len(loaded) > 0 && loaded[0].Name != "test" {
+		t.Errorf("loaded[0].Name = %q, want %q", loaded[0].Name, "test")
+	}
+}
+
+func TestIsSandboxMetadataFile(t *testing.T) {
+	tests := []struct {
+		filename string
+		want     bool
+	}{
+		{"sandbox-1.json", true},
+		{"my-project.json", true},
+		{"test.claude-permissions.json", false},
+		{"test.copilot-permissions.json", false},
+		{"some.other.json", false},
+		{"notes.txt", false},
+		{"readme.md", false},
+		{".json", true}, // edge case: empty name before .json
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			got := IsSandboxMetadataFile(tt.filename)
+			if got != tt.want {
+				t.Errorf("IsSandboxMetadataFile(%q) = %v, want %v", tt.filename, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestListSandboxes_EmptyDir(t *testing.T) {
 	tmpDir := t.TempDir()
 

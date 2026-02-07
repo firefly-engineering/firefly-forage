@@ -11,6 +11,17 @@ import (
 	"strings"
 )
 
+// IsSandboxMetadataFile returns true if the filename is a valid sandbox metadata file.
+// Valid metadata files are "<name>.json" where name contains no dots.
+// This excludes files like "test.claude-permissions.json".
+func IsSandboxMetadataFile(filename string) bool {
+	if filepath.Ext(filename) != ".json" {
+		return false
+	}
+	name := strings.TrimSuffix(filename, ".json")
+	return !strings.Contains(name, ".")
+}
+
 // sandboxNameRegex validates sandbox names.
 // Names must start with a lowercase letter or digit, followed by lowercase letters, digits, underscores, or hyphens.
 // Maximum length is 63 characters (common container name limit).
@@ -439,10 +450,10 @@ func ListSandboxes(sandboxesDir string) ([]*SandboxMetadata, error) {
 
 	var sandboxes []*SandboxMetadata
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if entry.IsDir() || !IsSandboxMetadataFile(entry.Name()) {
 			continue
 		}
-		name := entry.Name()[:len(entry.Name())-5]
+		name := strings.TrimSuffix(entry.Name(), ".json")
 		metadata, err := LoadSandboxMetadata(sandboxesDir, name)
 		if err != nil {
 			continue
