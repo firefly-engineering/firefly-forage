@@ -42,6 +42,10 @@ Agents are AI coding tools that will be available in the sandbox. Each agent nee
 | `package` | Nix derivation for the agent |
 | `secretName` | Key in `services.firefly-forage.secrets` |
 | `authEnvVar` | Environment variable for authentication |
+| `hostConfigDir` | Host directory to mount for persistent config (optional) |
+| `containerConfigDir` | Override container mount point (optional) |
+| `hostConfigDirReadOnly` | Mount config dir as read-only (default: `false`) |
+| `permissions` | Agent permission rules (optional, see below) |
 
 ```nix
 agents.claude = {
@@ -55,6 +59,45 @@ Forage creates a wrapper script that:
 1. Reads the secret from `/run/secrets/<secretName>`
 2. Sets the environment variable
 3. Executes the real agent binary
+
+### Permissions
+
+The `permissions` option controls what actions agents can take without prompting. When set, Forage generates a settings file that is bind-mounted read-only into the container.
+
+| Field | Description |
+|-------|-------------|
+| `skipAll` | Bypass all permission checks (grants all tool families) |
+| `allow` | List of permission rules to auto-approve |
+| `deny` | List of permission rules to always block |
+
+`skipAll` cannot be combined with `allow` or `deny`.
+
+**Full autonomy** (no permission prompts):
+
+```nix
+agents.claude = {
+  package = pkgs.claude-code;
+  secretName = "anthropic";
+  authEnvVar = "ANTHROPIC_API_KEY";
+  permissions.skipAll = true;
+};
+```
+
+**Granular allowlist**:
+
+```nix
+agents.claude = {
+  package = pkgs.claude-code;
+  secretName = "anthropic";
+  authEnvVar = "ANTHROPIC_API_KEY";
+  permissions = {
+    allow = [ "Read" "Glob" "Grep" "Edit(src/**)" "Bash(npm run *)" ];
+    deny = [ "Bash(rm -rf *)" ];
+  };
+};
+```
+
+For Claude, the settings file is written to `/etc/claude-code/managed-settings.json` (managed scope — highest precedence, cannot be overridden by user or project settings). `permissions` and `hostConfigDir` can coexist — they target different paths.
 
 ### Extra Packages
 
@@ -178,6 +221,23 @@ templates.multi = {
 };
 ```
 
+### Autonomous Template
+
+```nix
+templates.claude-auto = {
+  description = "Claude Code with full autonomy";
+
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+    permissions.skipAll = true;
+  };
+
+  network = "full";
+};
+```
+
 ### Air-Gapped Template
 
 ```nix
@@ -237,7 +297,8 @@ The template JSON format:
     "claude": {
       "packagePath": "/nix/store/...-claude-code",
       "secretName": "anthropic",
-      "authEnvVar": "ANTHROPIC_API_KEY"
+      "authEnvVar": "ANTHROPIC_API_KEY",
+      "permissions": { "skipAll": true }
     }
   },
   "extraPackages": [
@@ -246,3 +307,7 @@ The template JSON format:
   ]
 }
 ```
+
+The `permissions` field is `null` when not configured. When set, it can contain:
+- `{"skipAll": true}` — grants all tool families
+- `{"allow": [...], "deny": [...]}` — granular rules

@@ -198,6 +198,46 @@ services.firefly-forage.templates.claude = {
 };
 ```
 
+#### Agent Permissions
+
+Control what agents can do without prompting. Permissions are written to a settings file and bind-mounted read-only into the container.
+
+**Full autonomy** — skip all permission prompts:
+
+```nix
+services.firefly-forage.templates.claude-auto = {
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+    permissions.skipAll = true;
+  };
+};
+```
+
+**Granular allowlist** — approve specific tools/patterns:
+
+```nix
+services.firefly-forage.templates.claude-restricted = {
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+    permissions = {
+      allow = [ "Read" "Glob" "Grep" "Edit(src/**)" "Bash(npm run *)" ];
+      deny = [ "Bash(rm -rf *)" ];
+    };
+  };
+};
+```
+
+Options:
+- `permissions.skipAll` - Bypass all permission checks (cannot be combined with `allow`/`deny`)
+- `permissions.allow` - Rules to auto-approve (agent-specific format)
+- `permissions.deny` - Rules to always block
+
+For Claude, this generates `/etc/claude-code/managed-settings.json` in the container (managed scope — highest precedence). Permissions and `hostConfigDir` can coexist — they target different paths.
+
 #### Network Modes
 
 Control network access for sandboxes:
@@ -257,6 +297,16 @@ You can also change network modes at runtime using `forage-ctl network`.
         };
         extraPackages = with pkgs; [ ripgrep fd jq yq tree ];
         network = "full";
+      };
+
+      claude-auto = {
+        description = "Claude Code with full autonomy";
+        agents.claude = {
+          package = pkgs.claude-code;
+          secretName = "anthropic";
+          authEnvVar = "ANTHROPIC_API_KEY";
+          permissions.skipAll = true;
+        };
       };
 
       claude-isolated = {

@@ -65,6 +65,7 @@ This makes casual credential discovery harder, but doesn't prevent a determined 
 | Agent exfiltrates API keys | Auth obfuscation via wrappers |
 | Agent accesses host filesystem | Container isolation, explicit bind mounts only |
 | Agent makes unwanted network calls | Network isolation modes |
+| Agent runs dangerous commands | Permission rules (`allow`/`deny`) via managed settings |
 | Agent corrupts system state | Ephemeral root, easy reset |
 | Agent fills disk | Ephemeral tmpfs has size limits |
 | Agent escapes container | systemd-nspawn security features |
@@ -124,7 +125,21 @@ extraPackages = with pkgs; [ ripgrep fd ];
 
 # Use network isolation when possible
 network = "none";  # For tasks that don't need network
+
+# Use granular permissions instead of skipAll when possible
+agents.claude.permissions = {
+  allow = [ "Read" "Glob" "Grep" "Edit(src/**)" ];
+  deny = [ "Bash(rm -rf *)" ];
+};
 ```
+
+### Agent Permissions
+
+Use the most restrictive permissions that still allow the agent to do its job:
+
+- Prefer granular `allow`/`deny` over `skipAll`
+- Use `deny` rules to block dangerous patterns even when allowing broad tool access
+- `skipAll` is convenient for trusted development workflows but grants full tool access
 
 ### Workspace Hygiene
 
