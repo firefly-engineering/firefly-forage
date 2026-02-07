@@ -202,6 +202,66 @@ func TestGenerateNixConfig_JJMode(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_ClaudeDirMount(t *testing.T) {
+	// Create a temp dir to act as the source repo with a .claude/ directory
+	sourceRepo := t.TempDir()
+	claudeDir := filepath.Join(sourceRepo, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		mode      string
+		wantMount bool
+	}{
+		{"jj mode", "jj", true},
+		{"git-worktree mode", "git-worktree", true},
+		{"direct mode", "direct", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
+			cfg.WorkspaceMode = tt.mode
+			cfg.SourceRepo = sourceRepo
+
+			result, err := GenerateNixConfig(cfg)
+			if err != nil {
+				t.Fatalf("GenerateNixConfig failed: %v", err)
+			}
+
+			hasMount := strings.Contains(result, "/workspace/.claude")
+			if tt.wantMount && !hasMount {
+				t.Errorf("expected .claude bind mount in %s mode, but not found", tt.mode)
+			}
+			if !tt.wantMount && hasMount {
+				t.Errorf("did not expect .claude bind mount in %s mode, but found it", tt.mode)
+			}
+		})
+	}
+}
+
+func TestGenerateNixConfig_ClaudeDirMount_NoDir(t *testing.T) {
+	// Source repo exists but has no .claude/ directory — mount should not appear
+	sourceRepo := t.TempDir()
+
+	cfg := validTestConfig()
+	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
+	cfg.WorkspaceMode = "jj"
+	cfg.SourceRepo = sourceRepo
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if strings.Contains(result, "/workspace/.claude") {
+		t.Error("should not mount .claude when directory does not exist in source repo")
+	}
+}
+
 func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 	tests := []struct {
 		network      string

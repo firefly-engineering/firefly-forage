@@ -20,11 +20,12 @@ var upCmd = &cobra.Command{
 }
 
 var (
-	upTemplate    string
-	upWorkspace   string
-	upRepo        string
-	upGitWorktree string
-	upSSHKeys     []string
+	upTemplate      string
+	upWorkspace     string
+	upRepo          string
+	upGitWorktree   string
+	upSSHKeys       []string
+	upNoTmuxConfig  bool
 )
 
 func init() {
@@ -33,6 +34,7 @@ func init() {
 	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "JJ repository (creates isolated workspace)")
 	upCmd.Flags().StringVarP(&upGitWorktree, "git-worktree", "g", "", "Git repository (creates isolated worktree)")
 	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
+	upCmd.Flags().BoolVar(&upNoTmuxConfig, "no-tmux-config", false, "Don't mount host tmux config into sandbox")
 	if err := upCmd.MarkFlagRequired("template"); err != nil {
 		panic(err)
 	}
@@ -80,9 +82,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 // parseCreateOptions parses command flags into CreateOptions.
 func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
 	opts := sandbox.CreateOptions{
-		Name:     name,
-		Template: upTemplate,
-		SSHKeys:  upSSHKeys,
+		Name:         name,
+		Template:     upTemplate,
+		SSHKeys:      upSSHKeys,
+		NoTmuxConfig: upNoTmuxConfig,
 	}
 
 	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified

@@ -191,6 +191,7 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		ProxyURL:       proxyURL,
 		UID:            c.hostConfig.UID,
 		GID:            c.hostConfig.GID,
+		NoTmuxConfig:   opts.NoTmuxConfig,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)

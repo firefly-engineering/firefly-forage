@@ -29,6 +29,7 @@ type ContainerConfig struct {
 	ProxyURL       string // URL of the forage-proxy server (if using proxy mode)
 	UID            int    // Host user's UID for the container agent user
 	GID            int    // Host user's GID for the container agent user
+	NoTmuxConfig   bool   // Skip mounting host tmux config into the container
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -129,6 +130,19 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		})
 	}
 
+	// Mount source repo .claude/ into workspace for jj/git-worktree modes
+	// This directory is typically git-ignored so it won't appear in worktrees
+	if (cfg.WorkspaceMode == "jj" || cfg.WorkspaceMode == "git-worktree") && cfg.SourceRepo != "" {
+		claudeDir := filepath.Join(cfg.SourceRepo, ".claude")
+		if info, err := os.Stat(claudeDir); err == nil && info.IsDir() {
+			data.BindMounts = append(data.BindMounts, BindMount{
+				Path:     "/workspace/.claude",
+				HostPath: claudeDir,
+				ReadOnly: false,
+			})
+		}
+	}
+
 	// Add host config directory mounts for agents
 	for _, agent := range cfg.Template.Agents {
 		if agent.HostConfigDir != "" && agent.ContainerConfigDir != "" {
@@ -141,7 +155,7 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 	}
 
 	// Detect and mount host tmux config
-	if cfg.HostConfig != nil {
+	if !cfg.NoTmuxConfig && cfg.HostConfig != nil {
 		homeDir := resolveUserHome(cfg.HostConfig.User)
 		if homeDir != "" {
 			// Tmux config: prefer ~/.config/tmux dir, fall back to ~/.tmux.conf

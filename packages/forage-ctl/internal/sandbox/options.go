@@ -26,6 +26,9 @@ type CreateOptions struct {
 	// SSHKeys are explicit SSH public keys for sandbox access (optional)
 	// If empty, keys are resolved from config or ~/.ssh/*.pub
 	SSHKeys []string
+
+	// NoTmuxConfig skips mounting the host tmux config into the sandbox
+	NoTmuxConfig bool
 }
 
 // WorkspaceMode specifies the workspace setup strategy.
