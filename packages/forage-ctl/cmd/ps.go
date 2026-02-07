@@ -40,10 +40,6 @@ func runPs(cmd *cobra.Command, args []string) error {
 
 	for _, sb := range sandboxes {
 		mode := sb.WorkspaceMode
-		if mode == "" {
-			mode = "dir"
-		}
-
 		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
 		statusStr := formatStatus(status)
 
