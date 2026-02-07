@@ -493,6 +493,63 @@ func TestAgentConfigValidate(t *testing.T) {
 			},
 			wantErr: "containerConfigDir is required when hostConfigDir is set",
 		},
+		{
+			name: "valid permissions skipAll",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+				Permissions: &AgentPermissions{SkipAll: true},
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid permissions allow and deny",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+				Permissions: &AgentPermissions{
+					Allow: []string{"Read", "Glob"},
+					Deny:  []string{"Bash(rm -rf *)"},
+				},
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid nil permissions",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid skipAll with allow",
+			agent: AgentConfig{
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+				Permissions: &AgentPermissions{
+					SkipAll: true,
+					Allow:   []string{"Read"},
+				},
+			},
+			wantErr: "permissions: skipAll cannot be combined with allow or deny",
+		},
+		{
+			name: "valid permissions with hostConfigDir",
+			agent: AgentConfig{
+				PackagePath:        "/nix/store/abc-claude",
+				SecretName:         "anthropic",
+				AuthEnvVar:         "ANTHROPIC_API_KEY",
+				HostConfigDir:      "/home/user/.claude",
+				ContainerConfigDir: "/home/agent/.claude",
+				Permissions:        &AgentPermissions{SkipAll: true},
+			},
+			wantErr: "",
+		},
 	}
 
 	for _, tt := range tests {

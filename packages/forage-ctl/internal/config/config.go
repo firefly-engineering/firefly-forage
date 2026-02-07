@@ -143,13 +143,22 @@ type Template struct {
 	UseProxy      bool                   `json:"useProxy,omitempty"` // Use forage-proxy for API calls
 }
 
+// AgentPermissions controls agent permission settings.
+// When nil, no permission settings are generated.
+type AgentPermissions struct {
+	SkipAll bool     `json:"skipAll,omitempty"`
+	Allow   []string `json:"allow,omitempty"`
+	Deny    []string `json:"deny,omitempty"`
+}
+
 type AgentConfig struct {
-	PackagePath           string `json:"packagePath"`
-	SecretName            string `json:"secretName"`
-	AuthEnvVar            string `json:"authEnvVar"`
-	HostConfigDir         string `json:"hostConfigDir,omitempty"`
-	ContainerConfigDir    string `json:"containerConfigDir,omitempty"`
-	HostConfigDirReadOnly bool   `json:"hostConfigDirReadOnly,omitempty"`
+	PackagePath           string            `json:"packagePath"`
+	SecretName            string            `json:"secretName"`
+	AuthEnvVar            string            `json:"authEnvVar"`
+	HostConfigDir         string            `json:"hostConfigDir,omitempty"`
+	ContainerConfigDir    string            `json:"containerConfigDir,omitempty"`
+	HostConfigDirReadOnly bool              `json:"hostConfigDirReadOnly,omitempty"`
+	Permissions           *AgentPermissions `json:"permissions,omitempty"`
 }
 
 // Validate checks that the Template is valid.
@@ -210,6 +219,14 @@ func (a *AgentConfig) Validate() error {
 	if a.HostConfigDir != "" && a.ContainerConfigDir == "" {
 		return fmt.Errorf("containerConfigDir is required when hostConfigDir is set")
 	}
+
+	// Validate permissions
+	if a.Permissions != nil {
+		if a.Permissions.SkipAll && (len(a.Permissions.Allow) > 0 || len(a.Permissions.Deny) > 0) {
+			return fmt.Errorf("permissions: skipAll cannot be combined with allow or deny")
+		}
+	}
+
 	return nil
 }
 
