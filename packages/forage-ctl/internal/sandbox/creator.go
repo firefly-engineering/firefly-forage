@@ -80,26 +80,33 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		}
 	}
 
-	// Phase 6: Generate and write container config
-	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath)
+	// Phase 6: Generate permissions files
+	permsMounts, err := c.generatePermissionsFiles(opts.Name, resources.template)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to generate permissions files: %w", err)
+	}
+
+	// Phase 7: Generate and write container config
+	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts)
 	if err != nil {
 		cleanup()
 		return nil, err
 	}
 
-	// Phase 7: Create and start container
+	// Phase 8: Create and start container
 	if err := c.startContainer(opts.Name, configPath); err != nil {
 		cleanup()
 		return nil, err
 	}
 
-	// Phase 8: Save metadata
+	// Phase 9: Save metadata
 	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Phase 9: Post-creation setup
+	// Phase 10: Post-creation setup
 	c.postCreationSetup(metadata, resources.template, ws.effectivePath)
 
 	return &CreateResult{
@@ -170,7 +177,7 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 }
 
 // writeContainerConfig generates and writes the Nix container configuration.
-func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string) (string, error) {
+func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount) (string, error) {
 	proxyURL := ""
 	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
 		proxyURL = c.hostConfig.ProxyURL
@@ -178,20 +185,21 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 	}
 
 	containerCfg := &generator.ContainerConfig{
-		Name:           opts.Name,
-		NetworkSlot:    resources.networkSlot,
-		Workspace:      ws.effectivePath,
-		SecretsPath:    secretsPath,
-		AuthorizedKeys: c.resolveSSHKeys(opts),
-		Template:       resources.template,
-		HostConfig:     c.hostConfig,
-		WorkspaceMode:  string(ws.mode),
-		SourceRepo:     ws.sourceRepo,
-		NixpkgsRev:     c.hostConfig.NixpkgsRev,
-		ProxyURL:       proxyURL,
-		UID:            c.hostConfig.UID,
-		GID:            c.hostConfig.GID,
-		NoTmuxConfig:   opts.NoTmuxConfig,
+		Name:              opts.Name,
+		NetworkSlot:       resources.networkSlot,
+		Workspace:         ws.effectivePath,
+		SecretsPath:       secretsPath,
+		AuthorizedKeys:    c.resolveSSHKeys(opts),
+		Template:          resources.template,
+		HostConfig:        c.hostConfig,
+		WorkspaceMode:     string(ws.mode),
+		SourceRepo:        ws.sourceRepo,
+		NixpkgsRev:        c.hostConfig.NixpkgsRev,
+		ProxyURL:          proxyURL,
+		UID:               c.hostConfig.UID,
+		GID:               c.hostConfig.GID,
+		NoTmuxConfig:      opts.NoTmuxConfig,
+		PermissionsMounts: permsMounts,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -366,6 +374,48 @@ func (c *Creator) injectSkills(name, workspacePath string, metadata *config.Sand
 	if err := copySkillsToContainer(metadata.ContainerIP(), skillsContent); err != nil {
 		logging.Warn("failed to inject skills", "error", err)
 	}
+}
+
+// generatePermissionsFiles generates agent permissions settings files on the host
+// and returns the mounts needed to bind them into the container.
+func (c *Creator) generatePermissionsFiles(sandboxName string, template *config.Template) ([]generator.PermissionsMount, error) {
+	var mounts []generator.PermissionsMount
+
+	for agentName, agent := range template.Agents {
+		if agent.Permissions == nil {
+			continue
+		}
+
+		policy, ok := generator.GetPermissionsPolicy(agentName)
+		if !ok {
+			logging.Debug("no permissions policy for agent, skipping", "agent", agentName)
+			continue
+		}
+
+		content, err := policy.GenerateSettings(agent.Permissions)
+		if err != nil {
+			return nil, fmt.Errorf("agent %s: %w", agentName, err)
+		}
+		if content == nil {
+			continue
+		}
+
+		hostPath := filepath.Join(c.paths.SandboxesDir, fmt.Sprintf("%s.%s-permissions.json", sandboxName, agentName))
+		if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create sandboxes directory: %w", err)
+		}
+		if err := os.WriteFile(hostPath, content, 0644); err != nil {
+			return nil, fmt.Errorf("failed to write permissions file for %s: %w", agentName, err)
+		}
+		logging.Debug("wrote permissions file", "agent", agentName, "path", hostPath)
+
+		mounts = append(mounts, generator.PermissionsMount{
+			HostPath:      hostPath,
+			ContainerPath: policy.ContainerSettingsPath(),
+		})
+	}
+
+	return mounts, nil
 }
 
 // cleanup removes resources created during a failed sandbox creation.
