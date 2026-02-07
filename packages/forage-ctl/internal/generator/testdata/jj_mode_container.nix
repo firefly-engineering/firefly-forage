@@ -23,6 +23,7 @@
       users.users.agent = {
         isNormalUser = true;
         home = "/home/agent";
+        shell = "${pkgs.bash}/bin/bash";
         uid = 1000;
         group = "users";
         extraGroups = [ "wheel" ];

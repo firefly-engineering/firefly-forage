@@ -68,6 +68,7 @@ const containerTemplateText = `{ pkgs, ... }: {
       users.users.agent = {
         isNormalUser = true;
         home = "/home/agent";
+        shell = "${pkgs.bash}/bin/bash";
         uid = {{.UID}};
         group = "users";
         extraGroups = [ "wheel" ];
