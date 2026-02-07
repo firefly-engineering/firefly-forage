@@ -77,6 +77,32 @@ let
         default = false;
         description = "Mount the config directory as read-only (default: false to allow token refresh)";
       };
+
+      permissions = mkOption {
+        type = types.nullOr (types.submodule {
+          options = {
+            skipAll = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Bypass all permission checks";
+            };
+            allow = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              description = "Permission rules to auto-approve (agent-specific format)";
+              example = [ "Bash(npm run *)" "Edit" "Read" ];
+            };
+            deny = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              description = "Permission rules to always block";
+              example = [ "Bash(rm -rf *)" ];
+            };
+          };
+        });
+        default = null;
+        description = "Agent permission rules. When null, no permission settings are generated.";
+      };
     };
   };
 
@@ -259,6 +285,10 @@ in
                 packagePath = agent.package.outPath;
                 hostConfigDir = resolvedHostConfigDir;
                 containerConfigDir = resolvedContainerConfigDir;
+                permissions =
+                  if agent.permissions != null then {
+                    inherit (agent.permissions) skipAll allow deny;
+                  } else null;
               }
             ) template.agents;
             extraPackages = map (p: p.outPath) template.extraPackages;
