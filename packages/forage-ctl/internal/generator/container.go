@@ -34,22 +34,29 @@ var agentHomeFiles = map[string][]string{
 	"claude": {".claude.json"},
 }
 
+// PermissionsMount represents a permissions settings file to bind-mount into the container.
+type PermissionsMount struct {
+	HostPath      string
+	ContainerPath string
+}
+
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
-	Name           string
-	NetworkSlot    int
-	Workspace      string
-	SecretsPath    string
-	AuthorizedKeys []string
-	Template       *config.Template
-	HostConfig     *config.HostConfig
-	WorkspaceMode  string
-	SourceRepo     string
-	NixpkgsRev     string
-	ProxyURL       string // URL of the forage-proxy server (if using proxy mode)
-	UID            int    // Host user's UID for the container agent user
-	GID            int    // Host user's GID for the container agent user
-	NoTmuxConfig   bool   // Skip mounting host tmux config into the container
+	Name              string
+	NetworkSlot       int
+	Workspace         string
+	SecretsPath       string
+	AuthorizedKeys    []string
+	Template          *config.Template
+	HostConfig        *config.HostConfig
+	WorkspaceMode     string
+	SourceRepo        string
+	NixpkgsRev        string
+	ProxyURL          string             // URL of the forage-proxy server (if using proxy mode)
+	UID               int                // Host user's UID for the container agent user
+	GID               int                // Host user's GID for the container agent user
+	NoTmuxConfig      bool               // Skip mounting host tmux config into the container
+	PermissionsMounts []PermissionsMount // Agent permissions settings files to bind-mount
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -217,6 +224,18 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 				})
 			}
 		}
+	}
+
+	// Add permissions settings file mounts
+	for _, pm := range cfg.PermissionsMounts {
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     pm.ContainerPath,
+			HostPath: pm.HostPath,
+			ReadOnly: true,
+		})
+		dir := filepath.Dir(pm.ContainerPath)
+		data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules,
+			fmt.Sprintf("d %s 0755 root root -", dir))
 	}
 
 	// Build agent packages and environment variables

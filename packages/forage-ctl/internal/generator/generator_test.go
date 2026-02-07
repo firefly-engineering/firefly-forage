@@ -717,6 +717,56 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_PermissionsMounts(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.PermissionsMounts = []PermissionsMount{
+		{
+			HostPath:      "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json",
+			ContainerPath: "/etc/claude-code/managed-settings.json",
+		},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Check bind mount is present
+	if !strings.Contains(result, "/etc/claude-code/managed-settings.json") {
+		t.Error("Config should contain permissions container path")
+	}
+	if !strings.Contains(result, "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json") {
+		t.Error("Config should contain permissions host path")
+	}
+	// Check that the mount is read-only — find the specific mount
+	if !strings.Contains(result, `"/etc/claude-code/managed-settings.json" = { hostPath = "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json"; isReadOnly = true; }`) {
+		t.Error("Permissions mount should be read-only")
+	}
+
+	// Check tmpfiles rule for parent directory
+	if !strings.Contains(result, "d /etc/claude-code 0755 root root -") {
+		t.Error("Config should contain tmpfiles rule for permissions directory")
+	}
+}
+
+func TestGenerateNixConfig_NoPermissionsMounts(t *testing.T) {
+	cfg := validTestConfig()
+	// No PermissionsMounts set (default nil)
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should not contain any permissions-related mount
+	if strings.Contains(result, "managed-settings.json") {
+		t.Error("Config should not contain permissions mount when none configured")
+	}
+	if strings.Contains(result, "/etc/claude-code") {
+		t.Error("Config should not contain claude-code dir when no permissions configured")
+	}
+}
+
 // TestGenerateNixConfig_RestrictedNetwork tests restricted network mode separately
 // because it involves DNS resolution which produces dynamic IP addresses.
 func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {

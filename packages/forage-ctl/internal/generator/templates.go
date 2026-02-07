@@ -6,18 +6,19 @@ import (
 
 // TemplateData holds all data needed to render the container Nix configuration.
 type TemplateData struct {
-	ContainerName  string
-	NetworkSlot    int
-	StateVersion   string
-	BindMounts     []BindMount
-	AuthorizedKeys []string
-	NetworkConfig  string // Pre-rendered from network package
-	AgentPackages  []string
-	EnvVars        []EnvVar
-	RegistryConfig RegistryConfig
-	TmuxSession    string
-	UID            int    // Host user's UID for the container agent user
-	GID            int // Host user's GID for the container agent user
+	ContainerName      string
+	NetworkSlot        int
+	StateVersion       string
+	BindMounts         []BindMount
+	AuthorizedKeys     []string
+	NetworkConfig      string // Pre-rendered from network package
+	AgentPackages      []string
+	EnvVars            []EnvVar
+	RegistryConfig     RegistryConfig
+	TmuxSession        string
+	UID                int      // Host user's UID for the container agent user
+	GID                int      // Host user's GID for the container agent user
+	ExtraTmpfilesRules []string // Additional systemd tmpfiles rules
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -122,6 +123,9 @@ const containerTemplateText = `{ pkgs, ... }: {
       # Ensure ~/.config is owned by agent (bind mounts may create it as root)
       systemd.tmpfiles.rules = [
         "d /home/agent/.config 0755 agent users -"
+{{- range .ExtraTmpfilesRules}}
+        "{{.}}"
+{{- end}}
       ];
 
       systemd.services.forage-init = {
