@@ -28,6 +28,12 @@ var agentProjectDirs = map[string][]string{
 	"claude": {".claude"},
 }
 
+// agentHomeFiles maps agent names to files in the host user's home directory
+// that should be bind-mounted into the container agent's home.
+var agentHomeFiles = map[string][]string{
+	"claude": {".claude.json"},
+}
+
 // ContainerConfig holds the configuration for generating a container
 type ContainerConfig struct {
 	Name           string
@@ -163,6 +169,30 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 				HostPath: agent.HostConfigDir,
 				ReadOnly: agent.HostConfigDirReadOnly,
 			})
+		}
+	}
+
+	// Mount agent-specific home directory files from host
+	if cfg.HostConfig != nil {
+		homeDir := resolveUserHome(cfg.HostConfig.User)
+		if homeDir != "" {
+			mounted := map[string]bool{}
+			for name := range cfg.Template.Agents {
+				for _, file := range agentHomeFiles[name] {
+					if mounted[file] {
+						continue
+					}
+					hostPath := filepath.Join(homeDir, file)
+					if _, err := os.Stat(hostPath); err == nil {
+						data.BindMounts = append(data.BindMounts, BindMount{
+							Path:     filepath.Join("/home/agent", file),
+							HostPath: hostPath,
+							ReadOnly: false,
+						})
+						mounted[file] = true
+					}
+				}
+			}
 		}
 	}
 
