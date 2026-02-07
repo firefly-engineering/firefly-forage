@@ -23,6 +23,21 @@ type Backend interface {
 	Remove(repoPath, name, workspacePath string) error
 }
 
+// DetectBackend returns the appropriate workspace backend for the given path,
+// or nil if no backend recognizes it as a repository.
+// Checks jj first (since jj repos also contain .git).
+func DetectBackend(path string) Backend {
+	jj := &JJBackend{}
+	if jj.IsRepo(path) {
+		return jj
+	}
+	git := &GitBackend{}
+	if git.IsRepo(path) {
+		return git
+	}
+	return nil
+}
+
 // WorkspaceInfo contains information about a created workspace
 type WorkspaceInfo struct {
 	// Path is the filesystem path to the workspace

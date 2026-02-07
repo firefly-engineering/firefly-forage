@@ -94,8 +94,8 @@ func (e *testEnv) createWorkspace(t *testing.T, name string) string {
 func executeCommand(args ...string) (string, string, error) {
 	// Reset flag values before each test
 	upTemplate = ""
-	upWorkspace = ""
 	upRepo = ""
+	upDirect = false
 	logsFollow = false
 	logsLines = 50
 	verbose = false
@@ -155,17 +155,17 @@ func TestUpCommand_Help(t *testing.T) {
 		t.Error("Up help should mention --template flag")
 	}
 
-	if !strings.Contains(stdout, "--workspace") {
-		t.Error("Up help should mention --workspace flag")
-	}
-
 	if !strings.Contains(stdout, "--repo") {
 		t.Error("Up help should mention --repo flag")
+	}
+
+	if !strings.Contains(stdout, "--direct") {
+		t.Error("Up help should mention --direct flag")
 	}
 }
 
 func TestUpCommand_MissingTemplate(t *testing.T) {
-	stdout, stderr, err := executeCommand("up", "test-sandbox", "--workspace", "/tmp")
+	stdout, stderr, err := executeCommand("up", "test-sandbox", "--repo", "/tmp")
 	output := stdout + stderr
 
 	// Should either return an error or show required flag message
@@ -174,7 +174,7 @@ func TestUpCommand_MissingTemplate(t *testing.T) {
 	}
 }
 
-func TestUpCommand_MutuallyExclusiveFlags(t *testing.T) {
+func TestUpCommand_Flags(t *testing.T) {
 	env := setupTestEnv(t)
 	env.addTemplate(t, "test", &config.Template{
 		Name:    "test",
@@ -191,12 +191,14 @@ func TestUpCommand_MutuallyExclusiveFlags(t *testing.T) {
 	// Create workspace for potential future tests
 	_ = env.createWorkspace(t, "project")
 
-	// This test would need the actual command to check mutual exclusivity
-	// For now, we verify the help mentions both flags
+	// Verify the help mentions key flags
 	stdout, _, _ := executeCommand("up", "--help")
 
-	if !strings.Contains(stdout, "workspace") || !strings.Contains(stdout, "repo") {
-		t.Error("Help should document both --workspace and --repo")
+	if !strings.Contains(stdout, "repo") {
+		t.Error("Help should document --repo")
+	}
+	if !strings.Contains(stdout, "direct") {
+		t.Error("Help should document --direct")
 	}
 }
 

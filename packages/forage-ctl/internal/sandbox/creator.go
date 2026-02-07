@@ -162,7 +162,7 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 		Workspace:       ws.effectivePath,
 		NetworkSlot:     resources.networkSlot,
 		CreatedAt:       time.Now().Format(time.RFC3339),
-		WorkspaceMode:   string(opts.WorkspaceMode),
+		WorkspaceMode:   string(ws.mode),
 		SourceRepo:      ws.sourceRepo,
 		JJWorkspaceName: opts.Name,
 		GitBranch:       ws.gitBranch,
@@ -185,7 +185,7 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		AuthorizedKeys: c.resolveSSHKeys(opts),
 		Template:       resources.template,
 		HostConfig:     c.hostConfig,
-		WorkspaceMode:  string(opts.WorkspaceMode),
+		WorkspaceMode:  string(ws.mode),
 		SourceRepo:     ws.sourceRepo,
 		NixpkgsRev:     c.hostConfig.NixpkgsRev,
 		ProxyURL:       proxyURL,
@@ -238,58 +238,58 @@ type workspaceSetup struct {
 	sourceRepo    string
 	gitBranch     string
 	backend       workspace.Backend
+	mode          WorkspaceMode
 }
 
-// setupWorkspace sets up the workspace based on the mode.
+// setupWorkspace sets up the workspace based on the options.
 func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
 	ws := &workspaceSetup{}
 
-	switch opts.WorkspaceMode {
-	case WorkspaceModeJJ, WorkspaceModeGitWorktree:
-		ws.backend = workspaceBackendFor(opts.WorkspaceMode)
+	absPath, err := filepath.Abs(opts.RepoPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
 
-		absRepo, err := filepath.Abs(opts.RepoPath)
-		if err != nil {
-			return nil, fmt.Errorf("invalid repo path: %w", err)
+	if opts.Direct {
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("workspace does not exist: %s", absPath)
 		}
+		ws.effectivePath = absPath
+		ws.mode = WorkspaceModeDirect
+		return ws, nil
+	}
 
-		if !ws.backend.IsRepo(absRepo) {
-			return nil, fmt.Errorf("not a %s repository: %s", ws.backend.Name(), absRepo)
-		}
+	// Auto-detect VCS backend
+	ws.backend = workspace.DetectBackend(absPath)
+	if ws.backend == nil {
+		return nil, fmt.Errorf("not a supported repository: %s\n  Use --direct for non-repo directories", absPath)
+	}
 
-		if ws.backend.Exists(absRepo, opts.Name) {
-			return nil, fmt.Errorf("%s workspace %s already exists in repo", ws.backend.Name(), opts.Name)
-		}
+	switch ws.backend.Name() {
+	case "jj":
+		ws.mode = WorkspaceModeJJ
+	case "git-worktree":
+		ws.mode = WorkspaceModeGitWorktree
+	}
 
-		ws.sourceRepo = absRepo
-		ws.effectivePath = filepath.Join(c.paths.WorkspacesDir, opts.Name)
+	if ws.backend.Exists(absPath, opts.Name) {
+		return nil, fmt.Errorf("%s workspace %s already exists in repo", ws.backend.Name(), opts.Name)
+	}
 
-		// For git backend, store the branch name
-		if gitBackend, ok := ws.backend.(*workspace.GitBackend); ok {
-			ws.gitBranch = gitBackend.BranchName(opts.Name)
-		}
+	ws.sourceRepo = absPath
+	ws.effectivePath = filepath.Join(c.paths.WorkspacesDir, opts.Name)
 
-		// Create workspace directory and workspace
-		if err := os.MkdirAll(c.paths.WorkspacesDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create workspaces directory: %w", err)
-		}
+	if gitBackend, ok := ws.backend.(*workspace.GitBackend); ok {
+		ws.gitBranch = gitBackend.BranchName(opts.Name)
+	}
 
-		logging.Debug("creating workspace", "backend", ws.backend.Name(), "repo", absRepo, "name", opts.Name)
-		if err := ws.backend.Create(absRepo, opts.Name, ws.effectivePath); err != nil {
-			return nil, fmt.Errorf("failed to create %s workspace: %w", ws.backend.Name(), err)
-		}
+	if err := os.MkdirAll(c.paths.WorkspacesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create workspaces directory: %w", err)
+	}
 
-	case WorkspaceModeDirect, "":
-		absWorkspace, err := filepath.Abs(opts.WorkspacePath)
-		if err != nil {
-			return nil, fmt.Errorf("invalid workspace path: %w", err)
-		}
-
-		if _, err := os.Stat(absWorkspace); os.IsNotExist(err) {
-			return nil, fmt.Errorf("workspace does not exist: %s", absWorkspace)
-		}
-
-		ws.effectivePath = absWorkspace
+	logging.Debug("creating workspace", "backend", ws.backend.Name(), "repo", absPath, "name", opts.Name)
+	if err := ws.backend.Create(absPath, opts.Name, ws.effectivePath); err != nil {
+		return nil, fmt.Errorf("failed to create %s workspace: %w", ws.backend.Name(), err)
 	}
 
 	return ws, nil

@@ -191,6 +191,39 @@ func TestJJBackend_CreateAndRemove(t *testing.T) {
 	}
 }
 
+func TestDetectBackend_JJ(t *testing.T) {
+	repoPath := setupJJRepo(t)
+
+	backend := DetectBackend(repoPath)
+	if backend == nil {
+		t.Fatal("DetectBackend should return non-nil for jj repo")
+	}
+	if backend.Name() != "jj" {
+		t.Errorf("DetectBackend returned %q, want %q", backend.Name(), "jj")
+	}
+}
+
+func TestDetectBackend_Git(t *testing.T) {
+	repoPath := setupGitRepo(t)
+
+	backend := DetectBackend(repoPath)
+	if backend == nil {
+		t.Fatal("DetectBackend should return non-nil for git repo")
+	}
+	if backend.Name() != "git-worktree" {
+		t.Errorf("DetectBackend returned %q, want %q", backend.Name(), "git-worktree")
+	}
+}
+
+func TestDetectBackend_NonRepo(t *testing.T) {
+	nonRepoPath := t.TempDir()
+
+	backend := DetectBackend(nonRepoPath)
+	if backend != nil {
+		t.Errorf("DetectBackend should return nil for non-repo, got %q", backend.Name())
+	}
+}
+
 func TestGitBackend_BranchName(t *testing.T) {
 	b := Git().(*GitBackend)
 

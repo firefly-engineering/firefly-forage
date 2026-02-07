@@ -20,22 +20,23 @@ var upCmd = &cobra.Command{
 }
 
 var (
-	upTemplate      string
-	upWorkspace     string
-	upRepo          string
-	upGitWorktree   string
-	upSSHKeys       []string
-	upNoTmuxConfig  bool
+	upTemplate     string
+	upRepo         string
+	upSSHKeys      []string
+	upNoTmuxConfig bool
+	upDirect       bool
 )
 
 func init() {
 	upCmd.Flags().StringVarP(&upTemplate, "template", "t", "", "Template to use (required)")
-	upCmd.Flags().StringVarP(&upWorkspace, "workspace", "w", "", "Workspace directory to mount")
-	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "JJ repository (creates isolated workspace)")
-	upCmd.Flags().StringVarP(&upGitWorktree, "git-worktree", "g", "", "Git repository (creates isolated worktree)")
+	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "Repository or directory path")
+	upCmd.Flags().BoolVar(&upDirect, "direct", false, "Mount directory directly (skip VCS isolation)")
 	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
 	upCmd.Flags().BoolVar(&upNoTmuxConfig, "no-tmux-config", false, "Don't mount host tmux config into sandbox")
 	if err := upCmd.MarkFlagRequired("template"); err != nil {
+		panic(err)
+	}
+	if err := upCmd.MarkFlagRequired("repo"); err != nil {
 		panic(err)
 	}
 	rootCmd.AddCommand(upCmd)
@@ -81,37 +82,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 // parseCreateOptions parses command flags into CreateOptions.
 func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
-	opts := sandbox.CreateOptions{
+	return sandbox.CreateOptions{
 		Name:         name,
 		Template:     upTemplate,
+		RepoPath:     upRepo,
+		Direct:       upDirect,
 		SSHKeys:      upSSHKeys,
 		NoTmuxConfig: upNoTmuxConfig,
-	}
-
-	// Validate flags - exactly one of --workspace, --repo, or --git-worktree must be specified
-	flagCount := 0
-	if upWorkspace != "" {
-		flagCount++
-		opts.WorkspaceMode = sandbox.WorkspaceModeDirect
-		opts.WorkspacePath = upWorkspace
-	}
-	if upRepo != "" {
-		flagCount++
-		opts.WorkspaceMode = sandbox.WorkspaceModeJJ
-		opts.RepoPath = upRepo
-	}
-	if upGitWorktree != "" {
-		flagCount++
-		opts.WorkspaceMode = sandbox.WorkspaceModeGitWorktree
-		opts.RepoPath = upGitWorktree
-	}
-
-	if flagCount == 0 {
-		return opts, errors.New(errors.ExitGeneralError, "one of --workspace, --repo, or --git-worktree is required")
-	}
-	if flagCount > 1 {
-		return opts, errors.New(errors.ExitGeneralError, "--workspace, --repo, and --git-worktree are mutually exclusive")
-	}
-
-	return opts, nil
+	}, nil
 }

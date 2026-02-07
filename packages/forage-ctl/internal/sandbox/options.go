@@ -14,14 +14,11 @@ type CreateOptions struct {
 	// Template is the template name to use (required)
 	Template string
 
-	// WorkspaceMode specifies how the workspace is set up
-	WorkspaceMode WorkspaceMode
-
-	// WorkspacePath is the path for direct workspace mode
-	WorkspacePath string
-
-	// RepoPath is the repository path for jj/git-worktree modes
+	// RepoPath is the target path (repo or directory)
 	RepoPath string
+
+	// Direct forces direct mount, skipping VCS isolation
+	Direct bool
 
 	// SSHKeys are explicit SSH public keys for sandbox access (optional)
 	// If empty, keys are resolved from config or ~/.ssh/*.pub

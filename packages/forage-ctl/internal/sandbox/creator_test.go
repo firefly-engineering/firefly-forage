@@ -36,10 +36,10 @@ func TestCreator_Create_InvalidName(t *testing.T) {
 	for _, name := range invalidNames {
 		t.Run(name, func(t *testing.T) {
 			_, err := creator.Create(context.Background(), CreateOptions{
-				Name:          name,
-				Template:      "test",
-				WorkspaceMode: WorkspaceModeDirect,
-				WorkspacePath: env.TmpDir,
+				Name:     name,
+				Template: "test",
+				RepoPath: env.TmpDir,
+				Direct:   true,
 			})
 			if err == nil {
 				t.Errorf("Create(%q) should have failed with invalid name", name)
@@ -69,10 +69,10 @@ func TestCreator_Create_ValidName(t *testing.T) {
 
 	// Test valid sandbox name
 	result, err := creator.Create(context.Background(), CreateOptions{
-		Name:          "myproject",
-		Template:      "test",
-		WorkspaceMode: WorkspaceModeDirect,
-		WorkspacePath: workspacePath,
+		Name:     "myproject",
+		Template: "test",
+		RepoPath: workspacePath,
+		Direct:   true,
 	})
 
 	if err != nil {
@@ -125,10 +125,10 @@ func TestCreator_Create_DuplicateName(t *testing.T) {
 	}
 
 	_, err := creator.Create(context.Background(), CreateOptions{
-		Name:          "existing",
-		Template:      "test",
-		WorkspaceMode: WorkspaceModeDirect,
-		WorkspacePath: workspacePath,
+		Name:     "existing",
+		Template: "test",
+		RepoPath: workspacePath,
+		Direct:   true,
 	})
 
 	if err == nil {
@@ -149,10 +149,10 @@ func TestCreator_Create_MissingTemplate(t *testing.T) {
 	}
 
 	_, err := creator.Create(context.Background(), CreateOptions{
-		Name:          "myproject",
-		Template:      "nonexistent",
-		WorkspaceMode: WorkspaceModeDirect,
-		WorkspacePath: workspacePath,
+		Name:     "myproject",
+		Template: "nonexistent",
+		RepoPath: workspacePath,
+		Direct:   true,
 	})
 
 	if err == nil {
@@ -173,10 +173,10 @@ func TestCreator_Create_MissingWorkspace(t *testing.T) {
 	}
 
 	_, err := creator.Create(context.Background(), CreateOptions{
-		Name:          "myproject",
-		Template:      "test",
-		WorkspaceMode: WorkspaceModeDirect,
-		WorkspacePath: "/nonexistent/workspace",
+		Name:     "myproject",
+		Template: "test",
+		RepoPath: "/nonexistent/workspace",
+		Direct:   true,
 	})
 
 	if err == nil {
