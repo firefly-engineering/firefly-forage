@@ -50,6 +50,12 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		return nil, err
 	}
 
+	// Resolve and validate agent identity
+	identity := c.resolveIdentity(opts)
+	if err := config.ValidateAgentIdentity(identity); err != nil {
+		return nil, fmt.Errorf("invalid agent identity: %w", err)
+	}
+
 	// Phase 2: Load resources and allocate ports
 	resources, err := c.loadResources(opts)
 	if err != nil {
@@ -63,7 +69,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Phase 4: Create metadata
-	metadata := c.createMetadata(opts, resources, ws)
+	metadata := c.createMetadata(opts, resources, ws, identity)
 
 	// Set up cleanup on failure
 	cleanup := func() {
@@ -88,7 +94,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Phase 7: Generate and write container config
-	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts)
+	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts, identity)
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -162,7 +168,7 @@ func (c *Creator) loadResources(opts CreateOptions) (*resourceAllocation, error)
 }
 
 // createMetadata creates the sandbox metadata struct.
-func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup) *config.SandboxMetadata {
+func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, identity *config.AgentIdentity) *config.SandboxMetadata {
 	return &config.SandboxMetadata{
 		Name:            opts.Name,
 		Template:        opts.Template,
@@ -173,11 +179,12 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 		SourceRepo:      ws.sourceRepo,
 		JJWorkspaceName: opts.Name,
 		GitBranch:       ws.gitBranch,
+		AgentIdentity:   identity,
 	}
 }
 
 // writeContainerConfig generates and writes the Nix container configuration.
-func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount) (string, error) {
+func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount, identity *config.AgentIdentity) (string, error) {
 	proxyURL := ""
 	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
 		proxyURL = c.hostConfig.ProxyURL
@@ -200,6 +207,7 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		GID:               c.hostConfig.GID,
 		NoTmuxConfig:      opts.NoTmuxConfig,
 		PermissionsMounts: permsMounts,
+		AgentIdentity:     identity,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -433,6 +441,41 @@ func copySkillsToContainer(host string, content string) error {
 	// Pass content via stdin to sh, which writes it to the file.
 	// This is safe because content never appears in the command string.
 	return ssh.ExecWithStdin(host, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
+}
+
+// resolveIdentity merges host-level defaults with per-sandbox overrides from opts.
+// Returns nil if all fields are empty (no identity configured).
+func (c *Creator) resolveIdentity(opts CreateOptions) *config.AgentIdentity {
+	var gitUser, gitEmail, sshKeyPath string
+
+	// Start with host-level defaults
+	if c.hostConfig.AgentIdentity != nil {
+		gitUser = c.hostConfig.AgentIdentity.GitUser
+		gitEmail = c.hostConfig.AgentIdentity.GitEmail
+		sshKeyPath = c.hostConfig.AgentIdentity.SSHKeyPath
+	}
+
+	// Override with per-sandbox values
+	if opts.GitUser != "" {
+		gitUser = opts.GitUser
+	}
+	if opts.GitEmail != "" {
+		gitEmail = opts.GitEmail
+	}
+	if opts.SSHKeyPath != "" {
+		sshKeyPath = opts.SSHKeyPath
+	}
+
+	// Return nil if nothing is set
+	if gitUser == "" && gitEmail == "" && sshKeyPath == "" {
+		return nil
+	}
+
+	return &config.AgentIdentity{
+		GitUser:    gitUser,
+		GitEmail:   gitEmail,
+		SSHKeyPath: sshKeyPath,
+	}
 }
 
 // resolveSSHKeys returns SSH keys to use, in order of priority:
