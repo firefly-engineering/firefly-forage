@@ -307,6 +307,110 @@ func TestCreator_cleanup(t *testing.T) {
 	}
 }
 
+func TestCreator_resolveIdentity(t *testing.T) {
+	tests := []struct {
+		name       string
+		hostID     *config.AgentIdentity
+		opts       CreateOptions
+		wantNil    bool
+		wantUser   string
+		wantEmail  string
+		wantSSHKey string
+	}{
+		{
+			name:    "no identity anywhere",
+			hostID:  nil,
+			opts:    CreateOptions{},
+			wantNil: true,
+		},
+		{
+			name: "host defaults only",
+			hostID: &config.AgentIdentity{
+				GitUser:  "Host Agent",
+				GitEmail: "host@example.com",
+			},
+			opts:      CreateOptions{},
+			wantUser:  "Host Agent",
+			wantEmail: "host@example.com",
+		},
+		{
+			name:   "opts only",
+			hostID: nil,
+			opts: CreateOptions{
+				GitUser:  "Opts Agent",
+				GitEmail: "opts@example.com",
+			},
+			wantUser:  "Opts Agent",
+			wantEmail: "opts@example.com",
+		},
+		{
+			name: "opts override host",
+			hostID: &config.AgentIdentity{
+				GitUser:    "Host Agent",
+				GitEmail:   "host@example.com",
+				SSHKeyPath: "/host/key",
+			},
+			opts: CreateOptions{
+				GitUser: "Override Agent",
+			},
+			wantUser:   "Override Agent",
+			wantEmail:  "host@example.com",
+			wantSSHKey: "/host/key",
+		},
+		{
+			name: "opts override SSH key",
+			hostID: &config.AgentIdentity{
+				SSHKeyPath: "/host/key",
+			},
+			opts: CreateOptions{
+				SSHKeyPath: "/opts/key",
+			},
+			wantSSHKey: "/opts/key",
+		},
+		{
+			name:   "opts SSH key only",
+			hostID: nil,
+			opts: CreateOptions{
+				SSHKeyPath: "/my/key",
+			},
+			wantSSHKey: "/my/key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creator := &Creator{
+				hostConfig: &config.HostConfig{
+					User:          "testuser",
+					AgentIdentity: tt.hostID,
+				},
+			}
+
+			result := creator.resolveIdentity(tt.opts)
+
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("expected nil, got %+v", result)
+				}
+				return
+			}
+
+			if result == nil {
+				t.Fatal("expected non-nil identity")
+			}
+			if result.GitUser != tt.wantUser {
+				t.Errorf("GitUser = %q, want %q", result.GitUser, tt.wantUser)
+			}
+			if result.GitEmail != tt.wantEmail {
+				t.Errorf("GitEmail = %q, want %q", result.GitEmail, tt.wantEmail)
+			}
+			if result.SSHKeyPath != tt.wantSSHKey {
+				t.Errorf("SSHKeyPath = %q, want %q", result.SSHKeyPath, tt.wantSSHKey)
+			}
+		})
+	}
+}
+
 func TestWorkspaceBackendFor(t *testing.T) {
 	tests := []struct {
 		mode     WorkspaceMode

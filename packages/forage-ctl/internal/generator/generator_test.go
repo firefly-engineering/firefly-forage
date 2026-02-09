@@ -581,6 +581,74 @@ func TestGenerateSkills_RestrictedHosts(t *testing.T) {
 	}
 }
 
+func TestGenerateSkills_Identity(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:     "test",
+		Template: "claude",
+		AgentIdentity: &config.AgentIdentity{
+			GitUser:    "Bot",
+			GitEmail:   "bot@test.com",
+			SSHKeyPath: "/key",
+		},
+	}
+	template := &config.Template{
+		Network: "full",
+	}
+
+	result := GenerateSkills(metadata, template)
+
+	if !strings.Contains(result, "## Identity") {
+		t.Error("Skills should have identity section")
+	}
+	if !strings.Contains(result, "Bot") {
+		t.Error("Skills should contain git user name")
+	}
+	if !strings.Contains(result, "bot@test.com") {
+		t.Error("Skills should contain git email")
+	}
+	if !strings.Contains(result, "SSH key is available") {
+		t.Error("Skills should mention SSH key")
+	}
+}
+
+func TestGenerateSkills_IdentityGitOnly(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:     "test",
+		Template: "claude",
+		AgentIdentity: &config.AgentIdentity{
+			GitUser: "Bot",
+		},
+	}
+	template := &config.Template{
+		Network: "full",
+	}
+
+	result := GenerateSkills(metadata, template)
+
+	if !strings.Contains(result, "## Identity") {
+		t.Error("Skills should have identity section")
+	}
+	if strings.Contains(result, "SSH key") {
+		t.Error("Skills should not mention SSH key when not set")
+	}
+}
+
+func TestGenerateSkills_NoIdentity(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:     "test",
+		Template: "claude",
+	}
+	template := &config.Template{
+		Network: "full",
+	}
+
+	result := GenerateSkills(metadata, template)
+
+	if strings.Contains(result, "## Identity") {
+		t.Error("Skills should not have identity section when none configured")
+	}
+}
+
 func TestGenerateSkills_WithAgents(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
@@ -764,6 +832,100 @@ func TestGenerateNixConfig_NoPermissionsMounts(t *testing.T) {
 	}
 	if strings.Contains(result, "/etc/claude-code") {
 		t.Error("Config should not contain claude-code dir when no permissions configured")
+	}
+}
+
+func TestGenerateNixConfig_IdentityGitOnly(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.AgentIdentity = &config.AgentIdentity{
+		GitUser:  "Agent Bot",
+		GitEmail: "agent@example.com",
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should contain identity service with git config
+	if !strings.Contains(result, "forage-agent-identity") {
+		t.Error("Config should contain forage-agent-identity service")
+	}
+	if !strings.Contains(result, "user.name") {
+		t.Error("Config should set git user.name")
+	}
+	if !strings.Contains(result, "Agent Bot") {
+		t.Error("Config should contain git user name")
+	}
+	if !strings.Contains(result, "user.email") {
+		t.Error("Config should set git user.email")
+	}
+	if !strings.Contains(result, "agent@example.com") {
+		t.Error("Config should contain git user email")
+	}
+	// Should NOT have SSH key mounts
+	if strings.Contains(result, "/home/agent/.ssh/id_ed25519") {
+		t.Error("Config should not have SSH key mount without SSHKeyPath")
+	}
+}
+
+func TestGenerateNixConfig_IdentityWithSSHKey(t *testing.T) {
+	// Create temp SSH key files
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "id_ed25519")
+	os.WriteFile(keyPath, []byte("key"), 0600)
+	os.WriteFile(keyPath+".pub", []byte("pub"), 0644)
+
+	cfg := validTestConfig()
+	cfg.AgentIdentity = &config.AgentIdentity{
+		GitUser:    "Agent Bot",
+		GitEmail:   "agent@example.com",
+		SSHKeyPath: keyPath,
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should contain SSH key bind mounts
+	if !strings.Contains(result, "/home/agent/.ssh/id_ed25519") {
+		t.Error("Config should mount SSH private key")
+	}
+	if !strings.Contains(result, keyPath) {
+		t.Error("Config should reference host SSH key path")
+	}
+	if !strings.Contains(result, keyPath+".pub") {
+		t.Error("Config should mount SSH public key")
+	}
+	// Both key mounts should be read-only
+	// SSH config should be written
+	if !strings.Contains(result, "IdentityFile") {
+		t.Error("Config should write SSH config with IdentityFile")
+	}
+	if !strings.Contains(result, "StrictHostKeyChecking accept-new") {
+		t.Error("Config should set StrictHostKeyChecking")
+	}
+	// Should have tmpfiles rule for .ssh directory
+	if !strings.Contains(result, "d /home/agent/.ssh 0700 agent users -") {
+		t.Error("Config should have tmpfiles rule for .ssh directory")
+	}
+}
+
+func TestGenerateNixConfig_NoIdentity(t *testing.T) {
+	cfg := validTestConfig()
+	// AgentIdentity is nil by default
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if strings.Contains(result, "forage-agent-identity") {
+		t.Error("Config should not contain identity service when no identity")
+	}
+	if strings.Contains(result, "/home/agent/.ssh") {
+		t.Error("Config should not have .ssh mount when no identity")
 	}
 }
 

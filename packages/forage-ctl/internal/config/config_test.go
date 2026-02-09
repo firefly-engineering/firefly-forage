@@ -623,6 +623,186 @@ func TestAgentConfigValidate(t *testing.T) {
 	}
 }
 
+func TestAgentIdentity_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	metadata := &SandboxMetadata{
+		Name:        "identity-test",
+		Template:    "claude",
+		Workspace:   "/workspace",
+		NetworkSlot: 1,
+		AgentIdentity: &AgentIdentity{
+			GitUser:    "Agent Bot",
+			GitEmail:   "agent@example.com",
+			SSHKeyPath: "/run/secrets/agent-key",
+		},
+	}
+
+	if err := SaveSandboxMetadata(tmpDir, metadata); err != nil {
+		t.Fatalf("SaveSandboxMetadata failed: %v", err)
+	}
+
+	loaded, err := LoadSandboxMetadata(tmpDir, "identity-test")
+	if err != nil {
+		t.Fatalf("LoadSandboxMetadata failed: %v", err)
+	}
+
+	if loaded.AgentIdentity == nil {
+		t.Fatal("AgentIdentity should not be nil after round-trip")
+	}
+	if loaded.AgentIdentity.GitUser != "Agent Bot" {
+		t.Errorf("GitUser = %q, want %q", loaded.AgentIdentity.GitUser, "Agent Bot")
+	}
+	if loaded.AgentIdentity.GitEmail != "agent@example.com" {
+		t.Errorf("GitEmail = %q, want %q", loaded.AgentIdentity.GitEmail, "agent@example.com")
+	}
+	if loaded.AgentIdentity.SSHKeyPath != "/run/secrets/agent-key" {
+		t.Errorf("SSHKeyPath = %q, want %q", loaded.AgentIdentity.SSHKeyPath, "/run/secrets/agent-key")
+	}
+}
+
+func TestAgentIdentity_BackwardCompat(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// JSON without agentIdentity (old format)
+	data := `{"name": "old-sandbox", "template": "claude", "networkSlot": 1, "workspace": "/w"}`
+	metaPath := filepath.Join(tmpDir, "old-sandbox.json")
+	if err := os.WriteFile(metaPath, []byte(data), 0644); err != nil {
+		t.Fatalf("Failed to write metadata: %v", err)
+	}
+
+	loaded, err := LoadSandboxMetadata(tmpDir, "old-sandbox")
+	if err != nil {
+		t.Fatalf("LoadSandboxMetadata failed: %v", err)
+	}
+
+	if loaded.AgentIdentity != nil {
+		t.Error("AgentIdentity should be nil for old format without identity")
+	}
+}
+
+func TestAgentIdentity_NilOmittedInJSON(t *testing.T) {
+	metadata := &SandboxMetadata{
+		Name:        "no-identity",
+		Template:    "claude",
+		Workspace:   "/w",
+		NetworkSlot: 1,
+	}
+
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(data), "agentIdentity") {
+		t.Error("nil AgentIdentity should be omitted from JSON")
+	}
+}
+
+func TestValidateAgentIdentity(t *testing.T) {
+	// Create temp files for SSH key tests
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "id_ed25519")
+	pubPath := keyPath + ".pub"
+	os.WriteFile(keyPath, []byte("private-key"), 0600)
+	os.WriteFile(pubPath, []byte("ssh-ed25519 AAAA..."), 0644)
+
+	tests := []struct {
+		name    string
+		id      *AgentIdentity
+		wantErr string
+	}{
+		{
+			name:    "nil identity",
+			id:      nil,
+			wantErr: "",
+		},
+		{
+			name:    "git only (no SSH key)",
+			id:      &AgentIdentity{GitUser: "Agent", GitEmail: "a@b.com"},
+			wantErr: "",
+		},
+		{
+			name:    "empty identity",
+			id:      &AgentIdentity{},
+			wantErr: "",
+		},
+		{
+			name:    "valid SSH key",
+			id:      &AgentIdentity{SSHKeyPath: keyPath},
+			wantErr: "",
+		},
+		{
+			name:    "relative SSH path",
+			id:      &AgentIdentity{SSHKeyPath: "relative/path"},
+			wantErr: "sshKeyPath must be an absolute path",
+		},
+		{
+			name:    "nonexistent SSH key",
+			id:      &AgentIdentity{SSHKeyPath: "/nonexistent/key"},
+			wantErr: "sshKeyPath \"/nonexistent/key\"",
+		},
+		{
+			name: "missing .pub companion",
+			id: &AgentIdentity{SSHKeyPath: func() string {
+				kp := filepath.Join(tmpDir, "no_pub_key")
+				os.WriteFile(kp, []byte("key"), 0600)
+				return kp
+			}()},
+			wantErr: "sshKeyPath companion",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAgentIdentity(tt.id)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("ValidateAgentIdentity() unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("ValidateAgentIdentity() expected error containing %q, got nil", tt.wantErr)
+				} else if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("ValidateAgentIdentity() error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+			}
+		})
+	}
+}
+
+func TestHostConfig_AgentIdentity_RoundTrip(t *testing.T) {
+	config := HostConfig{
+		User:           "testuser",
+		UID:            1000,
+		GID:            100,
+		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
+		Secrets:        map[string]string{"anthropic": "sk-test"},
+		StateDir:       "/var/lib/forage",
+		AgentIdentity: &AgentIdentity{
+			GitUser:  "Host Agent",
+			GitEmail: "host@example.com",
+		},
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var loaded HostConfig
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if loaded.AgentIdentity == nil {
+		t.Fatal("AgentIdentity should not be nil")
+	}
+	if loaded.AgentIdentity.GitUser != "Host Agent" {
+		t.Errorf("GitUser = %q, want %q", loaded.AgentIdentity.GitUser, "Host Agent")
+	}
+}
+
 func TestValidateSandboxName(t *testing.T) {
 	tests := []struct {
 		name    string

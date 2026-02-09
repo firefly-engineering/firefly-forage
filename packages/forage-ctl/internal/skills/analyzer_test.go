@@ -348,6 +348,83 @@ func TestGenerateSkills_NoNetwork(t *testing.T) {
 	}
 }
 
+func TestGenerateSkills_IdentityGitOnly(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "jj",
+		SourceRepo:    "/home/user/project",
+		AgentIdentity: &config.AgentIdentity{
+			GitUser:  "Agent Bot",
+			GitEmail: "agent@example.com",
+		},
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	content := GenerateSkills(metadata, template, nil)
+
+	if !strings.Contains(content, "## Identity") {
+		t.Error("expected content to contain Identity section")
+	}
+	if !strings.Contains(content, "Agent Bot") {
+		t.Error("expected content to contain git user name")
+	}
+	if !strings.Contains(content, "agent@example.com") {
+		t.Error("expected content to contain git email")
+	}
+	if strings.Contains(content, "SSH key") {
+		t.Error("should not mention SSH key when not configured")
+	}
+}
+
+func TestGenerateSkills_IdentityWithSSH(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:     "test-sandbox",
+		Template: "claude",
+		AgentIdentity: &config.AgentIdentity{
+			GitUser:    "Agent Bot",
+			GitEmail:   "agent@example.com",
+			SSHKeyPath: "/run/secrets/agent-key",
+		},
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	content := GenerateSkills(metadata, template, nil)
+
+	if !strings.Contains(content, "## Identity") {
+		t.Error("expected content to contain Identity section")
+	}
+	if !strings.Contains(content, "SSH key is available") {
+		t.Error("expected content to mention SSH key availability")
+	}
+}
+
+func TestGenerateSkills_NoIdentity(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:     "test-sandbox",
+		Template: "claude",
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	content := GenerateSkills(metadata, template, nil)
+
+	if strings.Contains(content, "## Identity") {
+		t.Error("should not contain Identity section when no identity")
+	}
+}
+
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
