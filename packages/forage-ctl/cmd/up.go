@@ -25,6 +25,9 @@ var (
 	upSSHKeys      []string
 	upNoTmuxConfig bool
 	upDirect       bool
+	upGitUser      string
+	upGitEmail     string
+	upSSHKeyPath   string
 )
 
 func init() {
@@ -33,6 +36,9 @@ func init() {
 	upCmd.Flags().BoolVar(&upDirect, "direct", false, "Mount directory directly (skip VCS isolation)")
 	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
 	upCmd.Flags().BoolVar(&upNoTmuxConfig, "no-tmux-config", false, "Don't mount host tmux config into sandbox")
+	upCmd.Flags().StringVar(&upGitUser, "git-user", "", "Git user.name for agent commits")
+	upCmd.Flags().StringVar(&upGitEmail, "git-email", "", "Git user.email for agent commits")
+	upCmd.Flags().StringVar(&upSSHKeyPath, "ssh-key-path", "", "Path to SSH private key for agent push access")
 	if err := upCmd.MarkFlagRequired("template"); err != nil {
 		panic(err)
 	}
@@ -89,5 +95,8 @@ func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
 		Direct:       upDirect,
 		SSHKeys:      upSSHKeys,
 		NoTmuxConfig: upNoTmuxConfig,
+		GitUser:      upGitUser,
+		GitEmail:     upGitEmail,
+		SSHKeyPath:   upSSHKeyPath,
 	}, nil
 }

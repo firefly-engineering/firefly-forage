@@ -46,6 +46,9 @@ type CreateOptions struct {
 	RepoPath     string
 	Direct       bool
 	NoTmuxConfig bool
+	GitUser      string
+	GitEmail     string
+	SSHKeyPath   string
 }
 
 // PickerResult holds the result of the picker

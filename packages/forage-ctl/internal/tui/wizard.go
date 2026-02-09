@@ -26,12 +26,15 @@ const (
 	stepConfirm
 )
 
-// advancedField identifies a toggle in the advanced step.
+// advancedField identifies a field in the advanced step.
 type advancedField int
 
 const (
 	advDirect advancedField = iota
 	advNoTmuxConfig
+	advGitUser
+	advGitEmail
+	advSSHKeyPath
 	advFieldCount
 )
 
@@ -51,9 +54,12 @@ type wizardModel struct {
 	nameInput textinput.Model
 
 	// Step 4: advanced
-	advCursor    advancedField
-	direct       bool
-	noTmuxConfig bool
+	advCursor      advancedField
+	direct         bool
+	noTmuxConfig   bool
+	gitUserInput   textinput.Model
+	gitEmailInput  textinput.Model
+	sshKeyInput    textinput.Model
 
 	// Collected values
 	selectedPath     string
@@ -112,11 +118,29 @@ func newWizardModel(templatesDir string) wizardModel {
 	ni.CharLimit = 63
 	ni.Width = 40
 
+	gui := textinput.New()
+	gui.Placeholder = "Agent Name"
+	gui.CharLimit = 128
+	gui.Width = 50
+
+	gei := textinput.New()
+	gei.Placeholder = "agent@example.com"
+	gei.CharLimit = 128
+	gei.Width = 50
+
+	ski := textinput.New()
+	ski.Placeholder = "/path/to/ssh/key"
+	ski.CharLimit = 256
+	ski.Width = 60
+
 	return wizardModel{
-		step:         stepPath,
-		templatesDir: templatesDir,
-		pathInput:    pi,
-		nameInput:    ni,
+		step:          stepPath,
+		templatesDir:  templatesDir,
+		pathInput:     pi,
+		nameInput:     ni,
+		gitUserInput:  gui,
+		gitEmailInput: gei,
+		sshKeyInput:   ski,
 	}
 }
 
@@ -247,7 +271,68 @@ func (w *wizardModel) updateName(msg tea.Msg) (bool, *CreateOptions, tea.Cmd) {
 	return false, nil, cmd
 }
 
+func (w *wizardModel) isTextInputField() bool {
+	return w.advCursor == advGitUser || w.advCursor == advGitEmail || w.advCursor == advSSHKeyPath
+}
+
+func (w *wizardModel) activeTextInput() *textinput.Model {
+	switch w.advCursor {
+	case advGitUser:
+		return &w.gitUserInput
+	case advGitEmail:
+		return &w.gitEmailInput
+	case advSSHKeyPath:
+		return &w.sshKeyInput
+	}
+	return nil
+}
+
+func (w *wizardModel) blurAllAdvTextInputs() {
+	w.gitUserInput.Blur()
+	w.gitEmailInput.Blur()
+	w.sshKeyInput.Blur()
+}
+
+func (w *wizardModel) focusCurrentTextField() tea.Cmd {
+	w.blurAllAdvTextInputs()
+	if ti := w.activeTextInput(); ti != nil {
+		ti.Focus()
+		return textinput.Blink
+	}
+	return nil
+}
+
 func (w *wizardModel) updateAdvanced(msg tea.Msg) (bool, *CreateOptions, tea.Cmd) {
+	// If we're on a text input field, forward keystrokes to it
+	if w.isTextInputField() {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.Type {
+			case tea.KeyEnter:
+				w.blurAllAdvTextInputs()
+				w.step = stepConfirm
+				return false, nil, nil
+			case tea.KeyUp:
+				w.blurAllAdvTextInputs()
+				w.advCursor = (w.advCursor - 1 + advFieldCount) % advFieldCount
+				return false, nil, w.focusCurrentTextField()
+			case tea.KeyDown:
+				w.blurAllAdvTextInputs()
+				w.advCursor = (w.advCursor + 1) % advFieldCount
+				return false, nil, w.focusCurrentTextField()
+			case tea.KeyTab:
+				w.blurAllAdvTextInputs()
+				w.advCursor = (w.advCursor + 1) % advFieldCount
+				return false, nil, w.focusCurrentTextField()
+			}
+		}
+		// Forward to text input
+		if ti := w.activeTextInput(); ti != nil {
+			var cmd tea.Cmd
+			*ti, cmd = ti.Update(msg)
+			return false, nil, cmd
+		}
+	}
+
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
 		case "enter":
@@ -255,10 +340,13 @@ func (w *wizardModel) updateAdvanced(msg tea.Msg) (bool, *CreateOptions, tea.Cmd
 			return false, nil, nil
 		case "j", "down":
 			w.advCursor = (w.advCursor + 1) % advFieldCount
-			return false, nil, nil
+			return false, nil, w.focusCurrentTextField()
 		case "k", "up":
 			w.advCursor = (w.advCursor - 1 + advFieldCount) % advFieldCount
-			return false, nil, nil
+			return false, nil, w.focusCurrentTextField()
+		case "tab":
+			w.advCursor = (w.advCursor + 1) % advFieldCount
+			return false, nil, w.focusCurrentTextField()
 		case " ":
 			switch w.advCursor {
 			case advDirect:
@@ -282,6 +370,9 @@ func (w *wizardModel) updateConfirm(msg tea.Msg) (bool, *CreateOptions, tea.Cmd)
 				RepoPath:     w.selectedPath,
 				Direct:       w.direct,
 				NoTmuxConfig: w.noTmuxConfig,
+				GitUser:      strings.TrimSpace(w.gitUserInput.Value()),
+				GitEmail:     strings.TrimSpace(w.gitEmailInput.Value()),
+				SSHKeyPath:   strings.TrimSpace(w.sshKeyInput.Value()),
 			}, nil
 		case "n":
 			// Restart wizard
@@ -293,6 +384,9 @@ func (w *wizardModel) updateConfirm(msg tea.Msg) (bool, *CreateOptions, tea.Cmd)
 			w.selectedName = ""
 			w.direct = false
 			w.noTmuxConfig = false
+			w.gitUserInput.SetValue("")
+			w.gitEmailInput.SetValue("")
+			w.sshKeyInput.SetValue("")
 			return false, nil, textinput.Blink
 		}
 	}
@@ -330,8 +424,14 @@ func (w *wizardModel) View() string {
 		b.WriteString(w.renderToggle(advDirect, "Direct mount", "Skip VCS isolation, mount directory directly"))
 		b.WriteString("\n")
 		b.WriteString(w.renderToggle(advNoTmuxConfig, "No tmux config", "Don't mount host tmux config"))
+		b.WriteString("\n")
+		b.WriteString(w.renderTextInput(advGitUser, "Git user", "Git user.name for agent commits", &w.gitUserInput))
+		b.WriteString("\n")
+		b.WriteString(w.renderTextInput(advGitEmail, "Git email", "Git user.email for agent commits", &w.gitEmailInput))
+		b.WriteString("\n")
+		b.WriteString(w.renderTextInput(advSSHKeyPath, "SSH key path", "Host path to SSH private key for push access", &w.sshKeyInput))
 		b.WriteString("\n\n")
-		b.WriteString(wizardDimStyle.Render("Space to toggle, Enter to continue, Esc to go back."))
+		b.WriteString(wizardDimStyle.Render("Space/type to edit, Enter to continue, Esc to go back."))
 	case stepConfirm:
 		b.WriteString(wizardLabelStyle.Render("Confirm:"))
 		b.WriteString("\n\n")
@@ -343,6 +443,15 @@ func (w *wizardModel) View() string {
 		}
 		if w.noTmuxConfig {
 			b.WriteString(fmt.Sprintf("  No tmux:  %s\n", wizardValueStyle.Render("yes")))
+		}
+		if v := strings.TrimSpace(w.gitUserInput.Value()); v != "" {
+			b.WriteString(fmt.Sprintf("  Git user: %s\n", wizardValueStyle.Render(v)))
+		}
+		if v := strings.TrimSpace(w.gitEmailInput.Value()); v != "" {
+			b.WriteString(fmt.Sprintf("  Git email:%s\n", wizardValueStyle.Render(v)))
+		}
+		if v := strings.TrimSpace(w.sshKeyInput.Value()); v != "" {
+			b.WriteString(fmt.Sprintf("  SSH key:  %s\n", wizardValueStyle.Render(v)))
 		}
 		b.WriteString("\n")
 		b.WriteString(wizardDimStyle.Render("Enter to create, n to restart, Esc to go back."))
@@ -402,6 +511,26 @@ func (w *wizardModel) renderToggle(field advancedField, name, desc string) strin
 	if w.advCursor == field {
 		return selectedStyle.Render(line) + "\n" + wizardDimStyle.Render("      "+desc)
 	}
+	return line + "\n" + wizardDimStyle.Render("      "+desc)
+}
+
+func (w *wizardModel) renderTextInput(field advancedField, name, desc string, ti *textinput.Model) string {
+	cursor := " "
+	if w.advCursor == field {
+		cursor = ">"
+	}
+
+	val := strings.TrimSpace(ti.Value())
+	if w.advCursor == field {
+		// Show active text input
+		line := fmt.Sprintf("  %s %s: %s", cursor, name, ti.View())
+		return selectedStyle.Render(line) + "\n" + wizardDimStyle.Render("      "+desc)
+	}
+	if val == "" {
+		line := fmt.Sprintf("  %s %s: (not set)", cursor, name)
+		return line + "\n" + wizardDimStyle.Render("      "+desc)
+	}
+	line := fmt.Sprintf("  %s %s: %s", cursor, name, val)
 	return line + "\n" + wizardDimStyle.Render("      "+desc)
 }
 

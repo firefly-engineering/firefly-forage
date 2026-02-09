@@ -103,6 +103,9 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 		RepoPath:     opts.RepoPath,
 		Direct:       opts.Direct,
 		NoTmuxConfig: opts.NoTmuxConfig,
+		GitUser:      opts.GitUser,
+		GitEmail:     opts.GitEmail,
+		SSHKeyPath:   opts.SSHKeyPath,
 	})
 	if err != nil {
 		return fmt.Errorf("sandbox creation failed: %w", err)

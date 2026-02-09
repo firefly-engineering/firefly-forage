@@ -48,6 +48,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("JJ Workspace: %s\n", metadata.JJWorkspaceName)
 	}
 
+	if metadata.AgentIdentity != nil {
+		id := metadata.AgentIdentity
+		if id.GitUser != "" {
+			fmt.Printf("Git User: %s\n", id.GitUser)
+		}
+		if id.GitEmail != "" {
+			fmt.Printf("Git Email: %s\n", id.GitEmail)
+		}
+		if id.SSHKeyPath != "" {
+			fmt.Printf("SSH Key: %s\n", id.SSHKeyPath)
+		}
+	}
+
 	fmt.Printf("Created: %s\n", metadata.CreatedAt)
 	fmt.Println()
 
