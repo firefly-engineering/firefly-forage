@@ -286,6 +286,29 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 
 	sb.WriteString("\n")
 
+	// Identity section
+	if metadata.AgentIdentity != nil {
+		id := metadata.AgentIdentity
+		if id.GitUser != "" || id.GitEmail != "" || id.SSHKeyPath != "" {
+			sb.WriteString("## Identity\n\n")
+			if id.GitUser != "" || id.GitEmail != "" {
+				sb.WriteString("Git authorship is configured for this sandbox")
+				if id.GitUser != "" {
+					sb.WriteString(" as **" + id.GitUser + "**")
+				}
+				if id.GitEmail != "" {
+					sb.WriteString(" <" + id.GitEmail + ">")
+				}
+				sb.WriteString(".\n")
+				sb.WriteString("All commits will use this identity automatically.\n\n")
+			}
+			if id.SSHKeyPath != "" {
+				sb.WriteString("An SSH key is available for pushing to remote repositories.\n")
+				sb.WriteString("SSH is configured to use this key automatically for all hosts.\n\n")
+			}
+		}
+	}
+
 	// Project-specific section
 	if info != nil && info.Type != ProjectTypeUnknown {
 		sb.WriteString("## Project\n\n")

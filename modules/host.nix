@@ -199,6 +199,29 @@ in
       '';
       example = "eth0";
     };
+
+    agentIdentity = {
+      gitUser = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default git user.name for agent commits in sandboxes";
+        example = "Forage Agent";
+      };
+
+      gitEmail = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default git user.email for agent commits in sandboxes";
+        example = "agent@example.com";
+      };
+
+      sshKeyPath = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = "Path to SSH private key for agent push access (e.g. sops-nix secret path)";
+        example = "/run/secrets/agent-ssh-key";
+      };
+    };
   };
 
   # Import extra-container module at the module level
@@ -259,6 +282,19 @@ in
             extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
             # Nixpkgs revision for registry pinning
             nixpkgsRev = nixpkgs.rev or "unknown";
+          } // lib.optionalAttrs (
+            cfg.agentIdentity.gitUser != null
+            || cfg.agentIdentity.gitEmail != null
+            || cfg.agentIdentity.sshKeyPath != null
+          ) {
+            agentIdentity = lib.filterAttrs (_: v: v != null) {
+              gitUser = cfg.agentIdentity.gitUser;
+              gitEmail = cfg.agentIdentity.gitEmail;
+              sshKeyPath =
+                if cfg.agentIdentity.sshKeyPath != null
+                then resolveTilde (toString cfg.agentIdentity.sshKeyPath)
+                else null;
+            };
           };
         };
       }

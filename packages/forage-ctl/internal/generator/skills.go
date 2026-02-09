@@ -24,7 +24,32 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template)
 		sb.WriteString(fmt.Sprintf("- **Source Repo**: %s\n", metadata.SourceRepo))
 	}
 
-	sb.WriteString("\n## Workspace\n\n")
+	sb.WriteString("\n")
+
+	// Identity section
+	if metadata.AgentIdentity != nil {
+		id := metadata.AgentIdentity
+		if id.GitUser != "" || id.GitEmail != "" || id.SSHKeyPath != "" {
+			sb.WriteString("## Identity\n\n")
+			if id.GitUser != "" || id.GitEmail != "" {
+				sb.WriteString("Git authorship is configured for this sandbox")
+				if id.GitUser != "" {
+					sb.WriteString(fmt.Sprintf(" as **%s**", id.GitUser))
+				}
+				if id.GitEmail != "" {
+					sb.WriteString(fmt.Sprintf(" <%s>", id.GitEmail))
+				}
+				sb.WriteString(".\n")
+				sb.WriteString("All commits will use this identity automatically.\n\n")
+			}
+			if id.SSHKeyPath != "" {
+				sb.WriteString("An SSH key is available for pushing to remote repositories.\n")
+				sb.WriteString("SSH is configured to use this key automatically for all hosts.\n\n")
+			}
+		}
+	}
+
+	sb.WriteString("## Workspace\n\n")
 	sb.WriteString("Your workspace is mounted at `/workspace`. All your work should be done there.\n")
 	sb.WriteString("The workspace persists across container restarts.\n\n")
 
