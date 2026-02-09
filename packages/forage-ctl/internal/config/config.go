@@ -90,6 +90,37 @@ const (
 	TmuxSessionName   = "forage"
 )
 
+// AgentIdentity holds optional git authorship and SSH key configuration
+// for agents running inside sandboxes. All fields are optional.
+type AgentIdentity struct {
+	GitUser    string `json:"gitUser,omitempty"`
+	GitEmail   string `json:"gitEmail,omitempty"`
+	SSHKeyPath string `json:"sshKeyPath,omitempty"` // absolute path to private key on host
+}
+
+// ValidateAgentIdentity validates an AgentIdentity configuration.
+// When SSHKeyPath is non-empty, checks it's absolute, the file exists, and the .pub companion exists.
+// Returns nil if identity is nil or all fields are empty.
+func ValidateAgentIdentity(id *AgentIdentity) error {
+	if id == nil {
+		return nil
+	}
+	if id.SSHKeyPath == "" {
+		return nil
+	}
+	if !filepath.IsAbs(id.SSHKeyPath) {
+		return fmt.Errorf("sshKeyPath must be an absolute path (got %q)", id.SSHKeyPath)
+	}
+	if _, err := os.Stat(id.SSHKeyPath); err != nil {
+		return fmt.Errorf("sshKeyPath %q: %w", id.SSHKeyPath, err)
+	}
+	pubPath := id.SSHKeyPath + ".pub"
+	if _, err := os.Stat(pubPath); err != nil {
+		return fmt.Errorf("sshKeyPath companion %q: %w", pubPath, err)
+	}
+	return nil
+}
+
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
@@ -101,6 +132,7 @@ type HostConfig struct {
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
 	ProxyURL           string            `json:"proxyUrl,omitempty"`       // URL of the forage-proxy server
+	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"` // Host-level default agent identity
 }
 
 // resolveUID looks up the UID/GID from the OS for the configured user
@@ -243,15 +275,16 @@ func (a *AgentConfig) Validate() error {
 
 // SandboxMetadata represents the metadata for a running sandbox
 type SandboxMetadata struct {
-	Name            string `json:"name"`
-	Template        string `json:"template"`
-	Workspace       string `json:"workspace"`
-	NetworkSlot     int    `json:"networkSlot"`
-	CreatedAt       string `json:"createdAt"`
-	WorkspaceMode   string `json:"workspaceMode,omitempty"`   // "direct", "jj", or "git-worktree"
-	SourceRepo      string `json:"sourceRepo,omitempty"`      // Source repo path for jj/git-worktree
-	JJWorkspaceName string `json:"jjWorkspaceName,omitempty"` // JJ workspace name
-	GitBranch       string `json:"gitBranch,omitempty"`       // Git branch name for worktree
+	Name            string         `json:"name"`
+	Template        string         `json:"template"`
+	Workspace       string         `json:"workspace"`
+	NetworkSlot     int            `json:"networkSlot"`
+	CreatedAt       string         `json:"createdAt"`
+	WorkspaceMode   string         `json:"workspaceMode,omitempty"`   // "direct", "jj", or "git-worktree"
+	SourceRepo      string         `json:"sourceRepo,omitempty"`      // Source repo path for jj/git-worktree
+	JJWorkspaceName string         `json:"jjWorkspaceName,omitempty"` // JJ workspace name
+	GitBranch       string         `json:"gitBranch,omitempty"`       // Git branch name for worktree
+	AgentIdentity   *AgentIdentity `json:"agentIdentity,omitempty"`   // Resolved agent identity
 }
 
 // ContainerIP returns the container's IP address based on its network slot.
