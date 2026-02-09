@@ -26,6 +26,15 @@ type CreateOptions struct {
 
 	// NoTmuxConfig skips mounting the host tmux config into the sandbox
 	NoTmuxConfig bool
+
+	// GitUser is the git user.name for agent commits (optional)
+	GitUser string
+
+	// GitEmail is the git user.email for agent commits (optional)
+	GitEmail string
+
+	// SSHKeyPath is the absolute path to a private SSH key on the host (optional)
+	SSHKeyPath string
 }
 
 // WorkspaceMode specifies the workspace setup strategy.
