@@ -19,6 +19,9 @@ type TemplateData struct {
 	UID                int      // Host user's UID for the container agent user
 	GID                int      // Host user's GID for the container agent user
 	ExtraTmpfilesRules []string // Additional systemd tmpfiles rules
+	GitUser            string   // Git user.name for agent identity
+	GitEmail           string   // Git user.email for agent identity
+	SSHKeyName         string   // Basename of SSH key file (empty if no SSH key)
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -139,6 +142,28 @@ const containerTemplateText = `{ pkgs, ... }: {
           ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s {{.TmuxSession}} -c /workspace || true'";
         };
       };
+{{- if or .GitUser .GitEmail .SSHKeyName}}
+      systemd.services.forage-agent-identity = {
+        description = "Forage Agent Identity Setup";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "network.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          User = "agent";
+          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh && " +
+{{- if .GitUser}}
+            "${pkgs.git}/bin/git config --global user.name {{.GitUser | printf "%q"}} && " +
+{{- end}}
+{{- if .GitEmail}}
+            "${pkgs.git}/bin/git config --global user.email {{.GitEmail | printf "%q"}} && " +
+{{- end}}
+{{- if .SSHKeyName}}
+            "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
+{{- end}}
+            "true'";
+        };
+      };
+{{- end}}
     };
   };
 }

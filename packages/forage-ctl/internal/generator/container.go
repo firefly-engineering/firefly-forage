@@ -57,6 +57,7 @@ type ContainerConfig struct {
 	GID               int                // Host user's GID for the container agent user
 	NoTmuxConfig      bool               // Skip mounting host tmux config into the container
 	PermissionsMounts []PermissionsMount // Agent permissions settings files to bind-mount
+	AgentIdentity     *config.AgentIdentity // Optional agent identity for git authorship and SSH key
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -269,6 +270,35 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		data.RegistryConfig = RegistryConfig{
 			Enabled:    true,
 			NixpkgsRev: cfg.NixpkgsRev,
+		}
+	}
+
+	// Agent identity: git config and optional SSH key
+	if cfg.AgentIdentity != nil {
+		data.GitUser = cfg.AgentIdentity.GitUser
+		data.GitEmail = cfg.AgentIdentity.GitEmail
+
+		if cfg.AgentIdentity.SSHKeyPath != "" {
+			keyName := filepath.Base(cfg.AgentIdentity.SSHKeyPath)
+			data.SSHKeyName = keyName
+
+			// Bind-mount private key and .pub companion into /home/agent/.ssh/
+			data.BindMounts = append(data.BindMounts,
+				BindMount{
+					Path:     "/home/agent/.ssh/" + keyName,
+					HostPath: cfg.AgentIdentity.SSHKeyPath,
+					ReadOnly: true,
+				},
+				BindMount{
+					Path:     "/home/agent/.ssh/" + keyName + ".pub",
+					HostPath: cfg.AgentIdentity.SSHKeyPath + ".pub",
+					ReadOnly: true,
+				},
+			)
+
+			// Ensure .ssh directory exists with correct ownership
+			data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules,
+				"d /home/agent/.ssh 0700 agent users -")
 		}
 	}
 
