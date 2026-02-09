@@ -261,7 +261,114 @@ func (a *Analyzer) hasFilesMatching(pattern string) bool {
 	return len(matches) > 0
 }
 
-// GenerateSkills generates skill content based on project analysis
+// GenerateSystemPrompt generates a compact system prompt with environmental context.
+// This is always injected via --append-system-prompt and contains brief factual info
+// about the sandbox environment.
+func GenerateSystemPrompt(metadata *config.SandboxMetadata, template *config.Template) string {
+	data := buildSystemPromptData(metadata, template)
+	return renderTemplate("system-prompt.md.tmpl", data)
+}
+
+// GenerateSkillFiles generates skill file contents based on project analysis.
+// Returns a map of skill name to SKILL.md content. May return an empty map
+// if no skills are applicable.
+func GenerateSkillFiles(metadata *config.SandboxMetadata, template *config.Template, info *ProjectInfo) map[string]string {
+	result := map[string]string{}
+
+	// VCS skill
+	if tmplName, data := vcsSkillTemplate(metadata, info); tmplName != "" {
+		result["forage-vcs"] = renderTemplate(tmplName, data)
+	}
+
+	// Project skill
+	if info != nil && info.Type != ProjectTypeUnknown {
+		result["forage-project"] = renderTemplate("skill-project.md.tmpl", info)
+	}
+
+	// Nix skill
+	if info != nil && info.HasNixFlake {
+		result["forage-nix"] = renderTemplate("skill-nix.md.tmpl", nil)
+	}
+
+	return result
+}
+
+func vcsSkillTemplate(metadata *config.SandboxMetadata, info *ProjectInfo) (string, any) {
+	if metadata.WorkspaceMode == "jj" || (info != nil && info.HasJJ) {
+		return "skill-vcs-jj.md.tmpl", nil
+	}
+	if metadata.WorkspaceMode == "git-worktree" {
+		return "skill-vcs-git-worktree.md.tmpl", metadata
+	}
+	if info != nil && info.HasGit {
+		return "skill-vcs-git.md.tmpl", nil
+	}
+	return "", nil
+}
+
+// systemPromptData is the template data for the system prompt.
+type systemPromptData struct {
+	Name          string
+	Template      string
+	WorkspaceMode string
+	SourceRepo    string
+	GitBranch     string
+	Network       string
+	AllowedHosts  []string
+	HasIdentity   bool
+	GitUser       string
+	GitEmail      string
+	SSHKeyPath    string
+	Agents        []agentEntry
+	UseProxy      bool
+	TmuxSession   string
+}
+
+type agentEntry struct {
+	Name      string
+	AuthLabel string // e.g. "$ANTHROPIC_API_KEY" or "proxy"
+}
+
+func buildSystemPromptData(metadata *config.SandboxMetadata, template *config.Template) *systemPromptData {
+	data := &systemPromptData{
+		Name:          metadata.Name,
+		Template:      metadata.Template,
+		WorkspaceMode: metadata.WorkspaceMode,
+		SourceRepo:    metadata.SourceRepo,
+		GitBranch:     metadata.GitBranch,
+		Network:       template.Network,
+		AllowedHosts:  template.AllowedHosts,
+		UseProxy:      template.UseProxy,
+		TmuxSession:   config.TmuxSessionName,
+	}
+
+	if metadata.AgentIdentity != nil {
+		id := metadata.AgentIdentity
+		if id.GitUser != "" || id.GitEmail != "" || id.SSHKeyPath != "" {
+			data.HasIdentity = true
+			data.GitUser = id.GitUser
+			data.GitEmail = id.GitEmail
+			data.SSHKeyPath = id.SSHKeyPath
+		}
+	}
+
+	for name, agent := range template.Agents {
+		entry := agentEntry{Name: name}
+		if agent.AuthEnvVar != "" {
+			if template.UseProxy {
+				entry.AuthLabel = "proxy"
+			} else {
+				entry.AuthLabel = "$" + agent.AuthEnvVar
+			}
+		}
+		data.Agents = append(data.Agents, entry)
+	}
+
+	return data
+}
+
+// GenerateSkills generates skill content based on project analysis.
+// Deprecated: Use GenerateSystemPrompt and GenerateSkillFiles instead.
 func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template, info *ProjectInfo) string {
 	var sb strings.Builder
 

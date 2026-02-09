@@ -14,7 +14,6 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 )
 
@@ -50,16 +49,16 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		return nil, err
 	}
 
-	// Resolve and validate agent identity
-	identity := c.resolveIdentity(opts)
-	if err := config.ValidateAgentIdentity(identity); err != nil {
-		return nil, fmt.Errorf("invalid agent identity: %w", err)
-	}
-
 	// Phase 2: Load resources and allocate ports
 	resources, err := c.loadResources(opts)
 	if err != nil {
 		return nil, err
+	}
+
+	// Resolve and validate agent identity (after template load for template-level identity)
+	identity := c.resolveIdentity(opts, resources.template)
+	if err := config.ValidateAgentIdentity(identity); err != nil {
+		return nil, fmt.Errorf("invalid agent identity: %w", err)
 	}
 
 	// Phase 3: Set up workspace
@@ -93,8 +92,15 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		return nil, fmt.Errorf("failed to generate permissions files: %w", err)
 	}
 
+	// Phase 6.5: Generate system prompt + skill files
+	promptPaths, err := c.generatePromptFiles(opts.Name, ws.effectivePath, metadata, resources.template)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to generate prompt files: %w", err)
+	}
+
 	// Phase 7: Generate and write container config
-	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts, identity)
+	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts, identity, promptPaths)
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -112,8 +118,8 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Phase 10: Post-creation setup
-	c.postCreationSetup(metadata, resources.template, ws.effectivePath)
+	// Phase 10: Post-creation setup (wait for SSH)
+	c.postCreationSetup(metadata)
 
 	return &CreateResult{
 		Name:        opts.Name,
@@ -183,8 +189,14 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 	}
 }
 
+// promptFilePaths holds the host paths to generated prompt files.
+type promptFilePaths struct {
+	systemPromptPath string // host path to .system-prompt.md
+	skillsDir        string // host path to .skills/ directory (may be empty)
+}
+
 // writeContainerConfig generates and writes the Nix container configuration.
-func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount, identity *config.AgentIdentity) (string, error) {
+func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount, identity *config.AgentIdentity, prompt *promptFilePaths) (string, error) {
 	proxyURL := ""
 	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
 		proxyURL = c.hostConfig.ProxyURL
@@ -208,6 +220,8 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		NoTmuxConfig:      opts.NoTmuxConfig,
 		PermissionsMounts: permsMounts,
 		AgentIdentity:     identity,
+		SystemPromptPath:  prompt.systemPromptPath,
+		SkillsPath:        prompt.skillsDir,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -239,13 +253,11 @@ func (c *Creator) startContainer(name, configPath string) error {
 	return nil
 }
 
-// postCreationSetup performs post-creation setup (SSH wait, skills injection).
-func (c *Creator) postCreationSetup(metadata *config.SandboxMetadata, template *config.Template, workspacePath string) {
+// postCreationSetup performs post-creation setup (SSH wait).
+func (c *Creator) postCreationSetup(metadata *config.SandboxMetadata) {
 	containerIP := metadata.ContainerIP()
 	logging.Debug("waiting for SSH", "host", containerIP, "timeout", health.SSHReadyTimeoutSeconds)
 	c.waitForSSH(containerIP, health.SSHReadyTimeoutSeconds)
-
-	c.injectSkills(metadata.Name, workspacePath, metadata, template)
 }
 
 // workspaceSetup holds workspace setup results.
@@ -361,8 +373,9 @@ func (c *Creator) waitForSSH(host string, timeoutSeconds int) bool {
 	return false
 }
 
-// injectSkills analyzes the workspace and injects skills file.
-func (c *Creator) injectSkills(name, workspacePath string, metadata *config.SandboxMetadata, template *config.Template) {
+// generatePromptFiles analyzes the workspace and writes system prompt + skill files to the host.
+// These files are bind-mounted into the container before it starts.
+func (c *Creator) generatePromptFiles(name, workspacePath string, metadata *config.SandboxMetadata, template *config.Template) (*promptFilePaths, error) {
 	logging.Debug("analyzing workspace for project-aware skills", "path", workspacePath)
 	analyzer := skills.NewAnalyzer(workspacePath)
 	projectInfo := analyzer.Analyze()
@@ -371,17 +384,38 @@ func (c *Creator) injectSkills(name, workspacePath string, metadata *config.Sand
 		"buildSystem", projectInfo.BuildSystem,
 		"frameworks", projectInfo.Frameworks)
 
-	skillsContent := skills.GenerateSkills(metadata, template, projectInfo)
-	skillsPath := filepath.Join(c.paths.SandboxesDir, name+".skills.md")
-	if err := os.WriteFile(skillsPath, []byte(skillsContent), 0644); err != nil {
-		logging.Warn("failed to save skills file", "error", err)
+	result := &promptFilePaths{}
+
+	// Generate and write system prompt
+	promptContent := skills.GenerateSystemPrompt(metadata, template)
+	promptPath := filepath.Join(c.paths.SandboxesDir, name+".system-prompt.md")
+	if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create sandboxes directory: %w", err)
+	}
+	if err := os.WriteFile(promptPath, []byte(promptContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write system prompt: %w", err)
+	}
+	result.systemPromptPath = promptPath
+
+	// Generate and write skill files
+	skillFiles := skills.GenerateSkillFiles(metadata, template, projectInfo)
+	if len(skillFiles) > 0 {
+		skillsDir := filepath.Join(c.paths.SandboxesDir, name+".skills")
+		for skillName, content := range skillFiles {
+			skillDir := filepath.Join(skillsDir, skillName)
+			if err := os.MkdirAll(skillDir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create skill directory %s: %w", skillName, err)
+			}
+			skillPath := filepath.Join(skillDir, "SKILL.md")
+			if err := os.WriteFile(skillPath, []byte(content), 0644); err != nil {
+				return nil, fmt.Errorf("failed to write skill file %s: %w", skillName, err)
+			}
+			logging.Debug("wrote skill file", "skill", skillName, "path", skillPath)
+		}
+		result.skillsDir = skillsDir
 	}
 
-	// Copy skills to container workspace
-	logging.Debug("injecting skills into container")
-	if err := copySkillsToContainer(metadata.ContainerIP(), skillsContent); err != nil {
-		logging.Warn("failed to inject skills", "error", err)
-	}
+	return result, nil
 }
 
 // generatePermissionsFiles generates agent permissions settings files on the host
@@ -434,28 +468,49 @@ func (c *Creator) cleanup(metadata *config.SandboxMetadata) {
 	Cleanup(metadata, c.paths, DefaultCleanupOptions(), c.rt)
 }
 
-// copySkillsToContainer copies skills content into the container.
-// Uses stdin piping to safely transfer content without shell injection risks.
-// The content is passed via stdin to avoid any shell interpolation or heredoc escaping issues.
-func copySkillsToContainer(host string, content string) error {
-	// Pass content via stdin to sh, which writes it to the file.
-	// This is safe because content never appears in the command string.
-	return ssh.ExecWithStdin(host, content, "sh", "-c", "cat > /workspace/CLAUDE.md")
-}
-
-// resolveIdentity merges host-level defaults with per-sandbox overrides from opts.
+// resolveIdentity merges identity from four levels (lowest to highest priority):
+//  1. Host user's ~/.gitconfig (fallback for name/email only)
+//  2. HostConfig.AgentIdentity (host-level defaults)
+//  3. Template.AgentIdentity (template-level defaults)
+//  4. Per-sandbox CreateOptions (explicit overrides)
+//
 // Returns nil if all fields are empty (no identity configured).
-func (c *Creator) resolveIdentity(opts CreateOptions) *config.AgentIdentity {
+func (c *Creator) resolveIdentity(opts CreateOptions, template *config.Template) *config.AgentIdentity {
 	var gitUser, gitEmail, sshKeyPath string
 
-	// Start with host-level defaults
-	if c.hostConfig.AgentIdentity != nil {
-		gitUser = c.hostConfig.AgentIdentity.GitUser
-		gitEmail = c.hostConfig.AgentIdentity.GitEmail
-		sshKeyPath = c.hostConfig.AgentIdentity.SSHKeyPath
+	// 1. Host user gitconfig (lowest priority fallback, name/email only)
+	if hostGit := config.ReadHostUserGitIdentity(c.hostConfig.User); hostGit != nil {
+		gitUser = hostGit.GitUser
+		gitEmail = hostGit.GitEmail
 	}
 
-	// Override with per-sandbox values
+	// 2. Host-level defaults
+	if c.hostConfig.AgentIdentity != nil {
+		if c.hostConfig.AgentIdentity.GitUser != "" {
+			gitUser = c.hostConfig.AgentIdentity.GitUser
+		}
+		if c.hostConfig.AgentIdentity.GitEmail != "" {
+			gitEmail = c.hostConfig.AgentIdentity.GitEmail
+		}
+		if c.hostConfig.AgentIdentity.SSHKeyPath != "" {
+			sshKeyPath = c.hostConfig.AgentIdentity.SSHKeyPath
+		}
+	}
+
+	// 3. Template-level defaults
+	if template != nil && template.AgentIdentity != nil {
+		if template.AgentIdentity.GitUser != "" {
+			gitUser = template.AgentIdentity.GitUser
+		}
+		if template.AgentIdentity.GitEmail != "" {
+			gitEmail = template.AgentIdentity.GitEmail
+		}
+		if template.AgentIdentity.SSHKeyPath != "" {
+			sshKeyPath = template.AgentIdentity.SSHKeyPath
+		}
+	}
+
+	// 4. Per-sandbox overrides (highest priority)
 	if opts.GitUser != "" {
 		gitUser = opts.GitUser
 	}

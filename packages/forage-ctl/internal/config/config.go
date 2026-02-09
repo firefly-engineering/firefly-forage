@@ -121,6 +121,70 @@ func ValidateAgentIdentity(id *AgentIdentity) error {
 	return nil
 }
 
+// ReadHostUserGitIdentity reads the git user.name and user.email from the
+// given user's ~/.gitconfig (or ~/.config/git/config) as a fallback identity.
+// Returns nil if no git config is found or no user section exists.
+func ReadHostUserGitIdentity(username string) *AgentIdentity {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil
+	}
+
+	paths := []string{
+		filepath.Join(u.HomeDir, ".gitconfig"),
+		filepath.Join(u.HomeDir, ".config", "git", "config"),
+	}
+
+	for _, p := range paths {
+		if id := parseGitConfigIdentity(p); id != nil {
+			return id
+		}
+	}
+	return nil
+}
+
+// parseGitConfigIdentity extracts user.name and user.email from a git config file.
+func parseGitConfigIdentity(path string) *AgentIdentity {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var gitUser, gitEmail string
+	inUserSection := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "[user]" {
+			inUserSection = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inUserSection = false
+			continue
+		}
+		if !inUserSection {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		switch key {
+		case "name":
+			gitUser = val
+		case "email":
+			gitEmail = val
+		}
+	}
+
+	if gitUser == "" && gitEmail == "" {
+		return nil
+	}
+	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
+}
+
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
@@ -183,7 +247,8 @@ type Template struct {
 	AllowedHosts  []string               `json:"allowedHosts"`
 	Agents        map[string]AgentConfig `json:"agents"`
 	ExtraPackages []string               `json:"extraPackages"`
-	UseProxy      bool                   `json:"useProxy,omitempty"` // Use forage-proxy for API calls
+	UseProxy      bool                   `json:"useProxy,omitempty"`      // Use forage-proxy for API calls
+	AgentIdentity *AgentIdentity         `json:"agentIdentity,omitempty"` // Template-level default agent identity
 }
 
 // AgentPermissions controls agent permission settings.

@@ -1,107 +1,23 @@
 package generator
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 )
 
-// GenerateSkills generates the CLAUDE.md skills file content
+// GenerateSystemPrompt generates the compact system prompt content for --append-system-prompt.
+func GenerateSystemPrompt(metadata *config.SandboxMetadata, template *config.Template) string {
+	return skills.GenerateSystemPrompt(metadata, template)
+}
+
+// GenerateSkillFiles generates skill file contents based on project analysis.
+// Returns a map of skill name to SKILL.md content. May return an empty map.
+func GenerateSkillFiles(metadata *config.SandboxMetadata, template *config.Template, info *skills.ProjectInfo) map[string]string {
+	return skills.GenerateSkillFiles(metadata, template, info)
+}
+
+// GenerateSkills generates the combined skills content.
+// Deprecated: Use GenerateSystemPrompt and GenerateSkillFiles instead.
 func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template) string {
-	var sb strings.Builder
-
-	sb.WriteString("# Agent Instructions\n\n")
-	sb.WriteString("You are running in a sandboxed environment managed by Firefly Forage.\n\n")
-
-	sb.WriteString("## Environment\n\n")
-	sb.WriteString(fmt.Sprintf("- **Sandbox**: %s\n", metadata.Name))
-	sb.WriteString(fmt.Sprintf("- **Template**: %s\n", metadata.Template))
-	sb.WriteString("- **Workspace**: /workspace\n")
-
-	if metadata.WorkspaceMode == "jj" {
-		sb.WriteString("- **Mode**: jj workspace (isolated from source)\n")
-		sb.WriteString(fmt.Sprintf("- **Source Repo**: %s\n", metadata.SourceRepo))
-	}
-
-	sb.WriteString("\n")
-
-	// Identity section
-	if metadata.AgentIdentity != nil {
-		id := metadata.AgentIdentity
-		if id.GitUser != "" || id.GitEmail != "" || id.SSHKeyPath != "" {
-			sb.WriteString("## Identity\n\n")
-			if id.GitUser != "" || id.GitEmail != "" {
-				sb.WriteString("Git authorship is configured for this sandbox")
-				if id.GitUser != "" {
-					sb.WriteString(fmt.Sprintf(" as **%s**", id.GitUser))
-				}
-				if id.GitEmail != "" {
-					sb.WriteString(fmt.Sprintf(" <%s>", id.GitEmail))
-				}
-				sb.WriteString(".\n")
-				sb.WriteString("All commits will use this identity automatically.\n\n")
-			}
-			if id.SSHKeyPath != "" {
-				sb.WriteString("An SSH key is available for pushing to remote repositories.\n")
-				sb.WriteString("SSH is configured to use this key automatically for all hosts.\n\n")
-			}
-		}
-	}
-
-	sb.WriteString("## Workspace\n\n")
-	sb.WriteString("Your workspace is mounted at `/workspace`. All your work should be done there.\n")
-	sb.WriteString("The workspace persists across container restarts.\n\n")
-
-	// JJ instructions if applicable
-	if metadata.WorkspaceMode == "jj" {
-		sb.WriteString("## Version Control: JJ (Jujutsu)\n\n")
-		sb.WriteString("This workspace uses `jj` for version control:\n\n")
-		sb.WriteString("```bash\n")
-		sb.WriteString("jj status         # Show working copy status\n")
-		sb.WriteString("jj diff           # Show changes\n")
-		sb.WriteString("jj new            # Create new change\n")
-		sb.WriteString("jj describe -m \"\" # Set commit message\n")
-		sb.WriteString("jj bookmark set   # Update bookmark\n")
-		sb.WriteString("```\n\n")
-		sb.WriteString("This is an isolated jj workspace - changes don't affect other workspaces.\n\n")
-	} else {
-		sb.WriteString("## Version Control\n\n")
-		sb.WriteString("Use `git` or `jj` for version control as needed.\n\n")
-	}
-
-	// Network info
-	sb.WriteString("## Network\n\n")
-	switch template.Network {
-	case "none":
-		sb.WriteString("**No network access** - This sandbox has no external network connectivity.\n")
-	case "restricted":
-		sb.WriteString("**Restricted network** - Only specific hosts are accessible:\n")
-		for _, host := range template.AllowedHosts {
-			sb.WriteString(fmt.Sprintf("- %s\n", host))
-		}
-	default:
-		sb.WriteString("Full network access is available.\n")
-	}
-	sb.WriteString("\n")
-
-	// Agents
-	if len(template.Agents) > 0 {
-		sb.WriteString("## Available Agents\n\n")
-		for name, agent := range template.Agents {
-			sb.WriteString(fmt.Sprintf("- **%s**", name))
-			if agent.AuthEnvVar != "" {
-				sb.WriteString(fmt.Sprintf(" (auth via $%s)", agent.AuthEnvVar))
-			}
-			sb.WriteString("\n")
-		}
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("## Guidelines\n\n")
-	sb.WriteString("- Work within the `/workspace` directory\n")
-	sb.WriteString("- The container filesystem (except /workspace) is ephemeral\n")
-	sb.WriteString(fmt.Sprintf("- Use tmux for persistent sessions (`tmux attach -t %s`)\n", config.TmuxSessionName))
-
-	return sb.String()
+	return skills.GenerateSystemPrompt(metadata, template)
 }

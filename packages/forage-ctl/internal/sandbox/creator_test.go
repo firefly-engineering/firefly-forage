@@ -311,6 +311,7 @@ func TestCreator_resolveIdentity(t *testing.T) {
 	tests := []struct {
 		name       string
 		hostID     *config.AgentIdentity
+		tmplID     *config.AgentIdentity
 		opts       CreateOptions
 		wantNil    bool
 		wantUser   string
@@ -320,6 +321,7 @@ func TestCreator_resolveIdentity(t *testing.T) {
 		{
 			name:    "no identity anywhere",
 			hostID:  nil,
+			tmplID:  nil,
 			opts:    CreateOptions{},
 			wantNil: true,
 		},
@@ -334,6 +336,16 @@ func TestCreator_resolveIdentity(t *testing.T) {
 			wantEmail: "host@example.com",
 		},
 		{
+			name: "template defaults only",
+			tmplID: &config.AgentIdentity{
+				GitUser:  "Template Agent",
+				GitEmail: "template@example.com",
+			},
+			opts:      CreateOptions{},
+			wantUser:  "Template Agent",
+			wantEmail: "template@example.com",
+		},
+		{
 			name:   "opts only",
 			hostID: nil,
 			opts: CreateOptions{
@@ -344,18 +356,46 @@ func TestCreator_resolveIdentity(t *testing.T) {
 			wantEmail: "opts@example.com",
 		},
 		{
-			name: "opts override host",
+			name: "template overrides host",
+			hostID: &config.AgentIdentity{
+				GitUser:  "Host Agent",
+				GitEmail: "host@example.com",
+			},
+			tmplID: &config.AgentIdentity{
+				GitUser: "Template Agent",
+			},
+			opts:      CreateOptions{},
+			wantUser:  "Template Agent",
+			wantEmail: "host@example.com",
+		},
+		{
+			name: "opts override template and host",
 			hostID: &config.AgentIdentity{
 				GitUser:    "Host Agent",
 				GitEmail:   "host@example.com",
 				SSHKeyPath: "/host/key",
 			},
+			tmplID: &config.AgentIdentity{
+				GitUser:  "Template Agent",
+				GitEmail: "template@example.com",
+			},
 			opts: CreateOptions{
 				GitUser: "Override Agent",
 			},
 			wantUser:   "Override Agent",
-			wantEmail:  "host@example.com",
+			wantEmail:  "template@example.com",
 			wantSSHKey: "/host/key",
+		},
+		{
+			name: "template SSH key overrides host SSH key",
+			hostID: &config.AgentIdentity{
+				SSHKeyPath: "/host/key",
+			},
+			tmplID: &config.AgentIdentity{
+				SSHKeyPath: "/template/key",
+			},
+			opts:       CreateOptions{},
+			wantSSHKey: "/template/key",
 		},
 		{
 			name: "opts override SSH key",
@@ -381,12 +421,16 @@ func TestCreator_resolveIdentity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			creator := &Creator{
 				hostConfig: &config.HostConfig{
-					User:          "testuser",
+					User:          "nonexistent-user-for-test",
 					AgentIdentity: tt.hostID,
 				},
 			}
 
-			result := creator.resolveIdentity(tt.opts)
+			tmpl := &config.Template{
+				AgentIdentity: tt.tmplID,
+			}
+
+			result := creator.resolveIdentity(tt.opts, tmpl)
 
 			if tt.wantNil {
 				if result != nil {

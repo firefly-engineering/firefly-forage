@@ -1,0 +1,15 @@
+---
+user-invocable: false
+---
+
+# Nix
+
+This project uses Nix flakes:
+
+```bash
+nix build         # Build the project
+nix develop       # Enter dev shell
+nix flake check   # Run checks
+```
+
+The nix store is shared read-only from the host.

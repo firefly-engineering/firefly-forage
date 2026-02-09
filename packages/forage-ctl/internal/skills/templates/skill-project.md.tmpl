@@ -1,0 +1,26 @@
+---
+user-invocable: false
+---
+
+# Project
+
+- **Type**: {{.Type}}
+{{- if .BuildSystem}}
+- **Build System**: {{.BuildSystem}}
+{{- end}}
+{{- if .Frameworks}}
+- **Frameworks**: {{joinStrings .Frameworks ", "}}
+{{- end}}
+
+## Common Commands
+
+```bash
+{{- if .BuildCommand}}
+# Build
+{{.BuildCommand}}
+{{end}}
+{{- if .TestCommand}}
+# Test
+{{.TestCommand}}
+{{- end}}
+```

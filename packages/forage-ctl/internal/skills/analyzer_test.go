@@ -425,6 +425,185 @@ func TestGenerateSkills_NoIdentity(t *testing.T) {
 	}
 }
 
+func TestGenerateSystemPrompt(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "jj",
+		SourceRepo:    "/home/user/project",
+		AgentIdentity: &config.AgentIdentity{
+			GitUser:    "Bot",
+			GitEmail:   "bot@test.com",
+			SSHKeyPath: "/key",
+		},
+	}
+
+	template := &config.Template{
+		Name:         "claude",
+		Network:      "restricted",
+		AllowedHosts: []string{"api.anthropic.com", "github.com"},
+		Agents: map[string]config.AgentConfig{
+			"claude": {AuthEnvVar: "ANTHROPIC_API_KEY"},
+		},
+	}
+
+	result := GenerateSystemPrompt(metadata, template)
+
+	expected := []string{
+		"test-sandbox",
+		"claude",
+		"/workspace",
+		"jj workspace",
+		"/home/user/project",
+		"Restricted network",
+		"api.anthropic.com",
+		"github.com",
+		"Identity",
+		"Bot",
+		"bot@test.com",
+		"SSH key available",
+		"tmux",
+	}
+
+	for _, s := range expected {
+		if !strings.Contains(result, s) {
+			t.Errorf("system prompt should contain %q\nGot:\n%s", s, result)
+		}
+	}
+}
+
+func TestGenerateSystemPrompt_GitWorktreeMode(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "git-worktree",
+		SourceRepo:    "/home/user/project",
+		GitBranch:     "feature-branch",
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	result := GenerateSystemPrompt(metadata, template)
+
+	if !strings.Contains(result, "git worktree") {
+		t.Errorf("system prompt should mention git worktree mode\nGot:\n%s", result)
+	}
+	if !strings.Contains(result, "feature-branch") {
+		t.Errorf("system prompt should contain branch name\nGot:\n%s", result)
+	}
+}
+
+func TestGenerateSkillFiles_AllSkills(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "jj",
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	info := &ProjectInfo{
+		Type:         ProjectTypeGo,
+		HasGit:       true,
+		HasJJ:        true,
+		HasNixFlake:  true,
+		BuildSystem:  "go",
+		BuildCommand: "go build ./...",
+		TestCommand:  "go test ./...",
+		Frameworks:   []string{"cobra"},
+	}
+
+	result := GenerateSkillFiles(metadata, template, info)
+
+	// Should have all three skills
+	if _, ok := result["forage-vcs"]; !ok {
+		t.Error("expected forage-vcs skill")
+	}
+	if _, ok := result["forage-project"]; !ok {
+		t.Error("expected forage-project skill")
+	}
+	if _, ok := result["forage-nix"]; !ok {
+		t.Error("expected forage-nix skill")
+	}
+
+	// VCS skill should contain jj content
+	vcs := result["forage-vcs"]
+	if !strings.Contains(vcs, "jj status") {
+		t.Error("VCS skill should contain jj commands")
+	}
+	if !strings.Contains(vcs, "user-invocable: false") {
+		t.Error("VCS skill should have frontmatter")
+	}
+
+	// Project skill should contain Go content
+	project := result["forage-project"]
+	if !strings.Contains(project, "go build") {
+		t.Error("Project skill should contain build command")
+	}
+	if !strings.Contains(project, "cobra") {
+		t.Error("Project skill should contain frameworks")
+	}
+
+	// Nix skill should contain nix content
+	nix := result["forage-nix"]
+	if !strings.Contains(nix, "nix build") {
+		t.Error("Nix skill should contain nix build command")
+	}
+}
+
+func TestGenerateSkillFiles_GitWorktree(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "claude",
+		WorkspaceMode: "git-worktree",
+		GitBranch:     "feature-x",
+	}
+
+	template := &config.Template{
+		Name:    "claude",
+		Network: "full",
+	}
+
+	result := GenerateSkillFiles(metadata, template, nil)
+
+	vcs, ok := result["forage-vcs"]
+	if !ok {
+		t.Fatal("expected forage-vcs skill for git-worktree mode")
+	}
+
+	if !strings.Contains(vcs, "feature-x") {
+		t.Error("VCS skill should contain branch name")
+	}
+	if !strings.Contains(vcs, "git worktree") {
+		t.Error("VCS skill should mention git worktree")
+	}
+}
+
+func TestGenerateSkillFiles_NoSkills(t *testing.T) {
+	metadata := &config.SandboxMetadata{
+		Name:          "test-sandbox",
+		Template:      "test",
+		WorkspaceMode: "direct",
+	}
+
+	template := &config.Template{
+		Name:    "test",
+		Network: "full",
+	}
+
+	result := GenerateSkillFiles(metadata, template, nil)
+
+	if len(result) != 0 {
+		t.Errorf("expected no skill files for direct mode with no project info, got %d", len(result))
+	}
+}
+
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {

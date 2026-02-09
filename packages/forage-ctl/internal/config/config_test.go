@@ -803,6 +803,181 @@ func TestHostConfig_AgentIdentity_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseGitConfigIdentity(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantNil   bool
+		wantUser  string
+		wantEmail string
+	}{
+		{
+			name: "standard gitconfig",
+			content: `[user]
+	name = Test User
+	email = test@example.com
+[core]
+	editor = vim
+`,
+			wantUser:  "Test User",
+			wantEmail: "test@example.com",
+		},
+		{
+			name: "name only",
+			content: `[user]
+	name = Test User
+`,
+			wantUser: "Test User",
+		},
+		{
+			name: "email only",
+			content: `[user]
+	email = test@example.com
+`,
+			wantEmail: "test@example.com",
+		},
+		{
+			name: "no user section",
+			content: `[core]
+	editor = vim
+`,
+			wantNil: true,
+		},
+		{
+			name:    "empty file",
+			content: "",
+			wantNil: true,
+		},
+		{
+			name: "user section after other sections",
+			content: `[core]
+	editor = vim
+[user]
+	name = Late User
+	email = late@example.com
+[alias]
+	co = checkout
+`,
+			wantUser:  "Late User",
+			wantEmail: "late@example.com",
+		},
+		{
+			name: "spaces around equals",
+			content: `[user]
+	name = Spaced User
+	email = spaced@example.com
+`,
+			wantUser:  "Spaced User",
+			wantEmail: "spaced@example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			gitconfigPath := filepath.Join(tmpDir, ".gitconfig")
+			if err := os.WriteFile(gitconfigPath, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			result := parseGitConfigIdentity(gitconfigPath)
+
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("expected nil, got %+v", result)
+				}
+				return
+			}
+
+			if result == nil {
+				t.Fatal("expected non-nil identity")
+			}
+			if result.GitUser != tt.wantUser {
+				t.Errorf("GitUser = %q, want %q", result.GitUser, tt.wantUser)
+			}
+			if result.GitEmail != tt.wantEmail {
+				t.Errorf("GitEmail = %q, want %q", result.GitEmail, tt.wantEmail)
+			}
+			// SSHKeyPath should never be set from gitconfig
+			if result.SSHKeyPath != "" {
+				t.Errorf("SSHKeyPath = %q, want empty", result.SSHKeyPath)
+			}
+		})
+	}
+}
+
+func TestParseGitConfigIdentity_NonexistentFile(t *testing.T) {
+	result := parseGitConfigIdentity("/nonexistent/.gitconfig")
+	if result != nil {
+		t.Errorf("expected nil for nonexistent file, got %+v", result)
+	}
+}
+
+func TestTemplate_AgentIdentity_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	template := Template{
+		Name:    "test-template",
+		Network: "full",
+		Agents: map[string]AgentConfig{
+			"claude": {
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+		},
+		AgentIdentity: &AgentIdentity{
+			GitUser:  "Template Agent",
+			GitEmail: "template@example.com",
+		},
+	}
+
+	data, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	templatePath := filepath.Join(tmpDir, "test-template.json")
+	if err := os.WriteFile(templatePath, data, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	loaded, err := LoadTemplate(tmpDir, "test-template")
+	if err != nil {
+		t.Fatalf("LoadTemplate failed: %v", err)
+	}
+
+	if loaded.AgentIdentity == nil {
+		t.Fatal("AgentIdentity should not be nil after round-trip")
+	}
+	if loaded.AgentIdentity.GitUser != "Template Agent" {
+		t.Errorf("GitUser = %q, want %q", loaded.AgentIdentity.GitUser, "Template Agent")
+	}
+	if loaded.AgentIdentity.GitEmail != "template@example.com" {
+		t.Errorf("GitEmail = %q, want %q", loaded.AgentIdentity.GitEmail, "template@example.com")
+	}
+}
+
+func TestTemplate_AgentIdentity_BackwardCompat(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Template JSON without agentIdentity (old format)
+	data := `{"name": "old-template", "network": "full", "agents": {"claude": {"packagePath": "/nix/store/abc", "secretName": "anthropic", "authEnvVar": "ANTHROPIC_API_KEY"}}}`
+	templatePath := filepath.Join(tmpDir, "old-template.json")
+	if err := os.WriteFile(templatePath, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadTemplate(tmpDir, "old-template")
+	if err != nil {
+		t.Fatalf("LoadTemplate failed: %v", err)
+	}
+
+	if loaded.AgentIdentity != nil {
+		t.Error("AgentIdentity should be nil for old format without identity")
+	}
+}
+
 func TestValidateSandboxName(t *testing.T) {
 	tests := []struct {
 		name    string

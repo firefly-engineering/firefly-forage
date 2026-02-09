@@ -1,0 +1,20 @@
+---
+user-invocable: false
+---
+
+# Version Control: Git (Worktree)
+
+This workspace is a git worktree with its own working directory and branch.
+
+**Branch**: `{{.GitBranch}}`
+
+```bash
+git status        # Show working tree status
+git diff          # Show changes
+git add -p        # Stage changes interactively
+git commit -m ""  # Create commit on this branch
+git push -u origin {{.GitBranch}}  # Push branch
+```
+
+This is an isolated git worktree - commits on this branch don't affect other worktrees.
+When done, merge your branch or create a pull request.

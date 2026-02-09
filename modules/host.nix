@@ -147,6 +147,29 @@ let
         default = [ ];
         description = "Allowed hosts when network = restricted";
       };
+
+      agentIdentity = {
+        gitUser = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Default git user.name for agents in sandboxes using this template";
+          example = "Template Agent";
+        };
+
+        gitEmail = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Default git user.email for agents in sandboxes using this template";
+          example = "template-agent@example.com";
+        };
+
+        sshKeyPath = mkOption {
+          type = types.nullOr types.path;
+          default = null;
+          description = "Path to SSH private key for agent push access in this template";
+          example = "/run/secrets/template-agent-ssh-key";
+        };
+      };
     };
   };
 
@@ -328,6 +351,19 @@ in
               }
             ) template.agents;
             extraPackages = map (p: p.outPath) template.extraPackages;
+          } // lib.optionalAttrs (
+            template.agentIdentity.gitUser != null
+            || template.agentIdentity.gitEmail != null
+            || template.agentIdentity.sshKeyPath != null
+          ) {
+            agentIdentity = lib.filterAttrs (_: v: v != null) {
+              gitUser = template.agentIdentity.gitUser;
+              gitEmail = template.agentIdentity.gitEmail;
+              sshKeyPath =
+                if template.agentIdentity.sshKeyPath != null
+                then resolveTilde (toString template.agentIdentity.sshKeyPath)
+                else null;
+            };
           };
         }
       ) cfg.templates;

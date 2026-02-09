@@ -1,0 +1,41 @@
+# Firefly Forage Sandbox
+
+- **Sandbox**: {{.Name}}
+- **Template**: {{.Template}}
+- **Workspace**: /workspace
+{{- if eq .WorkspaceMode "jj"}}
+- **Mode**: jj workspace (isolated from source)
+- **Source Repo**: {{.SourceRepo}}
+{{- else if eq .WorkspaceMode "git-worktree"}}
+- **Mode**: git worktree (isolated from source)
+- **Source Repo**: {{.SourceRepo}}
+- **Branch**: {{.GitBranch}}
+{{- end}}
+
+{{if eq .Network "none" -}}
+**No network access.** Cannot make HTTP requests, clone repos, or install packages.
+{{- else if eq .Network "restricted" -}}
+**Restricted network.** Allowed hosts: {{joinStrings .AllowedHosts ", "}}
+{{- else -}}
+Full network access available.
+{{- end}}
+
+{{- if .HasIdentity}}
+
+**Identity:** git authorship configured
+{{- if .GitUser}} as {{.GitUser}}{{end}}
+{{- if .GitEmail}} <{{.GitEmail}}>{{end}}
+{{- if .SSHKeyPath}}; SSH key available{{end}}
+{{- end}}
+
+{{- if .Agents}}
+
+**Agents:** {{range $i, $a := .Agents}}{{if $i}}, {{end}}{{$a.Name}}{{if $a.AuthLabel}} ({{$a.AuthLabel}}){{end}}{{end}}
+{{- end}}
+
+{{- if .UseProxy}}
+
+API proxy active — keys injected by host, `ANTHROPIC_BASE_URL` set.
+{{- end}}
+
+Work in `/workspace`. Container filesystem (except /workspace) is ephemeral. Use tmux (`tmux attach -t {{.TmuxSession}}`).
