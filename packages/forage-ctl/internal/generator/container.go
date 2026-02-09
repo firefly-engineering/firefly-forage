@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
@@ -58,6 +59,8 @@ type ContainerConfig struct {
 	NoTmuxConfig      bool               // Skip mounting host tmux config into the container
 	PermissionsMounts []PermissionsMount // Agent permissions settings files to bind-mount
 	AgentIdentity     *config.AgentIdentity // Optional agent identity for git authorship and SSH key
+	SystemPromptPath  string             // Host path to .system-prompt.md file (may be empty)
+	SkillsPath        string             // Host path to .skills/ directory (may be empty)
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -116,9 +119,24 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		StateVersion:   NixOSStateVersion,
 		AuthorizedKeys: cfg.AuthorizedKeys,
 		NetworkConfig:  buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot),
-		TmuxSession:    config.TmuxSessionName,
 		UID:            cfg.UID,
 		GID:            cfg.GID,
+	}
+
+	// Compute tmux windows: use explicit config if set, else one window per agent
+	if len(cfg.Template.TmuxWindows) > 0 {
+		for _, w := range cfg.Template.TmuxWindows {
+			data.TmuxWindows = append(data.TmuxWindows, TmuxWindow{Name: w.Name, Command: w.Command})
+		}
+	} else {
+		names := make([]string, 0, len(cfg.Template.Agents))
+		for name := range cfg.Template.Agents {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			data.TmuxWindows = append(data.TmuxWindows, TmuxWindow{Name: name, Command: name})
+		}
 	}
 
 	// Build bind mounts
@@ -239,10 +257,40 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 			fmt.Sprintf("d %s 0755 root root -", dir))
 	}
 
+	// Mount system prompt file
+	if cfg.SystemPromptPath != "" {
+		containerPromptPath := "/home/agent/.config/forage/system-prompt.md"
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     containerPromptPath,
+			HostPath: cfg.SystemPromptPath,
+			ReadOnly: true,
+		})
+		data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules,
+			"d /home/agent/.config/forage 0755 agent users -")
+		data.SystemPromptFile = containerPromptPath
+	}
+
+	// Mount skills directory
+	if cfg.SkillsPath != "" {
+		data.BindMounts = append(data.BindMounts, BindMount{
+			Path:     "/home/agent/.claude/skills",
+			HostPath: cfg.SkillsPath,
+			ReadOnly: true,
+		})
+		data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules,
+			"d /home/agent/.claude 0755 agent users -",
+			"d /home/agent/.claude/skills 0755 agent users -")
+	}
+
 	// Build agent packages and environment variables
-	for _, agent := range cfg.Template.Agents {
+	for name, agent := range cfg.Template.Agents {
 		if agent.PackagePath != "" {
-			data.AgentPackages = append(data.AgentPackages, agent.PackagePath)
+			// For claude agent with a system prompt, use a wrapper instead of the raw package
+			if name == "claude" && cfg.SystemPromptPath != "" {
+				data.ClaudePackagePath = agent.PackagePath
+			} else {
+				data.AgentPackages = append(data.AgentPackages, agent.PackagePath)
+			}
 		}
 		// When using proxy, don't inject secrets directly - the proxy will inject them
 		if cfg.ProxyURL == "" && agent.AuthEnvVar != "" && agent.SecretName != "" {

@@ -78,7 +78,11 @@
           Type = "oneshot";
           User = "agent";
           WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.bash}/bin/bash -c 'tmux new-session -d -s forage -c /workspace || true'";
+          ExecStart = "${pkgs.writeShellScript "forage-init" ''
+            tmux new-session -d -s forage -c /workspace -n claude
+            tmux send-keys -t forage:claude 'claude' Enter
+            true
+          ''}";
         };
       };
     };

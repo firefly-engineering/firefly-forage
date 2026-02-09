@@ -239,6 +239,12 @@ func (c *HostConfig) Validate() error {
 	return nil
 }
 
+// TmuxWindow describes a tmux window to create at sandbox start.
+type TmuxWindow struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
+}
+
 // Template represents a sandbox template configuration
 type Template struct {
 	Name          string                 `json:"name"`
@@ -249,6 +255,7 @@ type Template struct {
 	ExtraPackages []string               `json:"extraPackages"`
 	UseProxy      bool                   `json:"useProxy,omitempty"`      // Use forage-proxy for API calls
 	AgentIdentity *AgentIdentity         `json:"agentIdentity,omitempty"` // Template-level default agent identity
+	TmuxWindows   []TmuxWindow           `json:"tmuxWindows,omitempty"`   // Explicit tmux window layout
 }
 
 // AgentPermissions controls agent permission settings.

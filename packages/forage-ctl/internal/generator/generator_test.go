@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 )
 
 // validTestConfig returns a valid ContainerConfig for testing
@@ -473,14 +474,14 @@ func TestContainerConfig_Validate(t *testing.T) {
 	}
 }
 
-func TestGenerateSkills(t *testing.T) {
+func TestGenerateSystemPrompt(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:          "test-sandbox",
 		Template:      "claude",
 		WorkspaceMode: "direct",
 	}
 
-	template := &config.Template{
+	tmpl := &config.Template{
 		Name:        "claude",
 		Description: "Claude sandbox",
 		Network:     "full",
@@ -491,21 +492,23 @@ func TestGenerateSkills(t *testing.T) {
 		},
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	// Check basic content
 	if !strings.Contains(result, "test-sandbox") {
-		t.Error("Skills should contain sandbox name")
+		t.Error("System prompt should contain sandbox name")
 	}
 	if !strings.Contains(result, "claude") {
-		t.Error("Skills should contain template name")
+		t.Error("System prompt should contain template name")
 	}
 	if !strings.Contains(result, "/workspace") {
-		t.Error("Skills should mention workspace")
+		t.Error("System prompt should mention workspace")
+	}
+	if !strings.Contains(result, "Full network access") {
+		t.Error("System prompt should mention network mode")
 	}
 }
 
-func TestGenerateSkills_JJMode(t *testing.T) {
+func TestGenerateSystemPrompt_JJMode(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:          "test-sandbox",
 		Template:      "claude",
@@ -513,26 +516,22 @@ func TestGenerateSkills_JJMode(t *testing.T) {
 		SourceRepo:    "/home/user/myrepo",
 	}
 
-	template := &config.Template{
+	tmpl := &config.Template{
 		Name:    "claude",
 		Network: "full",
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	// Check JJ-specific content
-	if !strings.Contains(result, "jj status") {
-		t.Error("Skills should contain jj commands for jj mode")
+	if !strings.Contains(result, "jj workspace") {
+		t.Error("System prompt should mention jj workspace mode")
 	}
-	if !strings.Contains(result, "jj diff") {
-		t.Error("Skills should contain jj diff command")
-	}
-	if !strings.Contains(result, "isolated jj workspace") {
-		t.Error("Skills should explain jj isolation")
+	if !strings.Contains(result, "/home/user/myrepo") {
+		t.Error("System prompt should mention source repo")
 	}
 }
 
-func TestGenerateSkills_NetworkModes(t *testing.T) {
+func TestGenerateSystemPrompt_NetworkModes(t *testing.T) {
 	tests := []struct {
 		network    string
 		shouldHave string
@@ -548,40 +547,40 @@ func TestGenerateSkills_NetworkModes(t *testing.T) {
 				Name:     "test",
 				Template: "test",
 			}
-			template := &config.Template{
+			tmpl := &config.Template{
 				Network: tt.network,
 			}
 
-			result := GenerateSkills(metadata, template)
+			result := GenerateSystemPrompt(metadata, tmpl)
 
 			if !strings.Contains(result, tt.shouldHave) {
-				t.Errorf("Skills for network %q should contain %q", tt.network, tt.shouldHave)
+				t.Errorf("System prompt for network %q should contain %q\nGot:\n%s", tt.network, tt.shouldHave, result)
 			}
 		})
 	}
 }
 
-func TestGenerateSkills_RestrictedHosts(t *testing.T) {
+func TestGenerateSystemPrompt_RestrictedHosts(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
 		Template: "test",
 	}
-	template := &config.Template{
+	tmpl := &config.Template{
 		Network:      "restricted",
 		AllowedHosts: []string{"api.anthropic.com", "github.com"},
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "api.anthropic.com") {
-		t.Error("Skills should list allowed hosts")
+		t.Error("System prompt should list allowed hosts")
 	}
 	if !strings.Contains(result, "github.com") {
-		t.Error("Skills should list allowed hosts")
+		t.Error("System prompt should list allowed hosts")
 	}
 }
 
-func TestGenerateSkills_Identity(t *testing.T) {
+func TestGenerateSystemPrompt_Identity(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
 		Template: "claude",
@@ -591,27 +590,27 @@ func TestGenerateSkills_Identity(t *testing.T) {
 			SSHKeyPath: "/key",
 		},
 	}
-	template := &config.Template{
+	tmpl := &config.Template{
 		Network: "full",
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	if !strings.Contains(result, "## Identity") {
-		t.Error("Skills should have identity section")
+	if !strings.Contains(result, "Identity") {
+		t.Error("System prompt should have identity info")
 	}
 	if !strings.Contains(result, "Bot") {
-		t.Error("Skills should contain git user name")
+		t.Error("System prompt should contain git user name")
 	}
 	if !strings.Contains(result, "bot@test.com") {
-		t.Error("Skills should contain git email")
+		t.Error("System prompt should contain git email")
 	}
-	if !strings.Contains(result, "SSH key is available") {
-		t.Error("Skills should mention SSH key")
+	if !strings.Contains(result, "SSH key available") {
+		t.Error("System prompt should mention SSH key")
 	}
 }
 
-func TestGenerateSkills_IdentityGitOnly(t *testing.T) {
+func TestGenerateSystemPrompt_IdentityGitOnly(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
 		Template: "claude",
@@ -619,42 +618,42 @@ func TestGenerateSkills_IdentityGitOnly(t *testing.T) {
 			GitUser: "Bot",
 		},
 	}
-	template := &config.Template{
+	tmpl := &config.Template{
 		Network: "full",
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	if !strings.Contains(result, "## Identity") {
-		t.Error("Skills should have identity section")
+	if !strings.Contains(result, "Identity") {
+		t.Error("System prompt should have identity info")
 	}
 	if strings.Contains(result, "SSH key") {
-		t.Error("Skills should not mention SSH key when not set")
+		t.Error("System prompt should not mention SSH key when not set")
 	}
 }
 
-func TestGenerateSkills_NoIdentity(t *testing.T) {
+func TestGenerateSystemPrompt_NoIdentity(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
 		Template: "claude",
 	}
-	template := &config.Template{
+	tmpl := &config.Template{
 		Network: "full",
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	if strings.Contains(result, "## Identity") {
-		t.Error("Skills should not have identity section when none configured")
+	if strings.Contains(result, "Identity") {
+		t.Error("System prompt should not have identity info when none configured")
 	}
 }
 
-func TestGenerateSkills_WithAgents(t *testing.T) {
+func TestGenerateSystemPrompt_WithAgents(t *testing.T) {
 	metadata := &config.SandboxMetadata{
 		Name:     "test",
 		Template: "multi",
 	}
-	template := &config.Template{
+	tmpl := &config.Template{
 		Network: "full",
 		Agents: map[string]config.AgentConfig{
 			"claude": {
@@ -666,16 +665,142 @@ func TestGenerateSkills_WithAgents(t *testing.T) {
 		},
 	}
 
-	result := GenerateSkills(metadata, template)
+	result := GenerateSystemPrompt(metadata, tmpl)
 
-	if !strings.Contains(result, "Available Agents") {
-		t.Error("Skills should have agents section")
+	if !strings.Contains(result, "Agents") {
+		t.Error("System prompt should have agents info")
 	}
 	if !strings.Contains(result, "claude") {
-		t.Error("Skills should list claude agent")
+		t.Error("System prompt should list claude agent")
 	}
 	if !strings.Contains(result, "opencode") {
-		t.Error("Skills should list opencode agent")
+		t.Error("System prompt should list opencode agent")
+	}
+}
+
+func TestGenerateSkillFiles_VCS(t *testing.T) {
+	tests := []struct {
+		name       string
+		metadata   *config.SandboxMetadata
+		info       *skills.ProjectInfo
+		wantSkill  bool
+		shouldHave []string
+	}{
+		{
+			name: "jj mode",
+			metadata: &config.SandboxMetadata{
+				Name:          "test",
+				Template:      "test",
+				WorkspaceMode: "jj",
+			},
+			wantSkill:  true,
+			shouldHave: []string{"jj status", "jj diff", "isolated jj workspace"},
+		},
+		{
+			name: "git-worktree mode",
+			metadata: &config.SandboxMetadata{
+				Name:          "test",
+				Template:      "test",
+				WorkspaceMode: "git-worktree",
+				GitBranch:     "test-branch",
+			},
+			wantSkill:  true,
+			shouldHave: []string{"git status", "test-branch", "git worktree"},
+		},
+		{
+			name: "plain git",
+			metadata: &config.SandboxMetadata{
+				Name:     "test",
+				Template: "test",
+			},
+			info:       &skills.ProjectInfo{HasGit: true},
+			wantSkill:  true,
+			shouldHave: []string{"Git", "Standard git workflow"},
+		},
+		{
+			name: "no vcs",
+			metadata: &config.SandboxMetadata{
+				Name:     "test",
+				Template: "test",
+			},
+			info:      &skills.ProjectInfo{},
+			wantSkill: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl := &config.Template{Network: "full"}
+			result := GenerateSkillFiles(tt.metadata, tmpl, tt.info)
+			vcs, ok := result["forage-vcs"]
+			if tt.wantSkill && !ok {
+				t.Fatal("expected forage-vcs skill file")
+			}
+			if !tt.wantSkill && ok {
+				t.Fatal("did not expect forage-vcs skill file")
+			}
+			for _, s := range tt.shouldHave {
+				if !strings.Contains(vcs, s) {
+					t.Errorf("forage-vcs should contain %q\nGot:\n%s", s, vcs)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateSkillFiles_Project(t *testing.T) {
+	tmpl := &config.Template{Network: "full"}
+	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
+
+	info := &skills.ProjectInfo{
+		Type:         skills.ProjectTypeGo,
+		BuildSystem:  "go",
+		BuildCommand: "go build ./...",
+		TestCommand:  "go test ./...",
+		Frameworks:   []string{"cobra"},
+	}
+
+	result := GenerateSkillFiles(metadata, tmpl, info)
+	project, ok := result["forage-project"]
+	if !ok {
+		t.Fatal("expected forage-project skill file")
+	}
+
+	for _, s := range []string{"go", "cobra", "go build", "go test"} {
+		if !strings.Contains(project, s) {
+			t.Errorf("forage-project should contain %q", s)
+		}
+	}
+	if !strings.Contains(project, "user-invocable: false") {
+		t.Error("forage-project should have user-invocable: false frontmatter")
+	}
+}
+
+func TestGenerateSkillFiles_Nix(t *testing.T) {
+	tmpl := &config.Template{Network: "full"}
+	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
+
+	info := &skills.ProjectInfo{HasNixFlake: true}
+	result := GenerateSkillFiles(metadata, tmpl, info)
+	nix, ok := result["forage-nix"]
+	if !ok {
+		t.Fatal("expected forage-nix skill file")
+	}
+
+	for _, s := range []string{"nix build", "nix develop", "nix flake check"} {
+		if !strings.Contains(nix, s) {
+			t.Errorf("forage-nix should contain %q", s)
+		}
+	}
+}
+
+func TestGenerateSkillFiles_Empty(t *testing.T) {
+	tmpl := &config.Template{Network: "full"}
+	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
+
+	result := GenerateSkillFiles(metadata, tmpl, nil)
+	if len(result) != 0 {
+		t.Errorf("expected empty skill files map, got %d entries", len(result))
 	}
 }
 
@@ -926,6 +1051,199 @@ func TestGenerateNixConfig_NoIdentity(t *testing.T) {
 	}
 	if strings.Contains(result, "/home/agent/.ssh") {
 		t.Error("Config should not have .ssh mount when no identity")
+	}
+}
+
+func TestGenerateNixConfig_SystemPromptMount(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// System prompt file should be bind-mounted read-only
+	if !strings.Contains(result, "/home/agent/.config/forage/system-prompt.md") {
+		t.Error("Config should mount system prompt at container path")
+	}
+	if !strings.Contains(result, "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md") {
+		t.Error("Config should reference host system prompt path")
+	}
+	// Should have tmpfiles rule for parent directory
+	if !strings.Contains(result, "d /home/agent/.config/forage 0755 agent users -") {
+		t.Error("Config should have tmpfiles rule for forage config directory")
+	}
+}
+
+func TestGenerateNixConfig_SkillsMount(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.SkillsPath = "/var/lib/forage/sandboxes/test-sandbox.skills"
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Skills directory should be bind-mounted read-only
+	if !strings.Contains(result, "/home/agent/.claude/skills") {
+		t.Error("Config should mount skills directory")
+	}
+	if !strings.Contains(result, "/var/lib/forage/sandboxes/test-sandbox.skills") {
+		t.Error("Config should reference host skills path")
+	}
+	// Should have tmpfiles rules
+	if !strings.Contains(result, "d /home/agent/.claude 0755 agent users -") {
+		t.Error("Config should have tmpfiles rule for .claude directory")
+	}
+}
+
+func TestGenerateNixConfig_ClaudeWrapper(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// When SystemPromptPath is set and claude agent exists, should emit wrapper
+	if !strings.Contains(result, "writeShellScriptBin") {
+		t.Error("Config should contain writeShellScriptBin wrapper for claude")
+	}
+	if !strings.Contains(result, "--append-system-prompt") {
+		t.Error("Config should contain --append-system-prompt flag")
+	}
+	if !strings.Contains(result, "system-prompt.md") {
+		t.Error("Config should reference system prompt file in wrapper")
+	}
+	// Raw claude package should NOT be in systemPackages
+	if strings.Contains(result, "        pkgs.claude-code\n") {
+		t.Error("Config should NOT include raw claude package when wrapper is used")
+	}
+}
+
+func TestGenerateNixConfig_NoClaudeWrapper_WithoutPrompt(t *testing.T) {
+	cfg := validTestConfig()
+	// No SystemPromptPath — claude should be added as raw package
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if strings.Contains(result, "writeShellScriptBin") {
+		t.Error("Config should NOT contain wrapper when no system prompt")
+	}
+	if !strings.Contains(result, "pkgs.claude-code") {
+		t.Error("Config should contain raw claude package when no system prompt")
+	}
+}
+
+func TestGenerateNixConfig_NonClaudeAgent_NoWrapper(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
+	// Replace claude with a non-claude agent
+	cfg.Template.Agents = map[string]config.AgentConfig{
+		"aider": {
+			PackagePath: "pkgs.aider",
+			SecretName:  "openai",
+			AuthEnvVar:  "OPENAI_API_KEY",
+		},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Non-claude agents should not get a wrapper
+	if strings.Contains(result, "writeShellScriptBin") {
+		t.Error("Config should NOT contain wrapper for non-claude agent")
+	}
+	if !strings.Contains(result, "pkgs.aider") {
+		t.Error("Config should contain raw aider package")
+	}
+}
+
+func TestGenerateNixConfig_DefaultTmuxWindows(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Agents = map[string]config.AgentConfig{
+		"claude": {
+			PackagePath: "pkgs.claude-code",
+			SecretName:  "anthropic",
+			AuthEnvVar:  "ANTHROPIC_API_KEY",
+		},
+		"aider": {
+			PackagePath: "pkgs.aider",
+			SecretName:  "openai",
+			AuthEnvVar:  "OPENAI_API_KEY",
+		},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Default: one window per agent, sorted by name (aider, claude)
+	if !strings.Contains(result, "new-session -d -s forage -c /workspace -n aider") {
+		t.Error("First tmux window should be 'aider' (sorted)")
+	}
+	if !strings.Contains(result, "new-window -t forage -n claude") {
+		t.Error("Second tmux window should be 'claude' (sorted)")
+	}
+	if !strings.Contains(result, "send-keys -t forage:aider 'aider' Enter") {
+		t.Error("Should send-keys for aider window")
+	}
+	if !strings.Contains(result, "send-keys -t forage:claude 'claude' Enter") {
+		t.Error("Should send-keys for claude window")
+	}
+}
+
+func TestGenerateNixConfig_ExplicitTmuxWindows(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.TmuxWindows = []config.TmuxWindow{
+		{Name: "claude", Command: "claude"},
+		{Name: "shell", Command: ""},
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// First window: claude with command
+	if !strings.Contains(result, "new-session -d -s forage -c /workspace -n claude") {
+		t.Error("First tmux window should be 'claude'")
+	}
+	if !strings.Contains(result, "send-keys -t forage:claude 'claude' Enter") {
+		t.Error("Should send-keys for claude window")
+	}
+	// Second window: shell with no command
+	if !strings.Contains(result, "new-window -t forage -n shell") {
+		t.Error("Second tmux window should be 'shell'")
+	}
+	// Shell window has empty command — no send-keys
+	if strings.Contains(result, "send-keys -t forage:shell") {
+		t.Error("Should NOT send-keys for shell window (empty command)")
+	}
+}
+
+func TestGenerateNixConfig_TmuxWriteShellScript(t *testing.T) {
+	cfg := validTestConfig()
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should use writeShellScript, not bash -c
+	if !strings.Contains(result, "writeShellScript") {
+		t.Error("forage-init should use writeShellScript")
+	}
+	if strings.Contains(result, "${pkgs.bash}/bin/bash -c") {
+		t.Error("forage-init should NOT use bash -c anymore")
 	}
 }
 
