@@ -20,14 +20,14 @@ var upCmd = &cobra.Command{
 }
 
 var (
-	upTemplate     string
-	upRepo         string
-	upSSHKeys      []string
-	upNoTmuxConfig bool
-	upDirect       bool
-	upGitUser      string
-	upGitEmail     string
-	upSSHKeyPath   string
+	upTemplate    string
+	upRepo        string
+	upSSHKeys     []string
+	upNoMuxConfig bool
+	upDirect      bool
+	upGitUser     string
+	upGitEmail    string
+	upSSHKeyPath  string
 )
 
 func init() {
@@ -35,7 +35,9 @@ func init() {
 	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "Repository or directory path")
 	upCmd.Flags().BoolVar(&upDirect, "direct", false, "Mount directory directly (skip VCS isolation)")
 	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
-	upCmd.Flags().BoolVar(&upNoTmuxConfig, "no-tmux-config", false, "Don't mount host tmux config into sandbox")
+	upCmd.Flags().BoolVar(&upNoMuxConfig, "no-mux-config", false, "Don't mount host multiplexer config into sandbox")
+	upCmd.Flags().BoolVar(&upNoMuxConfig, "no-tmux-config", false, "Don't mount host multiplexer config into sandbox")
+	_ = upCmd.Flags().MarkDeprecated("no-tmux-config", "use --no-mux-config instead")
 	upCmd.Flags().StringVar(&upGitUser, "git-user", "", "Git user.name for agent commits")
 	upCmd.Flags().StringVar(&upGitEmail, "git-email", "", "Git user.email for agent commits")
 	upCmd.Flags().StringVar(&upSSHKeyPath, "ssh-key-path", "", "Path to SSH private key for agent push access")
@@ -94,7 +96,7 @@ func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
 		RepoPath:     upRepo,
 		Direct:       upDirect,
 		SSHKeys:      upSSHKeys,
-		NoTmuxConfig: upNoTmuxConfig,
+		NoMuxConfig: upNoMuxConfig,
 		GitUser:      upGitUser,
 		GitEmail:     upGitEmail,
 		SSHKeyPath:   upSSHKeyPath,

@@ -153,7 +153,7 @@ func TestWizardConfirm(t *testing.T) {
 		w.selectedTemplate = "claude"
 		w.selectedName = "project-claude"
 		w.direct = true
-		w.noTmuxConfig = true
+		w.noMuxConfig = true
 
 		done, opts, _ := w.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		if !done {
@@ -174,8 +174,8 @@ func TestWizardConfirm(t *testing.T) {
 		if !opts.Direct {
 			t.Error("Direct should be true")
 		}
-		if !opts.NoTmuxConfig {
-			t.Error("NoTmuxConfig should be true")
+		if !opts.NoMuxConfig {
+			t.Error("NoMuxConfig should be true")
 		}
 	})
 
@@ -267,14 +267,14 @@ func TestWizardAdvanced(t *testing.T) {
 		}
 	})
 
-	t.Run("toggle noTmuxConfig", func(t *testing.T) {
+	t.Run("toggle noMuxConfig", func(t *testing.T) {
 		w := newWizardModel("")
 		w.step = stepAdvanced
-		w.advCursor = advNoTmuxConfig
+		w.advCursor = advNoMuxConfig
 
 		w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-		if !w.noTmuxConfig {
-			t.Error("noTmuxConfig should be true after toggle")
+		if !w.noMuxConfig {
+			t.Error("noMuxConfig should be true after toggle")
 		}
 	})
 
@@ -285,8 +285,8 @@ func TestWizardAdvanced(t *testing.T) {
 
 		// Move down
 		w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-		if w.advCursor != advNoTmuxConfig {
-			t.Errorf("cursor = %v, want advNoTmuxConfig", w.advCursor)
+		if w.advCursor != advNoMuxConfig {
+			t.Errorf("cursor = %v, want advNoMuxConfig", w.advCursor)
 		}
 
 		// Move up

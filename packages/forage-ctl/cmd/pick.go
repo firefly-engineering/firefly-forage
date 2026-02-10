@@ -102,7 +102,7 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 		Template:     opts.Template,
 		RepoPath:     opts.RepoPath,
 		Direct:       opts.Direct,
-		NoTmuxConfig: opts.NoTmuxConfig,
+		NoMuxConfig: opts.NoMuxConfig,
 		GitUser:      opts.GitUser,
 		GitEmail:     opts.GitEmail,
 		SSHKeyPath:   opts.SSHKeyPath,

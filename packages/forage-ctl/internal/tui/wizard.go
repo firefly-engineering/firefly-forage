@@ -31,7 +31,7 @@ type advancedField int
 
 const (
 	advDirect advancedField = iota
-	advNoTmuxConfig
+	advNoMuxConfig
 	advGitUser
 	advGitEmail
 	advSSHKeyPath
@@ -56,7 +56,7 @@ type wizardModel struct {
 	// Step 4: advanced
 	advCursor      advancedField
 	direct         bool
-	noTmuxConfig   bool
+	noMuxConfig   bool
 	gitUserInput   textinput.Model
 	gitEmailInput  textinput.Model
 	sshKeyInput    textinput.Model
@@ -351,8 +351,8 @@ func (w *wizardModel) updateAdvanced(msg tea.Msg) (bool, *CreateOptions, tea.Cmd
 			switch w.advCursor {
 			case advDirect:
 				w.direct = !w.direct
-			case advNoTmuxConfig:
-				w.noTmuxConfig = !w.noTmuxConfig
+			case advNoMuxConfig:
+				w.noMuxConfig = !w.noMuxConfig
 			}
 			return false, nil, nil
 		}
@@ -369,7 +369,7 @@ func (w *wizardModel) updateConfirm(msg tea.Msg) (bool, *CreateOptions, tea.Cmd)
 				Template:     w.selectedTemplate,
 				RepoPath:     w.selectedPath,
 				Direct:       w.direct,
-				NoTmuxConfig: w.noTmuxConfig,
+				NoMuxConfig: w.noMuxConfig,
 				GitUser:      strings.TrimSpace(w.gitUserInput.Value()),
 				GitEmail:     strings.TrimSpace(w.gitEmailInput.Value()),
 				SSHKeyPath:   strings.TrimSpace(w.sshKeyInput.Value()),
@@ -383,7 +383,7 @@ func (w *wizardModel) updateConfirm(msg tea.Msg) (bool, *CreateOptions, tea.Cmd)
 			w.selectedTemplate = ""
 			w.selectedName = ""
 			w.direct = false
-			w.noTmuxConfig = false
+			w.noMuxConfig = false
 			w.gitUserInput.SetValue("")
 			w.gitEmailInput.SetValue("")
 			w.sshKeyInput.SetValue("")
@@ -423,7 +423,7 @@ func (w *wizardModel) View() string {
 		b.WriteString("\n\n")
 		b.WriteString(w.renderToggle(advDirect, "Direct mount", "Skip VCS isolation, mount directory directly"))
 		b.WriteString("\n")
-		b.WriteString(w.renderToggle(advNoTmuxConfig, "No tmux config", "Don't mount host tmux config"))
+		b.WriteString(w.renderToggle(advNoMuxConfig, "No mux config", "Don't mount host multiplexer config"))
 		b.WriteString("\n")
 		b.WriteString(w.renderTextInput(advGitUser, "Git user", "Git user.name for agent commits", &w.gitUserInput))
 		b.WriteString("\n")
@@ -441,8 +441,8 @@ func (w *wizardModel) View() string {
 		if w.direct {
 			b.WriteString(fmt.Sprintf("  Direct:   %s\n", wizardValueStyle.Render("yes")))
 		}
-		if w.noTmuxConfig {
-			b.WriteString(fmt.Sprintf("  No tmux:  %s\n", wizardValueStyle.Render("yes")))
+		if w.noMuxConfig {
+			b.WriteString(fmt.Sprintf("  No mux:   %s\n", wizardValueStyle.Render("yes")))
 		}
 		if v := strings.TrimSpace(w.gitUserInput.Value()); v != "" {
 			b.WriteString(fmt.Sprintf("  Git user: %s\n", wizardValueStyle.Render(v)))
@@ -501,8 +501,8 @@ func (w *wizardModel) renderToggle(field advancedField, name, desc string) strin
 		if w.direct {
 			checked = "x"
 		}
-	case advNoTmuxConfig:
-		if w.noTmuxConfig {
+	case advNoMuxConfig:
+		if w.noMuxConfig {
 			checked = "x"
 		}
 	}

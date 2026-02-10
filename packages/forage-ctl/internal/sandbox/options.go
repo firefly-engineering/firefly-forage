@@ -24,8 +24,8 @@ type CreateOptions struct {
 	// If empty, keys are resolved from config or ~/.ssh/*.pub
 	SSHKeys []string
 
-	// NoTmuxConfig skips mounting the host tmux config into the sandbox
-	NoTmuxConfig bool
+	// NoMuxConfig skips mounting the host multiplexer config into the sandbox
+	NoMuxConfig bool
 
 	// GitUser is the git user.name for agent commits (optional)
 	GitUser string

@@ -186,6 +186,7 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 		JJWorkspaceName: opts.Name,
 		GitBranch:       ws.gitBranch,
 		AgentIdentity:   identity,
+		Multiplexer:     resources.template.Multiplexer,
 	}
 }
 
@@ -217,7 +218,8 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		ProxyURL:          proxyURL,
 		UID:               c.hostConfig.UID,
 		GID:               c.hostConfig.GID,
-		NoTmuxConfig:      opts.NoTmuxConfig,
+		NoMuxConfig:       opts.NoMuxConfig,
+		Multiplexer:       string(resources.template.Multiplexer),
 		PermissionsMounts: permsMounts,
 		AgentIdentity:     identity,
 		SystemPromptPath:  prompt.systemPromptPath,
