@@ -118,7 +118,6 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 		HostConfig:     hostConfig,
 		WorkspaceMode:  metadata.WorkspaceMode,
 		SourceRepo:     metadata.SourceRepo,
-		NixpkgsRev:     hostConfig.NixpkgsRev,
 		UID:            hostConfig.UID,
 		GID:            hostConfig.GID,
 	}

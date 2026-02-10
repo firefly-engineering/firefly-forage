@@ -53,7 +53,6 @@ type ContainerConfig struct {
 	HostConfig        *config.HostConfig
 	WorkspaceMode     string
 	SourceRepo        string
-	NixpkgsRev        string
 	ProxyURL          string             // URL of the forage-proxy server (if using proxy mode)
 	UID               int                // Host user's UID for the container agent user
 	GID               int                // Host user's GID for the container agent user
@@ -310,14 +309,6 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 			Name:  "ANTHROPIC_CUSTOM_HEADERS",
 			Value: fmt.Sprintf(`"X-Forage-Sandbox: %s"`, cfg.Name),
 		})
-	}
-
-	// Build registry config for nix pinning
-	if cfg.NixpkgsRev != "" && cfg.NixpkgsRev != "unknown" {
-		data.RegistryConfig = RegistryConfig{
-			Enabled:    true,
-			NixpkgsRev: cfg.NixpkgsRev,
-		}
 	}
 
 	// Agent identity: git config and optional SSH key

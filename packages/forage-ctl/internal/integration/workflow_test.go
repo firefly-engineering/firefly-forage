@@ -76,7 +76,6 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 		Template:       template,
 		HostConfig:     env.HostConfig,
 		WorkspaceMode:  "direct",
-		NixpkgsRev:     "abc123",
 		UID:            env.HostConfig.UID,
 		GID:            env.HostConfig.GID,
 	}

@@ -14,7 +14,6 @@ type TemplateData struct {
 	NetworkConfig      string // Pre-rendered from network package
 	AgentPackages      []string
 	EnvVars            []EnvVar
-	RegistryConfig     RegistryConfig
 	MuxPackages        []string // Multiplexer packages to install (e.g. ["tmux"] or ["wezterm"])
 	MuxInitScript      string   // Pre-rendered init script from multiplexer backend
 	UID                int      // Host user's UID for the container agent user
@@ -38,12 +37,6 @@ type BindMount struct {
 type EnvVar struct {
 	Name  string
 	Value string
-}
-
-// RegistryConfig holds nixpkgs registry configuration.
-type RegistryConfig struct {
-	Enabled    bool
-	NixpkgsRev string
 }
 
 // nixBool returns "true" or "false" for use in Nix configuration.
@@ -124,16 +117,15 @@ const containerTemplateText = `{ pkgs, ... }: {
 {{- end}}
       };
 {{end}}
-{{- if .RegistryConfig.Enabled}}
       environment.etc."nix/registry.json".text = builtins.toJSON {
         version = 2;
         flakes = [{
           exact = true;
           from = { id = "nixpkgs"; type = "indirect"; };
-          to = { type = "github"; owner = "NixOS"; repo = "nixpkgs"; rev = "{{.RegistryConfig.NixpkgsRev}}"; };
+          to = { type = "path"; path = "${pkgs.path}"; };
         }];
       };
-{{end}}
+
       # Ensure ~/.config is owned by agent (bind mounts may create it as root)
       systemd.tmpfiles.rules = [
         "d /home/agent/.config 0755 agent users -"

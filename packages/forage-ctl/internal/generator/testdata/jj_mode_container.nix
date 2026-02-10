@@ -63,7 +63,7 @@
         flakes = [{
           exact = true;
           from = { id = "nixpkgs"; type = "indirect"; };
-          to = { type = "github"; owner = "NixOS"; repo = "nixpkgs"; rev = "abc123def456"; };
+          to = { type = "path"; path = "${pkgs.path}"; };
         }];
       };
 

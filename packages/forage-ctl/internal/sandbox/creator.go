@@ -214,7 +214,6 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		HostConfig:        c.hostConfig,
 		WorkspaceMode:     string(ws.mode),
 		SourceRepo:        ws.sourceRepo,
-		NixpkgsRev:        c.hostConfig.NixpkgsRev,
 		ProxyURL:          proxyURL,
 		UID:               c.hostConfig.UID,
 		GID:               c.hostConfig.GID,

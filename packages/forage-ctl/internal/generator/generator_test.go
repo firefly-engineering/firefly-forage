@@ -38,7 +38,6 @@ func validTestConfig() *ContainerConfig {
 			GID:  100,
 		},
 		WorkspaceMode: "direct",
-		NixpkgsRev:    "abc123def",
 		UID:           1000,
 		GID:           100,
 	}
@@ -86,9 +85,9 @@ func TestGenerateNixConfig(t *testing.T) {
 		t.Error("Config should contain authorized keys")
 	}
 
-	// Check nixpkgs registry
-	if !strings.Contains(result, "abc123def") {
-		t.Error("Config should contain nixpkgs revision")
+	// Check nixpkgs registry uses local store path
+	if !strings.Contains(result, `"path"; path = "${pkgs.path}"`) {
+		t.Error("Config should pin nixpkgs registry to local pkgs.path")
 	}
 
 	// Check packages
@@ -339,21 +338,6 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGenerateNixConfig_NoNixpkgsRev(t *testing.T) {
-	cfg := validTestConfig()
-	cfg.NixpkgsRev = "" // No revision
-
-	result, err := GenerateNixConfig(cfg)
-	if err != nil {
-		t.Fatalf("GenerateNixConfig failed: %v", err)
-	}
-
-	// Should not contain registry config when no revision
-	if strings.Contains(result, "registry.json") {
-		t.Error("Config should not contain registry config when NixpkgsRev is empty")
 	}
 }
 
@@ -804,7 +788,6 @@ func goldenTestConfig() *ContainerConfig {
 			GID:  100,
 		},
 		WorkspaceMode: "direct",
-		NixpkgsRev:    "abc123def456",
 		UID:           1000,
 		GID:           100,
 	}
@@ -853,13 +836,6 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 				c.Template.Network = "none"
 			},
 			goldenFile: "no_network_container.nix",
-		},
-		{
-			name: "no_registry",
-			modifyFunc: func(c *ContainerConfig) {
-				c.NixpkgsRev = ""
-			},
-			goldenFile: "no_registry_container.nix",
 		},
 	}
 
