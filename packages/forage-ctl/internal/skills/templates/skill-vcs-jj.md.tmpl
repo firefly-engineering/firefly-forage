@@ -2,16 +2,111 @@
 user-invocable: false
 ---
 
-# Version Control: JJ (Jujutsu)
+# Version Control: Jujutsu (jj)
 
-This workspace uses `jj` for version control:
+This is an isolated jj workspace. Changes here don't affect other workspaces.
+
+## Critical Rules
+
+- **DO NOT use git commands.** A `.git/` directory may exist (colocated repo) but running git commands directly risks data corruption. Use only `jj` commands.
+- **Always use `-m` flags** for messages. Never use commands that open an editor (`jj describe` without `-m`, `jj split`, `jj squash` without `-m`, `jj resolve`). These will hang.
+- **There is no staging area.** All file changes are automatically part of the working copy commit (`@`). No `add` step needed.
+- **Nix and git-aware tools**: These tools discover files via the underlying git repo. New or renamed files only become visible to git after jj snapshots the working copy, which happens on any `jj` command. Before running `nix build` or similar, run `jj status` first to trigger a snapshot.
+
+## Key Concepts
+
+- **Working copy is a commit**: `@` always refers to the current working copy commit. Changes are snapshotted automatically on every `jj` command.
+- **Commits are mutable**: Unlike git, any commit can be rewritten. Use this for clean, atomic history.
+- **Change IDs vs Commit IDs**: Change IDs (e.g. `tqpwlqmp`) are stable across rewrites. Commit IDs (hashes) change when content changes. Prefer change IDs.
+
+## Workflow
+
+Describe intent first, then code:
 
 ```bash
-jj status         # Show working copy status
-jj diff           # Show changes
-jj new            # Create new change
-jj describe -m "" # Set commit message
-jj bookmark set   # Update bookmark
+jj describe -m "feat: add validation to user input"  # describe what you'll do
+# ... make changes ... (automatically tracked)
+jj status                                             # verify changes
+jj new                                                # start next commit
 ```
 
-This is an isolated jj workspace - changes don't affect other workspaces.
+For multiple logical changes, keep commits atomic:
+
+```bash
+jj new && jj describe -m "fix: handle missing error case"
+# ... make changes ...
+jj new && jj describe -m "test: add coverage for edge cases"
+# ... make changes ...
+```
+
+## Commands
+
+### Inspect
+
+```bash
+jj workspace root      # workspace root directory
+jj status              # working copy status
+jj util markdown-help  # full command reference
+jj diff            # working copy diff
+jj log             # recent history
+jj log -p          # history with patches
+jj show CHANGE     # show specific commit
+```
+
+### Create and Edit
+
+```bash
+jj new                          # new empty commit on top of @
+jj new CHANGE                   # new commit on top of CHANGE
+jj describe -m "message"        # set/update commit message for @
+jj edit CHANGE                  # make CHANGE the working copy
+```
+
+### Refine History
+
+```bash
+jj squash                       # squash @ into parent (auto-merges messages)
+jj squash -m "message"          # squash @ into parent with explicit message
+jj squash --from X --into Y     # move changes from X into Y
+jj absorb                       # auto-distribute @ changes to ancestor commits that last touched those lines
+jj abandon CHANGE               # remove a commit (descendants rebase to its parent)
+jj undo                         # revert last jj operation
+```
+
+### Restore and Fix
+
+```bash
+jj restore                      # discard all working copy changes
+jj restore PATH                 # discard changes to specific file
+jj restore --from CHANGE PATH   # restore file from another commit
+```
+
+### Bookmarks (Branches)
+
+```bash
+jj bookmark list                    # list bookmarks
+jj bookmark create NAME -r @        # create bookmark at current commit
+jj bookmark move NAME --to CHANGE   # move bookmark to a commit
+jj bookmark delete NAME             # delete bookmark
+```
+
+Bookmarks do NOT auto-advance. You must explicitly `jj bookmark move` before pushing.
+
+### Push
+
+```bash
+jj git push -b BOOKMARK         # push a bookmark to the remote
+```
+
+Before pushing: ensure the bookmark points to the correct commit, commits are atomic, and the user has requested the push.
+
+### Conflicts
+
+jj allows committing conflicts. Do not use `jj resolve` (interactive). Edit conflicted files directly to remove markers, then run `jj status` to verify.
+
+## Commit Quality
+
+1. One logical change per commit
+2. Describe before coding
+3. Use `jj show @` to review before moving on
+4. Use `jj squash` or `jj absorb` to reorganize

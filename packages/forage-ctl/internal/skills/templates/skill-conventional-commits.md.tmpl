@@ -1,0 +1,50 @@
+---
+user-invocable: false
+---
+
+# Commit Messages: Conventional Commits
+
+All commits must use [Conventional Commits](https://www.conventionalcommits.org/) format.
+
+## Format
+
+```
+<type>[(scope)]: <description>
+
+[optional body]
+```
+
+## Types
+
+| Type | Purpose |
+|------|---------|
+| `feat` | New feature or capability |
+| `fix` | Bug fix |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test` | Adding or updating tests |
+| `docs` | Documentation only |
+| `chore` | Maintenance, dependencies, tooling |
+| `ci` | CI/CD configuration |
+| `perf` | Performance improvement |
+| `build` | Build system or external dependencies |
+| `style` | Formatting, whitespace, semicolons (no logic change) |
+
+## Rules
+
+- **Type is required**, always lowercase
+- **Scope is optional**, lowercase, in parentheses (e.g. `feat(auth):`)
+- **Description**: lowercase start, imperative mood, no trailing period
+- **Breaking changes**: add `!` after type/scope (e.g. `feat!: remove v1 API`)
+- One logical change per commit
+
+## Examples
+
+```
+feat: add user validation
+fix(parser): handle empty input gracefully
+refactor: extract multiplexer interface
+test: add coverage for edge cases
+docs(api): update authentication examples
+chore: upgrade go dependencies
+feat!: drop support for node 16
+```

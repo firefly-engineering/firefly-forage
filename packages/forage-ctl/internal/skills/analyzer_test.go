@@ -521,12 +521,8 @@ func TestGenerateSkillFiles_AllSkills(t *testing.T) {
 
 	result := GenerateSkillFiles(metadata, template, info)
 
-	// Should have all three skills
 	if _, ok := result["forage-vcs"]; !ok {
 		t.Error("expected forage-vcs skill")
-	}
-	if _, ok := result["forage-project"]; !ok {
-		t.Error("expected forage-project skill")
 	}
 	if _, ok := result["forage-nix"]; !ok {
 		t.Error("expected forage-nix skill")
@@ -539,15 +535,6 @@ func TestGenerateSkillFiles_AllSkills(t *testing.T) {
 	}
 	if !strings.Contains(vcs, "user-invocable: false") {
 		t.Error("VCS skill should have frontmatter")
-	}
-
-	// Project skill should contain Go content
-	project := result["forage-project"]
-	if !strings.Contains(project, "go build") {
-		t.Error("Project skill should contain build command")
-	}
-	if !strings.Contains(project, "cobra") {
-		t.Error("Project skill should contain frameworks")
 	}
 
 	// Nix skill should contain nix content
@@ -580,8 +567,8 @@ func TestGenerateSkillFiles_GitWorktree(t *testing.T) {
 	if !strings.Contains(vcs, "feature-x") {
 		t.Error("VCS skill should contain branch name")
 	}
-	if !strings.Contains(vcs, "git worktree") {
-		t.Error("VCS skill should mention git worktree")
+	if !strings.Contains(vcs, "Git Worktree") {
+		t.Error("VCS skill should mention Git Worktree")
 	}
 }
 

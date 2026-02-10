@@ -705,7 +705,7 @@ func TestGenerateSkillFiles_VCS(t *testing.T) {
 				GitBranch:     "test-branch",
 			},
 			wantSkill:  true,
-			shouldHave: []string{"git status", "test-branch", "git worktree"},
+			shouldHave: []string{"git status", "test-branch", "Git Worktree"},
 		},
 		{
 			name: "plain git",
@@ -713,9 +713,8 @@ func TestGenerateSkillFiles_VCS(t *testing.T) {
 				Name:     "test",
 				Template: "test",
 			},
-			info:       &skills.ProjectInfo{HasGit: true},
-			wantSkill:  true,
-			shouldHave: []string{"Git", "Standard git workflow"},
+			info:      &skills.ProjectInfo{HasGit: true},
+			wantSkill: false,
 		},
 		{
 			name: "no vcs",
@@ -745,34 +744,6 @@ func TestGenerateSkillFiles_VCS(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGenerateSkillFiles_Project(t *testing.T) {
-	tmpl := &config.Template{Network: "full"}
-	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
-
-	info := &skills.ProjectInfo{
-		Type:         skills.ProjectTypeGo,
-		BuildSystem:  "go",
-		BuildCommand: "go build ./...",
-		TestCommand:  "go test ./...",
-		Frameworks:   []string{"cobra"},
-	}
-
-	result := GenerateSkillFiles(metadata, tmpl, info)
-	project, ok := result["forage-project"]
-	if !ok {
-		t.Fatal("expected forage-project skill file")
-	}
-
-	for _, s := range []string{"go", "cobra", "go build", "go test"} {
-		if !strings.Contains(project, s) {
-			t.Errorf("forage-project should contain %q", s)
-		}
-	}
-	if !strings.Contains(project, "user-invocable: false") {
-		t.Error("forage-project should have user-invocable: false frontmatter")
 	}
 }
 

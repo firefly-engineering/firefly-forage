@@ -281,9 +281,10 @@ func GenerateSkillFiles(metadata *config.SandboxMetadata, template *config.Templ
 		result["forage-vcs"] = renderTemplate(tmplName, data)
 	}
 
-	// Project skill
-	if info != nil && info.Type != ProjectTypeUnknown {
-		result["forage-project"] = renderTemplate("skill-project.md.tmpl", info)
+	// Conventional commits skill (emitted for any VCS)
+	hasVCS := info != nil && (info.HasGit || info.HasJJ)
+	if hasVCS || metadata.WorkspaceMode == "jj" || metadata.WorkspaceMode == "git-worktree" {
+		result["forage-commits"] = renderTemplate("skill-conventional-commits.md.tmpl", nil)
 	}
 
 	// Nix skill
@@ -300,9 +301,6 @@ func vcsSkillTemplate(metadata *config.SandboxMetadata, info *ProjectInfo) (stri
 	}
 	if metadata.WorkspaceMode == "git-worktree" {
 		return "skill-vcs-git-worktree.md.tmpl", metadata
-	}
-	if info != nil && info.HasGit {
-		return "skill-vcs-git.md.tmpl", nil
 	}
 	return "", nil
 }

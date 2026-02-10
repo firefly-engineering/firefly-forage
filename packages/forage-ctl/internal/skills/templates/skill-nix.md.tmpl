@@ -4,12 +4,50 @@ user-invocable: false
 
 # Nix
 
-This project uses Nix flakes:
+## Critical Rules
+
+- **New files must be git-tracked before Nix can see them.** Nix flakes only evaluate files known to git. After creating or renaming a file, run `git add <file>` (or `jj status` in jj workspaces) before any `nix build`, `nix develop`, or `nix flake check`. Forgetting this causes "file not found" errors even though the file exists on disk.
+- **The nix store (`/nix/store`) is shared read-only from the host.** Pre-built packages are available instantly. The nix daemon handles building new derivations.
+- **Do not use interactive nix commands.** Avoid `nix repl` or any command that expects a TTY.
+
+## Ad-Hoc Packages
+
+Any tool not installed in the sandbox can be run on demand from nixpkgs. Use this instead of attempting to install packages manually.
 
 ```bash
-nix build         # Build the project
-nix develop       # Enter dev shell
-nix flake check   # Run checks
+# Run a tool directly (single command)
+nix run nixpkgs#ripgrep -- -r "pattern" .
+nix run nixpkgs#jq -- '.items[]' data.json
+nix run nixpkgs#fd -- --extension go
+
+# Get tools on PATH for multiple commands
+nix shell nixpkgs#jq nixpkgs#curl --command bash -c 'curl -s "$URL" | jq .data'
+
+# Combine multiple packages in a shell session
+nix shell nixpkgs#nodejs nixpkgs#yarn --command yarn install
 ```
 
-The nix store is shared read-only from the host.
+**When to use which:**
+- `nix run nixpkgs#pkg -- args` — single command, one tool, fire-and-forget
+- `nix shell nixpkgs#pkg --command cmd` — need multiple tools or a pipeline
+
+## Project Commands
+
+```bash
+nix flake show              # list what the flake provides
+nix develop                 # enter the project dev shell
+nix develop --command cmd   # run a single command in the dev shell
+nix build                   # build the default package
+nix build .#name            # build a specific output
+nix flake check             # run flake checks
+nix flake lock              # regenerate flake.lock
+nix flake update            # update all flake inputs
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| "file not found" during eval | New file not tracked by git | `git add <file>` or `jj status` |
+| "Git tree is dirty" warning | Uncommitted changes exist | Informational only — safe to ignore |
+| Package not found | Wrong attribute name | Search at https://search.nixos.org/packages |

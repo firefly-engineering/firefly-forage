@@ -2,19 +2,62 @@
 user-invocable: false
 ---
 
-# Version Control: Git (Worktree)
+# Version Control: Git Worktree
 
-This workspace is a git worktree with its own working directory and branch.
+This workspace is an isolated git worktree with its own working directory and branch.
 
 **Branch**: `{{.GitBranch}}`
 
+## Critical Rules
+
+- **Stay in your worktree.** Do not modify files outside `git rev-parse --show-toplevel`.
+- **Do not switch branches.** This worktree is locked to `{{.GitBranch}}`. Never run `git checkout` or `git switch` to change it.
+- **Do not use `git stash`.** The stash is shared across all worktrees and causes confusion. Commit your work instead.
+- **Do not use `git add -p` or `git add -i`.** Interactive staging requires a terminal and will hang. Use `git add <file>` for specific files or `git add -A` for all changes.
+
+## Key Concepts
+
+- **Isolated working tree, shared repo**: This worktree has its own files and `HEAD`, but shares branches, remotes, and tags with other worktrees. A `git fetch` here updates all worktrees.
+- **Branch exclusivity**: The same branch cannot be checked out in multiple worktrees. Do not try to check out another worktree's branch.
+- **Independent dependencies**: Build artifacts, `node_modules`, `.venv`, etc. are per-worktree. Install dependencies after creating a new worktree.
+
+## Workflow
+
 ```bash
-git status        # Show working tree status
-git diff          # Show changes
-git add -p        # Stage changes interactively
-git commit -m ""  # Create commit on this branch
-git push -u origin {{.GitBranch}}  # Push branch
+# Make changes, then commit
+git add <files>
+git commit -m "feat: add validation"
+git push -u origin {{.GitBranch}}
 ```
 
-This is an isolated git worktree - commits on this branch don't affect other worktrees.
-When done, merge your branch or create a pull request.
+## Commands
+
+### Inspect
+
+```bash
+git rev-parse --show-toplevel    # worktree root directory
+git status                       # working tree status
+git diff                         # unstaged changes
+git diff --staged                # staged changes
+git log --oneline -20            # recent history
+```
+
+### Stage and Commit
+
+```bash
+git add <file>                   # stage specific file
+git add -A                       # stage all changes
+git commit -m "message"          # create commit
+git commit --amend -m "message"  # amend last commit (before push only)
+```
+
+### Sync
+
+```bash
+git fetch origin                         # fetch latest from remote
+git rebase origin/main                   # rebase onto latest main
+git push -u origin {{.GitBranch}}        # push branch
+git push --force-with-lease              # push after rebase (safer than --force)
+```
+
+When done, push your branch and create a pull request.
