@@ -9,6 +9,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
@@ -128,10 +129,14 @@ func (s *Server) ConnectToSandbox(name string) error {
 	containerIP := metadata.ContainerIP()
 	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP)
 
-	// Use SSH to connect to sandbox
-	command := fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace",
-		config.TmuxSessionName, config.TmuxSessionName)
-	return ssh.ReplaceWithSession(containerIP, command)
+	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
+
+	// Use SSH to connect to sandbox with the appropriate multiplexer command
+	if attachCmd := mux.AttachCommand(); attachCmd != "" {
+		return ssh.ReplaceWithSession(containerIP, attachCmd)
+	}
+	// For wezterm: gateway is SSH-based, fall back to interactive shell
+	return ssh.ReplaceWithSession(containerIP, "")
 }
 
 // ListSandboxes returns a formatted list of sandboxes

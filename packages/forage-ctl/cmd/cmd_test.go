@@ -241,8 +241,8 @@ func TestSSHCommand_Help(t *testing.T) {
 		t.Fatalf("Help command failed: %v", err)
 	}
 
-	if !strings.Contains(stdout, "SSH") || !strings.Contains(stdout, "tmux") {
-		t.Error("SSH help should mention SSH and tmux")
+	if !strings.Contains(stdout, "SSH") || !strings.Contains(stdout, "multiplexer") {
+		t.Error("SSH help should mention SSH and multiplexer")
 	}
 }
 
