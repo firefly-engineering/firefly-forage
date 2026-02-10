@@ -10,6 +10,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/terminal"
 )
 
 var sshCmd = &cobra.Command{
@@ -20,6 +21,7 @@ var sshCmd = &cobra.Command{
 }
 
 func init() {
+	sshCmd.Flags().Bool("no-tmux-cc", false, "Disable tmux control mode (-CC) even when WezTerm is detected")
 	rootCmd.AddCommand(sshCmd)
 }
 
@@ -34,7 +36,12 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
 
 	if attachCmd := mux.AttachCommand(); attachCmd != "" {
-		// tmux path: exec into SSH with tmux attach
+		noCC, _ := cmd.Flags().GetBool("no-tmux-cc")
+		if !noCC && terminal.SupportsControlMode() {
+			if tmux, ok := mux.(*multiplexer.Tmux); ok {
+				attachCmd = tmux.AttachCommandCC()
+			}
+		}
 		return ssh.ReplaceWithSession(metadata.ContainerIP(), attachCmd)
 	}
 
