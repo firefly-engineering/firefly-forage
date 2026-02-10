@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 )
 
 func TestStatusConstants(t *testing.T) {
@@ -15,7 +16,7 @@ func TestStatusConstants(t *testing.T) {
 	}{
 		{StatusHealthy, "healthy"},
 		{StatusUnhealthy, "unhealthy"},
-		{StatusNoTmux, "no-tmux"},
+		{StatusNoMux, "no-mux"},
 		{StatusStopped, "stopped"},
 	}
 
@@ -66,9 +67,9 @@ func TestCheckResult(t *testing.T) {
 	result := &CheckResult{
 		ContainerRunning: true,
 		SSHReachable:     true,
-		TmuxActive:       true,
+		MuxActive:        true,
 		Uptime:           "1h 30m",
-		TmuxWindows:      []string{"0:bash", "1:nvim"},
+		MuxWindows:       []string{"0:bash", "1:nvim"},
 	}
 
 	if !result.ContainerRunning {
@@ -77,14 +78,14 @@ func TestCheckResult(t *testing.T) {
 	if !result.SSHReachable {
 		t.Error("SSHReachable should be true")
 	}
-	if !result.TmuxActive {
-		t.Error("TmuxActive should be true")
+	if !result.MuxActive {
+		t.Error("MuxActive should be true")
 	}
 	if result.Uptime != "1h 30m" {
 		t.Errorf("Uptime = %q, want %q", result.Uptime, "1h 30m")
 	}
-	if len(result.TmuxWindows) != 2 {
-		t.Errorf("TmuxWindows length = %d, want 2", len(result.TmuxWindows))
+	if len(result.MuxWindows) != 2 {
+		t.Errorf("MuxWindows length = %d, want 2", len(result.MuxWindows))
 	}
 }
 
@@ -96,18 +97,20 @@ func TestCheckSSH_NoConnection(t *testing.T) {
 	}
 }
 
-func TestCheckTmux_NoConnection(t *testing.T) {
+func TestCheckMux_NoConnection(t *testing.T) {
 	// Test with an IP that definitely won't have SSH running
-	result := CheckTmux("192.0.2.1") // TEST-NET-1 address
+	mux := multiplexer.New(multiplexer.TypeTmux)
+	result := CheckMux("192.0.2.1", mux) // TEST-NET-1 address
 	if result {
-		t.Error("CheckTmux should return false for unreachable host")
+		t.Error("CheckMux should return false for unreachable host")
 	}
 }
 
-func TestGetTmuxWindows_NoConnection(t *testing.T) {
+func TestGetMuxWindows_NoConnection(t *testing.T) {
 	// Test with an IP that definitely won't have SSH running
-	windows := GetTmuxWindows("192.0.2.1") // TEST-NET-1 address
+	mux := multiplexer.New(multiplexer.TypeTmux)
+	windows := GetMuxWindows("192.0.2.1", mux) // TEST-NET-1 address
 	if windows != nil {
-		t.Error("GetTmuxWindows should return nil for unreachable host")
+		t.Error("GetMuxWindows should return nil for unreachable host")
 	}
 }

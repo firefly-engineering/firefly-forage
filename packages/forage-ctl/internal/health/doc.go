@@ -1,31 +1,31 @@
 // Package health provides health check utilities for sandbox monitoring.
 //
 // Health checks verify that a sandbox is fully operational by checking
-// container status, SSH connectivity, and tmux session availability.
+// container status, SSH connectivity, and multiplexer session availability.
 //
 // # Health Status
 //
 // Sandbox health is represented by Status:
 //
-//	StatusHealthy   - Container running, SSH reachable, tmux active
+//	StatusHealthy   - Container running, SSH reachable, mux active
 //	StatusUnhealthy - Container running but SSH unreachable
-//	StatusNoTmux    - SSH reachable but tmux session not found
+//	StatusNoMux     - SSH reachable but multiplexer session not found
 //	StatusStopped   - Container not running
 //
 // # Check Functions
 //
 // Individual checks:
 //
-//	health.CheckSSH(port)      // SSH connectivity
-//	health.CheckTmux(port)     // tmux session exists
-//	health.GetUptime(name, rt) // Container uptime
+//	health.CheckSSH(host)           // SSH connectivity
+//	health.CheckMux(host, mux)      // multiplexer session exists
+//	health.GetUptime(name, rt)      // Container uptime
 //
 // Combined checks:
 //
-//	result := health.Check(sandboxName, port, rt)
-//	// result.ContainerRunning, .SSHReachable, .TmuxActive, .Uptime
+//	result := health.Check(sandboxName, host, rt, mux)
+//	// result.ContainerRunning, .SSHReachable, .MuxActive, .Uptime
 //
-//	status := health.GetSummary(sandboxName, port, rt)
+//	status := health.GetSummary(sandboxName, host, rt, mux)
 //	// Returns StatusHealthy, StatusUnhealthy, etc.
 //
 // # Constants

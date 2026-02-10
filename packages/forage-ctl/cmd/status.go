@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 )
 
 var statusCmd = &cobra.Command{
@@ -28,7 +29,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result := health.Check(name, metadata.ContainerIP(), getRuntime())
+	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
+	result := health.Check(name, metadata.ContainerIP(), getRuntime(), mux)
 
 	fmt.Printf("Sandbox: %s\n", metadata.Name)
 	fmt.Printf("Template: %s\n", metadata.Template)
@@ -70,9 +72,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if result.ContainerRunning {
 		fmt.Printf("  Uptime: %s\n", result.Uptime)
 		fmt.Printf("  SSH: %s\n", boolStatus(result.SSHReachable))
-		fmt.Printf("  Tmux: %s\n", boolStatus(result.TmuxActive))
-		if len(result.TmuxWindows) > 0 {
-			fmt.Printf("  Windows: %s\n", strings.Join(result.TmuxWindows, ", "))
+		fmt.Printf("  Mux: %s\n", boolStatus(result.MuxActive))
+		if len(result.MuxWindows) > 0 {
+			fmt.Printf("  Windows: %s\n", strings.Join(result.MuxWindows, ", "))
 		}
 	}
 

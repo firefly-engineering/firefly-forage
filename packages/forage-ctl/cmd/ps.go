@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 )
 
 var psCmd = &cobra.Command{
@@ -40,7 +41,8 @@ func runPs(cmd *cobra.Command, args []string) error {
 
 	for _, sb := range sandboxes {
 		mode := sb.WorkspaceMode
-		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
+		mux := multiplexer.New(multiplexer.Type(sb.Multiplexer))
+		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt, mux)
 		statusStr := formatStatus(status)
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
@@ -57,8 +59,8 @@ func formatStatus(status health.Status) string {
 		return "✓ healthy"
 	case health.StatusUnhealthy:
 		return "⚠ unhealthy"
-	case health.StatusNoTmux:
-		return "○ no-tmux"
+	case health.StatusNoMux:
+		return "○ no-mux"
 	case health.StatusStopped:
 		return "● stopped"
 	default:

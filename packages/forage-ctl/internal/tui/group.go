@@ -12,6 +12,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
@@ -71,7 +72,8 @@ func buildGroupedItems(sandboxes []*config.SandboxMetadata, rt runtime.Runtime) 
 	for _, g := range groups {
 		items = append(items, headerItem{label: g.key})
 		for _, sb := range g.sandboxes {
-			status := health.GetSummary(sb.Name, sb.ContainerIP(), rt)
+			mux := multiplexer.New(multiplexer.Type(sb.Multiplexer))
+			status := health.GetSummary(sb.Name, sb.ContainerIP(), rt, mux)
 			uptime := "stopped"
 			if status != health.StatusStopped {
 				uptime = health.GetUptime(sb.Name, rt)

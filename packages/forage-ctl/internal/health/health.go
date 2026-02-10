@@ -3,10 +3,9 @@ package health
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
@@ -22,7 +21,7 @@ type Status string
 const (
 	StatusHealthy   Status = "healthy"
 	StatusUnhealthy Status = "unhealthy"
-	StatusNoTmux    Status = "no-tmux"
+	StatusNoMux     Status = "no-mux"
 	StatusStopped   Status = "stopped"
 
 	// SSHReadyTimeoutSeconds is the default timeout waiting for SSH to become ready.
@@ -33,9 +32,9 @@ const (
 type CheckResult struct {
 	ContainerRunning bool
 	SSHReachable     bool
-	TmuxActive       bool
+	MuxActive        bool
 	Uptime           string
-	TmuxWindows      []string
+	MuxWindows       []string
 }
 
 // CheckSSH checks if SSH is reachable
@@ -43,26 +42,21 @@ func CheckSSH(host string) bool {
 	return ssh.CheckConnection(host)
 }
 
-// CheckTmux checks if the tmux session exists
-func CheckTmux(host string) bool {
-	_, err := ssh.ExecWithOutput(host, "tmux", "has-session", "-t", config.TmuxSessionName)
+// CheckMux checks if the multiplexer session exists
+func CheckMux(host string, mux multiplexer.Multiplexer) bool {
+	args := mux.CheckSessionArgs()
+	_, err := ssh.ExecWithOutput(host, args...)
 	return err == nil
 }
 
-// GetTmuxWindows returns the list of tmux windows
-func GetTmuxWindows(host string) []string {
-	output, err := ssh.ExecWithOutput(host, "tmux", "list-windows", "-t", config.TmuxSessionName, "-F", "#{window_index}:#{window_name}")
+// GetMuxWindows returns the list of multiplexer windows
+func GetMuxWindows(host string, mux multiplexer.Multiplexer) []string {
+	args := mux.ListWindowsArgs()
+	output, err := ssh.ExecWithOutput(host, args...)
 	if err != nil {
 		return nil
 	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	var windows []string
-	for _, line := range lines {
-		if line != "" {
-			windows = append(windows, line)
-		}
-	}
-	return windows
+	return mux.ParseWindowList(output)
 }
 
 // GetUptime returns the container uptime in human-readable format.
@@ -123,7 +117,7 @@ func formatDuration(d time.Duration) string {
 
 // Check performs all health checks for a sandbox.
 // The rt parameter is optional; if nil, container running check returns false.
-func Check(sandboxName string, host string, rt runtime.Runtime) *CheckResult {
+func Check(sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) *CheckResult {
 	result := &CheckResult{}
 
 	// Check container
@@ -143,10 +137,10 @@ func Check(sandboxName string, host string, rt runtime.Runtime) *CheckResult {
 		return result
 	}
 
-	// Check tmux
-	result.TmuxActive = CheckTmux(host)
-	if result.TmuxActive {
-		result.TmuxWindows = GetTmuxWindows(host)
+	// Check multiplexer
+	result.MuxActive = CheckMux(host, mux)
+	if result.MuxActive {
+		result.MuxWindows = GetMuxWindows(host, mux)
 	}
 
 	return result
@@ -154,7 +148,7 @@ func Check(sandboxName string, host string, rt runtime.Runtime) *CheckResult {
 
 // GetSummary returns a summary health status.
 // The rt parameter is optional; if nil, returns StatusStopped.
-func GetSummary(sandboxName string, host string, rt runtime.Runtime) Status {
+func GetSummary(sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) Status {
 	if rt == nil {
 		return StatusStopped
 	}
@@ -165,8 +159,8 @@ func GetSummary(sandboxName string, host string, rt runtime.Runtime) Status {
 	if !CheckSSH(host) {
 		return StatusUnhealthy
 	}
-	if !CheckTmux(host) {
-		return StatusNoTmux
+	if !CheckMux(host, mux) {
+		return StatusNoMux
 	}
 	return StatusHealthy
 }

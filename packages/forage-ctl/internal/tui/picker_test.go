@@ -95,7 +95,7 @@ func TestSandboxItemStatusIcons(t *testing.T) {
 	}{
 		{health.StatusHealthy, "✓"},
 		{health.StatusUnhealthy, "⚠"},
-		{health.StatusNoTmux, "○"},
+		{health.StatusNoMux, "○"},
 		{health.StatusStopped, "●"},
 	}
 

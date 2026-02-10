@@ -11,6 +11,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
@@ -45,7 +46,7 @@ type CreateOptions struct {
 	Template     string
 	RepoPath     string
 	Direct       bool
-	NoTmuxConfig bool
+	NoMuxConfig bool
 	GitUser      string
 	GitEmail     string
 	SSHKeyPath   string
@@ -78,7 +79,7 @@ func (i sandboxItem) Description() string {
 		statusIcon = "✓"
 	case health.StatusUnhealthy:
 		statusIcon = "⚠"
-	case health.StatusNoTmux:
+	case health.StatusNoMux:
 		statusIcon = "○"
 	case health.StatusStopped:
 		statusIcon = "●"
@@ -363,14 +364,15 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt r
 	}
 
 	for i, sandbox := range sandboxes {
-		status := health.GetSummary(sandbox.Name, sandbox.ContainerIP(), rt)
+		mux := multiplexer.New(multiplexer.Type(sandbox.Multiplexer))
+		status := health.GetSummary(sandbox.Name, sandbox.ContainerIP(), rt, mux)
 		statusIcon := "●"
 		switch status {
 		case health.StatusHealthy:
 			statusIcon = "✓"
 		case health.StatusUnhealthy:
 			statusIcon = "⚠"
-		case health.StatusNoTmux:
+		case health.StatusNoMux:
 			statusIcon = "○"
 		}
 
