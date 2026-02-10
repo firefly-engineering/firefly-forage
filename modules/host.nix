@@ -294,7 +294,7 @@ in
     environment.etc =
       {
         "firefly-forage/config.json" = {
-          text = builtins.toJSON {
+          text = builtins.toJSON ({
             user = cfg.user;
             uid = config.users.users.${cfg.user}.uid;
             gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
@@ -318,13 +318,13 @@ in
                 then resolveTilde (toString cfg.agentIdentity.sshKeyPath)
                 else null;
             };
-          };
+          });
         };
       }
       // mapAttrs (
         name: template: {
           target = "firefly-forage/templates/${name}.json";
-          text = builtins.toJSON {
+          text = builtins.toJSON ({
             inherit name;
             inherit (template)
               description
@@ -364,7 +364,7 @@ in
                 then resolveTilde (toString template.agentIdentity.sshKeyPath)
                 else null;
             };
-          };
+          });
         }
       ) cfg.templates;
   };
