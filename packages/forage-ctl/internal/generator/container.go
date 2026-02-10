@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 )
 
@@ -56,7 +57,8 @@ type ContainerConfig struct {
 	ProxyURL          string             // URL of the forage-proxy server (if using proxy mode)
 	UID               int                // Host user's UID for the container agent user
 	GID               int                // Host user's GID for the container agent user
-	NoTmuxConfig      bool               // Skip mounting host tmux config into the container
+	NoMuxConfig       bool               // Skip mounting host mux config into the container
+	Multiplexer       string             // Multiplexer type ("tmux", "wezterm", or "" for default)
 	PermissionsMounts []PermissionsMount // Agent permissions settings files to bind-mount
 	AgentIdentity     *config.AgentIdentity // Optional agent identity for git authorship and SSH key
 	SystemPromptPath  string             // Host path to .system-prompt.md file (may be empty)
@@ -123,10 +125,15 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		GID:            cfg.GID,
 	}
 
-	// Compute tmux windows: use explicit config if set, else one window per agent
+	// Build multiplexer
+	mux := multiplexer.New(multiplexer.Type(cfg.Multiplexer))
+	data.MuxPackages = mux.NixPackages()
+
+	// Compute windows: use explicit config if set, else one window per agent
+	var windows []multiplexer.Window
 	if len(cfg.Template.TmuxWindows) > 0 {
 		for _, w := range cfg.Template.TmuxWindows {
-			data.TmuxWindows = append(data.TmuxWindows, TmuxWindow{Name: w.Name, Command: w.Command})
+			windows = append(windows, multiplexer.Window{Name: w.Name, Command: w.Command})
 		}
 	} else {
 		names := make([]string, 0, len(cfg.Template.Agents))
@@ -135,9 +142,10 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			data.TmuxWindows = append(data.TmuxWindows, TmuxWindow{Name: name, Command: name})
+			windows = append(windows, multiplexer.Window{Name: name, Command: name})
 		}
 	}
+	data.MuxInitScript = mux.InitScript(windows)
 
 	// Build bind mounts
 	data.BindMounts = []BindMount{
@@ -222,24 +230,15 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
-	// Detect and mount host tmux config
-	if !cfg.NoTmuxConfig && cfg.HostConfig != nil {
+	// Detect and mount host multiplexer config
+	if !cfg.NoMuxConfig && cfg.HostConfig != nil {
 		homeDir := resolveUserHome(cfg.HostConfig.User)
 		if homeDir != "" {
-			// Tmux config: prefer ~/.config/tmux dir, fall back to ~/.tmux.conf
-			tmuxConfigDir := filepath.Join(homeDir, ".config", "tmux")
-			tmuxConfFile := filepath.Join(homeDir, ".tmux.conf")
-			if info, err := os.Stat(tmuxConfigDir); err == nil && info.IsDir() {
+			for _, cm := range mux.HostConfigMounts(homeDir) {
 				data.BindMounts = append(data.BindMounts, BindMount{
-					Path:     "/home/agent/.config/tmux",
-					HostPath: tmuxConfigDir,
-					ReadOnly: true,
-				})
-			} else if _, err := os.Stat(tmuxConfFile); err == nil {
-				data.BindMounts = append(data.BindMounts, BindMount{
-					Path:     "/home/agent/.tmux.conf",
-					HostPath: tmuxConfFile,
-					ReadOnly: true,
+					Path:     cm.ContainerPath,
+					HostPath: cm.HostPath,
+					ReadOnly: cm.ReadOnly,
 				})
 			}
 		}

@@ -1247,6 +1247,46 @@ func TestGenerateNixConfig_TmuxWriteShellScript(t *testing.T) {
 	}
 }
 
+func TestGenerateNixConfig_WeztermMultiplexer(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Multiplexer = "wezterm"
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should contain wezterm package instead of tmux
+	if !strings.Contains(result, "wezterm") {
+		t.Error("Config should contain wezterm package")
+	}
+	if strings.Contains(result, "\n        tmux\n") {
+		t.Error("Config should NOT contain tmux package when using wezterm")
+	}
+	// Should use wezterm-mux-server in init script
+	if !strings.Contains(result, "wezterm-mux-server") {
+		t.Error("Config should contain wezterm-mux-server in init script")
+	}
+}
+
+func TestGenerateNixConfig_DefaultMultiplexer(t *testing.T) {
+	cfg := validTestConfig()
+	// Multiplexer field is empty (default)
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should use tmux by default
+	if !strings.Contains(result, "tmux") {
+		t.Error("Config should contain tmux by default")
+	}
+	if !strings.Contains(result, "tmux new-session") {
+		t.Error("Config should use tmux init script by default")
+	}
+}
+
 // TestGenerateNixConfig_RestrictedNetwork tests restricted network mode separately
 // because it involves DNS resolution which produces dynamic IP addresses.
 func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {

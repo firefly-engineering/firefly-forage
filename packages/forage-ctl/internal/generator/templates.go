@@ -1,16 +1,8 @@
 package generator
 
 import (
-	"fmt"
-	"strings"
 	"text/template"
 )
-
-// TmuxWindow describes a tmux window to create at sandbox start.
-type TmuxWindow struct {
-	Name    string
-	Command string
-}
 
 // TemplateData holds all data needed to render the container Nix configuration.
 type TemplateData struct {
@@ -23,7 +15,8 @@ type TemplateData struct {
 	AgentPackages      []string
 	EnvVars            []EnvVar
 	RegistryConfig     RegistryConfig
-	TmuxWindows        []TmuxWindow
+	MuxPackages        []string // Multiplexer packages to install (e.g. ["tmux"] or ["wezterm"])
+	MuxInitScript      string   // Pre-rendered init script from multiplexer backend
 	UID                int      // Host user's UID for the container agent user
 	GID                int      // Host user's GID for the container agent user
 	ExtraTmpfilesRules []string // Additional systemd tmpfiles rules
@@ -59,12 +52,6 @@ func nixBool(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-// shellQuote returns a single-quoted shell string, escaping any embedded
-// single quotes using the '\'' idiom.
-func shellQuote(s string) string {
-	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 // containerTemplate is the main Go template for generating NixOS container configurations.
@@ -114,7 +101,9 @@ const containerTemplateText = `{ pkgs, ... }: {
       environment.systemPackages = with pkgs; [
         git
         jujutsu
-        tmux
+{{- range .MuxPackages}}
+        {{.}}
+{{- end}}
         neovim
         ripgrep
         fd
@@ -162,17 +151,7 @@ const containerTemplateText = `{ pkgs, ... }: {
           User = "agent";
           WorkingDirectory = "/workspace";
           ExecStart = "${pkgs.writeShellScript "forage-init" ''
-{{- range $i, $w := .TmuxWindows}}
-{{- if eq $i 0}}
-            tmux new-session -d -s forage -c /workspace -n {{$w.Name}}
-{{- else}}
-            tmux new-window -t forage -n {{$w.Name}} -c /workspace
-{{- end}}
-{{- if $w.Command}}
-            tmux send-keys -t forage:{{$w.Name}} {{$w.Command | shellQuote}} Enter
-{{- end}}
-{{- end}}
-            true
+{{.MuxInitScript}}
           ''}";
         };
       };
@@ -208,8 +187,7 @@ var containerTemplate *template.Template
 
 func init() {
 	funcs := template.FuncMap{
-		"nixBool":    nixBool,
-		"shellQuote": shellQuote,
+		"nixBool": nixBool,
 	}
 	containerTemplate = template.Must(template.New("container").Funcs(funcs).Parse(containerTemplateText))
 }
