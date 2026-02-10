@@ -978,6 +978,87 @@ func TestTemplate_AgentIdentity_BackwardCompat(t *testing.T) {
 	}
 }
 
+func TestSandboxMetadata_Multiplexer_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	metadata := &SandboxMetadata{
+		Name:        "mux-test",
+		Template:    "claude",
+		Workspace:   "/workspace",
+		NetworkSlot: 1,
+		Multiplexer: "wezterm",
+	}
+
+	if err := SaveSandboxMetadata(tmpDir, metadata); err != nil {
+		t.Fatalf("SaveSandboxMetadata failed: %v", err)
+	}
+
+	loaded, err := LoadSandboxMetadata(tmpDir, "mux-test")
+	if err != nil {
+		t.Fatalf("LoadSandboxMetadata failed: %v", err)
+	}
+
+	if loaded.Multiplexer != "wezterm" {
+		t.Errorf("Multiplexer = %q, want %q", loaded.Multiplexer, "wezterm")
+	}
+}
+
+func TestSandboxMetadata_Multiplexer_BackwardCompat(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// JSON without multiplexer (old format)
+	data := `{"name": "old-sandbox", "template": "claude", "networkSlot": 1, "workspace": "/w"}`
+	metaPath := filepath.Join(tmpDir, "old-sandbox.json")
+	if err := os.WriteFile(metaPath, []byte(data), 0644); err != nil {
+		t.Fatalf("Failed to write metadata: %v", err)
+	}
+
+	loaded, err := LoadSandboxMetadata(tmpDir, "old-sandbox")
+	if err != nil {
+		t.Fatalf("LoadSandboxMetadata failed: %v", err)
+	}
+
+	if loaded.Multiplexer != "" {
+		t.Errorf("Multiplexer = %q, want empty for old format", loaded.Multiplexer)
+	}
+}
+
+func TestTemplate_Multiplexer_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tmpl := Template{
+		Name:        "wez-template",
+		Network:     "full",
+		Multiplexer: "wezterm",
+		Agents: map[string]AgentConfig{
+			"claude": {
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(tmpl, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	templatePath := filepath.Join(tmpDir, "wez-template.json")
+	if err := os.WriteFile(templatePath, data, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	loaded, err := LoadTemplate(tmpDir, "wez-template")
+	if err != nil {
+		t.Fatalf("LoadTemplate failed: %v", err)
+	}
+
+	if loaded.Multiplexer != "wezterm" {
+		t.Errorf("Multiplexer = %q, want %q", loaded.Multiplexer, "wezterm")
+	}
+}
+
 func TestValidateSandboxName(t *testing.T) {
 	tests := []struct {
 		name    string

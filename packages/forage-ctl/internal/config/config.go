@@ -88,6 +88,7 @@ const (
 	DefaultSecretsDir = "/run/forage-secrets"
 	ContainerPrefix   = "forage-"
 	TmuxSessionName   = "forage"
+	MuxSessionName    = TmuxSessionName // alias for new code
 )
 
 // AgentIdentity holds optional git authorship and SSH key configuration
@@ -256,6 +257,7 @@ type Template struct {
 	UseProxy      bool                   `json:"useProxy,omitempty"`      // Use forage-proxy for API calls
 	AgentIdentity *AgentIdentity         `json:"agentIdentity,omitempty"` // Template-level default agent identity
 	TmuxWindows   []TmuxWindow           `json:"tmuxWindows,omitempty"`   // Explicit tmux window layout
+	Multiplexer   string                 `json:"multiplexer,omitempty"`   // "tmux" (default) or "wezterm"
 }
 
 // AgentPermissions controls agent permission settings.
@@ -357,6 +359,7 @@ type SandboxMetadata struct {
 	JJWorkspaceName string         `json:"jjWorkspaceName,omitempty"` // JJ workspace name
 	GitBranch       string         `json:"gitBranch,omitempty"`       // Git branch name for worktree
 	AgentIdentity   *AgentIdentity `json:"agentIdentity,omitempty"`   // Resolved agent identity
+	Multiplexer     string         `json:"multiplexer,omitempty"`     // "tmux" (default) or "wezterm"
 }
 
 // ContainerIP returns the container's IP address based on its network slot.
