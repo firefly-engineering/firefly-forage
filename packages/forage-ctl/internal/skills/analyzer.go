@@ -9,6 +9,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 )
 
 // ProjectType represents the detected project type
@@ -321,7 +322,7 @@ type systemPromptData struct {
 	SSHKeyPath    string
 	Agents        []agentEntry
 	UseProxy      bool
-	TmuxSession   string
+	MuxInstructions string
 }
 
 type agentEntry struct {
@@ -330,16 +331,17 @@ type agentEntry struct {
 }
 
 func buildSystemPromptData(metadata *config.SandboxMetadata, template *config.Template) *systemPromptData {
+	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
 	data := &systemPromptData{
-		Name:          metadata.Name,
-		Template:      metadata.Template,
-		WorkspaceMode: metadata.WorkspaceMode,
-		SourceRepo:    metadata.SourceRepo,
-		GitBranch:     metadata.GitBranch,
-		Network:       template.Network,
-		AllowedHosts:  template.AllowedHosts,
-		UseProxy:      template.UseProxy,
-		TmuxSession:   config.TmuxSessionName,
+		Name:            metadata.Name,
+		Template:        metadata.Template,
+		WorkspaceMode:   metadata.WorkspaceMode,
+		SourceRepo:      metadata.SourceRepo,
+		GitBranch:       metadata.GitBranch,
+		Network:         template.Network,
+		AllowedHosts:    template.AllowedHosts,
+		UseProxy:        template.UseProxy,
+		MuxInstructions: mux.PromptInstructions(),
 	}
 
 	if metadata.AgentIdentity != nil {
@@ -548,7 +550,8 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 	sb.WriteString("## Guidelines\n\n")
 	sb.WriteString("- Work within the `/workspace` directory\n")
 	sb.WriteString("- The container filesystem (except /workspace) is ephemeral\n")
-	sb.WriteString(fmt.Sprintf("- Use tmux for persistent sessions (`tmux attach -t %s`)\n", config.TmuxSessionName))
+	muxForLegacy := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
+	sb.WriteString(fmt.Sprintf("- %s\n", muxForLegacy.PromptInstructions()))
 
 	return sb.String()
 }
