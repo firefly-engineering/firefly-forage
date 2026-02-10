@@ -43,6 +43,12 @@ func (t *Tmux) AttachCommand() string {
 	return fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace", SessionName, SessionName)
 }
 
+// AttachCommandCC returns the remote command for tmux control mode (-CC).
+// This is tmux-specific and not part of the Multiplexer interface.
+func (t *Tmux) AttachCommandCC() string {
+	return fmt.Sprintf("tmux -CC attach-session -t %s || tmux -CC new-session -s %s -c /workspace", SessionName, SessionName)
+}
+
 func (t *Tmux) CheckSessionArgs() []string {
 	return []string{"tmux", "has-session", "-t", SessionName}
 }
