@@ -5,13 +5,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/terminal"
 )
 
 // SessionName is the tmux/mux session name used in all sandboxes.
 const SessionName = "forage"
 
 // Tmux implements Multiplexer for tmux.
-type Tmux struct{}
+type Tmux struct {
+	// DisableControlMode prevents automatic use of tmux -CC even when
+	// the host terminal supports it. Used by --no-tmux-cc flag.
+	DisableControlMode bool
+}
 
 func (t *Tmux) Type() Type { return TypeTmux }
 
@@ -40,13 +46,12 @@ func (t *Tmux) InitScript(windows []Window) string {
 }
 
 func (t *Tmux) AttachCommand() string {
+	// Use tmux control mode (-CC) when the host terminal supports it,
+	// unless explicitly disabled.
+	if !t.DisableControlMode && terminal.SupportsControlMode() {
+		return fmt.Sprintf("tmux -CC attach-session -t %s || tmux -CC new-session -s %s -c /workspace", SessionName, SessionName)
+	}
 	return fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace", SessionName, SessionName)
-}
-
-// AttachCommandCC returns the remote command for tmux control mode (-CC).
-// This is tmux-specific and not part of the Multiplexer interface.
-func (t *Tmux) AttachCommandCC() string {
-	return fmt.Sprintf("tmux -CC attach-session -t %s || tmux -CC new-session -s %s -c /workspace", SessionName, SessionName)
 }
 
 func (t *Tmux) CheckSessionArgs() []string {

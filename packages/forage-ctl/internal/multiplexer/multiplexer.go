@@ -60,13 +60,32 @@ type Multiplexer interface {
 	PromptInstructions() string
 }
 
+// Option configures a Multiplexer. Options that don't apply to a
+// particular multiplexer type are silently ignored.
+type Option func(Multiplexer)
+
+// WithControlMode sets whether to use control mode (e.g. tmux -CC).
+// Only affects multiplexers that support control mode.
+func WithControlMode(enabled bool) Option {
+	return func(m Multiplexer) {
+		if t, ok := m.(*Tmux); ok {
+			t.DisableControlMode = !enabled
+		}
+	}
+}
+
 // New returns a Multiplexer for the given type.
 // Defaults to TypeTmux for empty or unrecognised values.
-func New(t Type) Multiplexer {
+func New(t Type, opts ...Option) Multiplexer {
+	var m Multiplexer
 	switch t {
 	case TypeWezterm:
-		return &Wezterm{}
+		m = &Wezterm{}
 	default:
-		return &Tmux{}
+		m = &Tmux{}
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
