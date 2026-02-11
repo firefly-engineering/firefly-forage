@@ -155,12 +155,14 @@ const containerTemplateText = `{ pkgs, ... }: {
         serviceConfig = {
           Type = "oneshot";
           User = "agent";
-          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh && " +
+          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh /home/agent/.config/jj && " +
 {{- if .GitUser}}
             "${pkgs.git}/bin/git config --global user.name {{.GitUser | printf "%q"}} && " +
+            "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | printf "%q"}} && " +
 {{- end}}
 {{- if .GitEmail}}
             "${pkgs.git}/bin/git config --global user.email {{.GitEmail | printf "%q"}} && " +
+            "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | printf "%q"}} && " +
 {{- end}}
 {{- if .SSHKeyName}}
             "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +

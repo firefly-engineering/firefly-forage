@@ -122,21 +122,33 @@ func ValidateAgentIdentity(id *AgentIdentity) error {
 	return nil
 }
 
-// ReadHostUserGitIdentity reads the git user.name and user.email from the
-// given user's ~/.gitconfig (or ~/.config/git/config) as a fallback identity.
-// Returns nil if no git config is found or no user section exists.
+// ReadHostUserGitIdentity reads the git/jj user.name and user.email from the
+// given user's config files as a fallback identity. Checks jj config first
+// (since that's what forage workspaces typically use), then falls back to git config.
+// Returns nil if no config is found or no user section exists.
 func ReadHostUserGitIdentity(username string) *AgentIdentity {
 	u, err := user.Lookup(username)
 	if err != nil {
 		return nil
 	}
 
-	paths := []string{
+	// Try jj config first (preferred for forage workspaces)
+	jjPaths := []string{
+		filepath.Join(u.HomeDir, ".config", "jj", "config.toml"),
+		filepath.Join(u.HomeDir, ".jjconfig.toml"),
+	}
+	for _, p := range jjPaths {
+		if id := parseJJConfigIdentity(p); id != nil {
+			return id
+		}
+	}
+
+	// Fall back to git config
+	gitPaths := []string{
 		filepath.Join(u.HomeDir, ".gitconfig"),
 		filepath.Join(u.HomeDir, ".config", "git", "config"),
 	}
-
-	for _, p := range paths {
+	for _, p := range gitPaths {
 		if id := parseGitConfigIdentity(p); id != nil {
 			return id
 		}
@@ -184,6 +196,50 @@ func parseGitConfigIdentity(path string) *AgentIdentity {
 		return nil
 	}
 	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
+}
+
+// parseJJConfigIdentity extracts user.name and user.email from a jj config file (TOML format).
+func parseJJConfigIdentity(path string) *AgentIdentity {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var jjUser, jjEmail string
+	inUserSection := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "[user]" {
+			inUserSection = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inUserSection = false
+			continue
+		}
+		if !inUserSection {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		// TOML strings are quoted
+		val = strings.Trim(val, `"'`)
+		switch key {
+		case "name":
+			jjUser = val
+		case "email":
+			jjEmail = val
+		}
+	}
+
+	if jjUser == "" && jjEmail == "" {
+		return nil
+	}
+	return &AgentIdentity{GitUser: jjUser, GitEmail: jjEmail}
 }
 
 // HostConfig represents the host configuration from config.json
