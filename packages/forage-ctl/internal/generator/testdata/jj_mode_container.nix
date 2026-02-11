@@ -11,6 +11,7 @@
       "/workspace" = { hostPath = "/var/lib/forage/workspaces/test-sandbox"; isReadOnly = false; };
       "/run/secrets" = { hostPath = "/run/secrets/test-sandbox"; isReadOnly = true; };
       "/home/user/myrepo/.jj" = { hostPath = "/home/user/myrepo/.jj"; isReadOnly = false; };
+      "/home/user/myrepo/.git" = { hostPath = "/home/user/myrepo/.git"; isReadOnly = false; };
     };
 
     config = { pkgs, ... }: {

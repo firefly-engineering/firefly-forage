@@ -791,12 +791,13 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 		{
 			name: "jj_mode",
 			modifyFunc: func(c *ContainerConfig) {
-				// Change workspace mount to jj workspace path and add .jj mount
+				// Change workspace mount to jj workspace path and add .jj and .git mounts
 				c.Contributions.Mounts = []injection.Mount{
 					{HostPath: "/nix/store", ContainerPath: "/nix/store", ReadOnly: true},
 					{HostPath: "/var/lib/forage/workspaces/test-sandbox", ContainerPath: "/workspace", ReadOnly: false},
 					{HostPath: "/run/secrets/test-sandbox", ContainerPath: "/run/secrets", ReadOnly: true},
 					{HostPath: "/home/user/myrepo/.jj", ContainerPath: "/home/user/myrepo/.jj", ReadOnly: false},
+					{HostPath: "/home/user/myrepo/.git", ContainerPath: "/home/user/myrepo/.git", ReadOnly: false},
 				}
 			},
 			goldenFile: "jj_mode_container.nix",

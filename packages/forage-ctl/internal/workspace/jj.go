@@ -72,23 +72,34 @@ func (b *JJBackend) Remove(repoPath, name, workspacePath string) error {
 }
 
 // ContributeMounts returns mounts for jj workspace mode.
-// Only mounts .jj directory - intentionally omits .git to enforce jj-only operations.
+// Mounts both .jj and .git directories since jj uses git as its storage backend.
 func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
 	if req.SourceRepo == "" {
 		return nil, nil
 	}
 
-	// Only mount .jj - do NOT mount .git to enforce jj-only operations
 	jjPath := filepath.Join(req.SourceRepo, ".jj")
 	if _, err := os.Stat(jjPath); err != nil {
 		return nil, nil
 	}
 
-	return []injection.Mount{{
+	mounts := []injection.Mount{{
 		HostPath:      jjPath,
 		ContainerPath: jjPath,
 		ReadOnly:      false,
-	}}, nil
+	}}
+
+	// jj uses git as its storage backend, so .git must also be mounted
+	gitPath := filepath.Join(req.SourceRepo, ".git")
+	if _, err := os.Stat(gitPath); err == nil {
+		mounts = append(mounts, injection.Mount{
+			HostPath:      gitPath,
+			ContainerPath: gitPath,
+			ReadOnly:      false,
+		})
+	}
+
+	return mounts, nil
 }
 
 // ContributePromptFragments returns jj-specific VCS instructions.
