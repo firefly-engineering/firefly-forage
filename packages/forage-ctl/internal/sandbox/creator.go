@@ -11,6 +11,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
@@ -204,6 +205,9 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		logging.Debug("using API proxy", "url", proxyURL)
 	}
 
+	// Create multiplexer instance
+	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
+
 	containerCfg := &generator.ContainerConfig{
 		Name:              opts.Name,
 		NetworkSlot:       resources.networkSlot,
@@ -218,7 +222,7 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 		UID:               c.hostConfig.UID,
 		GID:               c.hostConfig.GID,
 		NoMuxConfig:       opts.NoMuxConfig,
-		Multiplexer:       string(resources.template.Multiplexer),
+		Mux:               mux,
 		PermissionsMounts: permsMounts,
 		AgentIdentity:     identity,
 		SystemPromptPath:  prompt.systemPromptPath,

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 )
 
@@ -1196,7 +1197,7 @@ func TestGenerateNixConfig_TmuxWriteShellScript(t *testing.T) {
 
 func TestGenerateNixConfig_WeztermMultiplexer(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.Multiplexer = "wezterm"
+	cfg.Mux = multiplexer.New(multiplexer.TypeWezterm)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {

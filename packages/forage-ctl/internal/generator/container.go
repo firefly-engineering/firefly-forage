@@ -67,8 +67,8 @@ type ContainerConfig struct {
 	ProxyURL          string             // URL of the forage-proxy server (if using proxy mode)
 	UID               int                // Host user's UID for the container agent user
 	GID               int                // Host user's GID for the container agent user
-	NoMuxConfig       bool               // Skip mounting host mux config into the container
-	Multiplexer       string             // Multiplexer type ("tmux", "wezterm", or "" for default)
+	NoMuxConfig bool                      // Skip mounting host mux config into the container
+	Mux         multiplexer.Multiplexer  // Multiplexer instance (created by caller)
 	PermissionsMounts []PermissionsMount // Agent permissions settings files to bind-mount
 	AgentIdentity     *config.AgentIdentity // Optional agent identity for git authorship and SSH key
 	SystemPromptPath  string             // Host path to .system-prompt.md file (may be empty)
@@ -144,8 +144,11 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		GID:            cfg.GID,
 	}
 
-	// Build multiplexer
-	mux := multiplexer.New(multiplexer.Type(cfg.Multiplexer))
+	// Use provided multiplexer
+	mux := cfg.Mux
+	if mux == nil {
+		mux = multiplexer.New(multiplexer.TypeTmux) // Default fallback
+	}
 	data.MuxPackages = mux.NixPackages()
 
 	// Compute windows: use explicit config if set, else one window per agent
