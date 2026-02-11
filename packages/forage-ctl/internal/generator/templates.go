@@ -83,6 +83,7 @@ const containerTemplateText = `{ pkgs, ... }: {
 
     config = { pkgs, ... }: {
       system.stateVersion = "{{.StateVersion}}";
+      nixpkgs.config.allowUnfree = true;
       {{.NetworkConfig}}
       users.users.agent = {
         isNormalUser = true;

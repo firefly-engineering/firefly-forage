@@ -14,6 +14,7 @@
 
     config = { pkgs, ... }: {
       system.stateVersion = "24.05";
+      nixpkgs.config.allowUnfree = true;
       # No network access
       networking.nameservers = [];
       networking.defaultGateway = null;
