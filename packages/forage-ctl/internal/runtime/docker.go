@@ -24,6 +24,12 @@ type DockerRuntime struct {
 
 	// UseRootless indicates whether to use rootless mode
 	UseRootless bool
+
+	// StagingDir is the directory for staging generated files
+	StagingDir string
+
+	// GeneratedFileMounter handles staging of generated files
+	GeneratedFileMounter
 }
 
 // NewDockerRuntime creates a new Docker/Podman runtime.
@@ -317,5 +323,11 @@ func (r *DockerRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 	return containers, nil
 }
 
-// Ensure DockerRuntime implements Runtime
+// ContainerInfo returns information about the container environment.
+func (r *DockerRuntime) ContainerInfo() SandboxContainerInfo {
+	return DefaultContainerInfo()
+}
+
+// Ensure DockerRuntime implements Runtime and GeneratedFileRuntime
 var _ Runtime = (*DockerRuntime)(nil)
+var _ GeneratedFileRuntime = (*DockerRuntime)(nil)

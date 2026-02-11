@@ -26,6 +26,9 @@ type NspawnRuntime struct {
 	// SandboxesDir is the directory containing sandbox metadata files
 	// Used for looking up SSH ports from persisted metadata
 	SandboxesDir string
+
+	// GeneratedFileMounter handles staging of generated files
+	GeneratedFileMounter
 }
 
 // NewNspawnRuntime creates a new nspawn runtime with the given configuration
@@ -34,6 +37,9 @@ func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir string) 
 		ExtraContainerPath: extraContainerPath,
 		ContainerPrefix:    containerPrefix,
 		SandboxesDir:       sandboxesDir,
+		GeneratedFileMounter: GeneratedFileMounter{
+			StagingDir: sandboxesDir,
+		},
 	}
 }
 
@@ -353,5 +359,11 @@ func (r *NspawnRuntime) SSHInteractiveWithHost(host string, command string) erro
 	return ssh.ReplaceWithSession(host, command)
 }
 
-// Ensure NspawnRuntime implements Runtime
+// ContainerInfo returns information about the container environment.
+func (r *NspawnRuntime) ContainerInfo() SandboxContainerInfo {
+	return DefaultContainerInfo()
+}
+
+// Ensure NspawnRuntime implements Runtime and GeneratedFileRuntime
 var _ Runtime = (*NspawnRuntime)(nil)
+var _ GeneratedFileRuntime = (*NspawnRuntime)(nil)
