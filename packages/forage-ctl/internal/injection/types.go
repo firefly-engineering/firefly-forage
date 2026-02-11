@@ -80,6 +80,18 @@ type GeneratedFileRequest struct {
 	SourceRepo    string
 	WorkspacePath string
 	Template      string // sandbox template name
+
+	// Extended context for skills generation (optional)
+	WorkspaceMode string            // "jj", "git-worktree", or "direct"
+	GitBranch     string            // git branch name (for git-worktree mode)
+	Network       string            // "full", "restricted", or "none"
+	AllowedHosts  []string          // allowed hosts (for restricted network)
+	UseProxy      bool              // whether proxy is used
+	Multiplexer   string            // "tmux" or "wezterm"
+	GitUser       string            // git user name (for identity)
+	GitEmail      string            // git email (for identity)
+	SSHKeyPath    string            // SSH key path (for identity)
+	Agents        map[string]string // agent name -> auth label (e.g., "$ANTHROPIC_API_KEY" or "proxy")
 }
 
 // TmpfilesRequest provides context for tmpfiles rules.

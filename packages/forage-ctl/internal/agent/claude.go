@@ -120,14 +120,11 @@ func (a *ClaudeAgent) ContributeGeneratedFiles(ctx context.Context, req *injecti
 		}
 	}
 
-	// Note: Skills and system prompt generation are handled separately
-	// via the skills package, as they need project analysis context.
-	// The collector will handle those contributions.
+	// Skills and system prompt generation are handled by SkillsContributor,
+	// which wraps the skills package and uses project analysis context.
 
-	// Ensure .claude directory and commands subdirectory exist (via tmpfiles)
-	// These are created by the base tmpfiles contributor.
-
-	_ = claudeDir // Used for future skill file placement
+	// Ensure .claude directory exists (handled by ClaudeTmpfilesContributor)
+	_ = claudeDir
 
 	return files, nil
 }

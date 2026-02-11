@@ -16,22 +16,43 @@ import (
 // Ensure context is used
 var _ = context.Background
 
+// ContributionSourcesParams holds parameters for building contribution sources.
+type ContributionSourcesParams struct {
+	Runtime       runtime.Runtime
+	Template      *config.Template
+	Metadata      *config.SandboxMetadata // Needed for skills generation
+	WsBackend     workspace.Backend
+	Mux           multiplexer.Multiplexer
+	Identity      *config.AgentIdentity
+	WorkspacePath string
+	SourceRepo    string
+	SecretsPath   string
+	ProxyURL      string
+	SandboxName   string
+	HostConfig    *config.HostConfig
+}
+
+// ContributionSourcesResult holds the result of building contribution sources.
+type ContributionSourcesResult struct {
+	Sources         injection.CollectionSources
+	Reproducibility reproducibility.Reproducibility
+}
+
 // buildContributionSources builds the collection sources for the injection collector.
 // This centralizes the construction of all the contributors that participate in
 // container configuration.
-func buildContributionSources(
-	rt runtime.Runtime,
-	template *config.Template,
-	wsBackend workspace.Backend,
-	mux multiplexer.Multiplexer,
-	identity *config.AgentIdentity,
-	workspacePath string,
-	sourceRepo string,
-	secretsPath string,
-	proxyURL string,
-	sandboxName string,
-	hostConfig *config.HostConfig,
-) injection.CollectionSources {
+func buildContributionSources(params ContributionSourcesParams) ContributionSourcesResult {
+	rt := params.Runtime
+	template := params.Template
+	wsBackend := params.WsBackend
+	mux := params.Mux
+	identity := params.Identity
+	workspacePath := params.WorkspacePath
+	sourceRepo := params.SourceRepo
+	secretsPath := params.SecretsPath
+	proxyURL := params.ProxyURL
+	sandboxName := params.SandboxName
+	hostConfig := params.HostConfig
 	// Get container info from runtime if available
 	var containerInfo runtime.SandboxContainerInfo
 	if gfr, ok := rt.(runtime.GeneratedFileRuntime); ok {
@@ -126,6 +147,12 @@ func buildContributionSources(
 		}
 	}
 
+	// 10. Skills contributor (generates system prompt and skill files)
+	if params.Metadata != nil && template != nil {
+		skillsContrib := NewSkillsContributor(containerInfo.HomeDir, template, params.Metadata)
+		contributors = append(contributors, skillsContrib)
+	}
+
 	// Build request contexts
 	mountReq := &injection.MountRequest{
 		WorkspacePath: workspacePath,
@@ -168,14 +195,17 @@ func buildContributionSources(
 		gfMounter = gfr
 	}
 
-	return injection.CollectionSources{
-		Contributors:         contributors,
-		MountRequest:         mountReq,
-		EnvVarRequest:        envVarReq,
-		InitCommandRequest:   initCmdReq,
-		GeneratedFileRequest: genFileReq,
-		TmpfilesRequest:      tmpfilesReq,
-		GeneratedFileMounter: gfMounter,
-		SandboxName:          sandboxName,
+	return ContributionSourcesResult{
+		Sources: injection.CollectionSources{
+			Contributors:         contributors,
+			MountRequest:         mountReq,
+			EnvVarRequest:        envVarReq,
+			InitCommandRequest:   initCmdReq,
+			GeneratedFileRequest: genFileReq,
+			TmpfilesRequest:      tmpfilesReq,
+			GeneratedFileMounter: gfMounter,
+			SandboxName:          sandboxName,
+		},
+		Reproducibility: repro,
 	}
 }

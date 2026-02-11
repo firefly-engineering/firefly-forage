@@ -9,8 +9,10 @@ import (
 	"sort"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 )
 
 // NixOSStateVersion is the NixOS state version used in generated container configs.
@@ -18,6 +20,9 @@ const NixOSStateVersion = "24.05"
 
 // backendRepoMounts maps workspace modes to source repo directories
 // that must be mounted at their original paths for the VCS to function.
+//
+// Deprecated: Use workspace backend's ContributeMounts method instead.
+// This map is kept for backward compatibility.
 var backendRepoMounts = map[string][]string{
 	"jj": {".jj", ".git"},
 	// git-worktree needs no extra mounts — .git file is in the worktree already
@@ -26,12 +31,18 @@ var backendRepoMounts = map[string][]string{
 // agentProjectDirs maps agent names to source repo directories they need
 // mounted into /workspace. These are typically git-ignored directories that
 // don't appear in worktrees/workspaces.
+//
+// Deprecated: Use agent's ContributeMounts method instead.
+// This map is kept for backward compatibility.
 var agentProjectDirs = map[string][]string{
 	"claude": {".claude"},
 }
 
 // agentHomeFiles maps agent names to files in the host user's home directory
 // that should be bind-mounted into the container agent's home.
+//
+// Deprecated: Use agent's ContributeMounts method instead.
+// This map is kept for backward compatibility.
 var agentHomeFiles = map[string][]string{
 	"claude": {".claude.json"},
 }
@@ -62,6 +73,15 @@ type ContainerConfig struct {
 	AgentIdentity     *config.AgentIdentity // Optional agent identity for git authorship and SSH key
 	SystemPromptPath  string             // Host path to .system-prompt.md file (may be empty)
 	SkillsPath        string             // Host path to .skills/ directory (may be empty)
+
+	// Contributions from the injection collector (optional).
+	// When set, contributions are used in addition to the legacy code paths.
+	// This allows for gradual migration to the new injection system.
+	Contributions *injection.Contributions
+
+	// Reproducibility handles package resolution (optional).
+	// Used to resolve Package{Name, Version} to Nix expressions.
+	Reproducibility reproducibility.Reproducibility
 }
 
 // Validate checks that the ContainerConfig has all required fields
@@ -340,6 +360,9 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
+	// Apply contributions from the injection collector (if available)
+	applyContributions(data, cfg.Contributions, cfg.Reproducibility)
+
 	return data
 }
 
@@ -366,4 +389,77 @@ func buildNetworkConfig(networkMode string, allowedHosts []string, slot int) str
 	}
 
 	return network.GenerateNixNetworkConfig(cfg)
+}
+
+// applyContributions adds contributions from the injection collector to template data.
+// This is called after the legacy code paths have populated the initial data.
+func applyContributions(data *TemplateData, contributions *injection.Contributions, repro reproducibility.Reproducibility) {
+	if contributions == nil {
+		return
+	}
+
+	// Add contributed mounts (deduplicated by container path)
+	existingMounts := make(map[string]bool)
+	for _, m := range data.BindMounts {
+		existingMounts[m.Path] = true
+	}
+	for _, m := range contributions.Mounts {
+		if !existingMounts[m.ContainerPath] {
+			data.BindMounts = append(data.BindMounts, BindMount{
+				Path:     m.ContainerPath,
+				HostPath: m.HostPath,
+				ReadOnly: m.ReadOnly,
+			})
+			existingMounts[m.ContainerPath] = true
+		}
+	}
+
+	// Add contributed environment variables (deduplicated by name)
+	existingEnvVars := make(map[string]bool)
+	for _, e := range data.EnvVars {
+		existingEnvVars[e.Name] = true
+	}
+	for _, e := range contributions.EnvVars {
+		if !existingEnvVars[e.Name] {
+			data.EnvVars = append(data.EnvVars, EnvVar{
+				Name:  e.Name,
+				Value: e.Value,
+			})
+			existingEnvVars[e.Name] = true
+		}
+	}
+
+	// Add contributed tmpfiles rules (deduplicated)
+	existingRules := make(map[string]bool)
+	for _, r := range data.ExtraTmpfilesRules {
+		existingRules[r] = true
+	}
+	for _, r := range contributions.TmpfilesRules {
+		if !existingRules[r] {
+			data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules, r)
+			existingRules[r] = true
+		}
+	}
+
+	// Resolve and add contributed packages
+	if repro != nil && len(contributions.Packages) > 0 {
+		existingPkgs := make(map[string]bool)
+		for _, p := range data.AgentPackages {
+			existingPkgs[p] = true
+		}
+		for _, p := range data.MuxPackages {
+			existingPkgs[p] = true
+		}
+		for _, pkg := range contributions.Packages {
+			resolved, err := repro.ResolvePackage(pkg)
+			if err != nil {
+				// Skip packages that can't be resolved
+				continue
+			}
+			if !existingPkgs[resolved] {
+				data.AgentPackages = append(data.AgentPackages, resolved)
+				existingPkgs[resolved] = true
+			}
+		}
+	}
 }
