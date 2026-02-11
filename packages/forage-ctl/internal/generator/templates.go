@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"strings"
 	"text/template"
 )
 
@@ -45,6 +46,24 @@ func nixBool(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// nixEscape escapes a string for safe inclusion inside a Nix "..." string literal.
+// It handles backslashes, double quotes, and ${} interpolation sequences.
+func nixEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "${", "\\${")
+	return s
+}
+
+// shellQuote wraps a string in double quotes with proper escaping for bash.
+func shellQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "`", "\\`")
+	s = strings.ReplaceAll(s, "$", `\$`)
+	return `"` + s + `"`
 }
 
 // containerTemplate is the main Go template for generating NixOS container configurations.
@@ -157,12 +176,12 @@ const containerTemplateText = `{ pkgs, ... }: {
           User = "agent";
           ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh /home/agent/.config/jj && " +
 {{- if .GitUser}}
-            "${pkgs.git}/bin/git config --global user.name {{.GitUser | printf "%q"}} && " +
-            "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | printf "%q"}} && " +
+            "${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscape}} && " +
+            "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscape}} && " +
 {{- end}}
 {{- if .GitEmail}}
-            "${pkgs.git}/bin/git config --global user.email {{.GitEmail | printf "%q"}} && " +
-            "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | printf "%q"}} && " +
+            "${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscape}} && " +
+            "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscape}} && " +
 {{- end}}
 {{- if .SSHKeyName}}
             "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
@@ -181,7 +200,9 @@ var containerTemplate *template.Template
 
 func init() {
 	funcs := template.FuncMap{
-		"nixBool": nixBool,
+		"nixBool":    nixBool,
+		"nixEscape":  nixEscape,
+		"shellQuote": shellQuote,
 	}
 	containerTemplate = template.Must(template.New("container").Funcs(funcs).Parse(containerTemplateText))
 }
