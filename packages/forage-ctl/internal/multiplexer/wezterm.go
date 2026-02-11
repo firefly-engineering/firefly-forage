@@ -1,8 +1,11 @@
 package multiplexer
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
 
 // Wezterm implements Multiplexer for wezterm-mux-server.
@@ -62,3 +65,29 @@ func (w *Wezterm) HostConfigMounts(homeDir string) []ConfigMount { return nil }
 func (w *Wezterm) PromptInstructions() string {
 	return "Terminal multiplexing via wezterm. New tabs: `wezterm cli spawn --cwd /workspace`. List panes: `wezterm cli list`."
 }
+
+// ContributePackages returns the packages needed for wezterm.
+func (w *Wezterm) ContributePackages(ctx context.Context) ([]injection.Package, error) {
+	return []injection.Package{{Name: "wezterm"}}, nil
+}
+
+// ContributeMounts returns nil - wezterm config is client-side only.
+func (w *Wezterm) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
+	return nil, nil
+}
+
+// ContributePromptFragments returns prompt instructions for wezterm.
+func (w *Wezterm) ContributePromptFragments(ctx context.Context) ([]injection.PromptFragment, error) {
+	return []injection.PromptFragment{{
+		Section:  injection.PromptSectionEnvironment,
+		Priority: 100,
+		Content:  w.PromptInstructions(),
+	}}, nil
+}
+
+// Ensure Wezterm implements contribution interfaces
+var (
+	_ injection.MountContributor   = (*Wezterm)(nil)
+	_ injection.PackageContributor = (*Wezterm)(nil)
+	_ injection.PromptContributor  = (*Wezterm)(nil)
+)

@@ -1,11 +1,13 @@
 package multiplexer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/terminal"
 )
 
@@ -100,3 +102,52 @@ func (t *Tmux) HostConfigMounts(homeDir string) []ConfigMount {
 func (t *Tmux) PromptInstructions() string {
 	return fmt.Sprintf("Use tmux (`tmux attach -t %s`).", SessionName)
 }
+
+// ContributePackages returns the packages needed for tmux.
+func (t *Tmux) ContributePackages(ctx context.Context) ([]injection.Package, error) {
+	return []injection.Package{{Name: "tmux"}}, nil
+}
+
+// ContributeMounts returns host config mounts for tmux.
+func (t *Tmux) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
+	if req.HostHomeDir == "" {
+		return nil, nil
+	}
+
+	// Prefer ~/.config/tmux dir, fall back to ~/.tmux.conf
+	tmuxConfigDir := filepath.Join(req.HostHomeDir, ".config", "tmux")
+	if info, err := os.Stat(tmuxConfigDir); err == nil && info.IsDir() {
+		return []injection.Mount{{
+			HostPath:      tmuxConfigDir,
+			ContainerPath: "/home/agent/.config/tmux",
+			ReadOnly:      true,
+		}}, nil
+	}
+
+	tmuxConfFile := filepath.Join(req.HostHomeDir, ".tmux.conf")
+	if _, err := os.Stat(tmuxConfFile); err == nil {
+		return []injection.Mount{{
+			HostPath:      tmuxConfFile,
+			ContainerPath: "/home/agent/.tmux.conf",
+			ReadOnly:      true,
+		}}, nil
+	}
+
+	return nil, nil
+}
+
+// ContributePromptFragments returns prompt instructions for tmux.
+func (t *Tmux) ContributePromptFragments(ctx context.Context) ([]injection.PromptFragment, error) {
+	return []injection.PromptFragment{{
+		Section:  injection.PromptSectionEnvironment,
+		Priority: 100,
+		Content:  t.PromptInstructions(),
+	}}, nil
+}
+
+// Ensure Tmux implements contribution interfaces
+var (
+	_ injection.MountContributor   = (*Tmux)(nil)
+	_ injection.PackageContributor = (*Tmux)(nil)
+	_ injection.PromptContributor  = (*Tmux)(nil)
+)
