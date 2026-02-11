@@ -148,6 +148,19 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
+	// When wrapping Claude, remove the raw package from AgentPackages
+	// to avoid buildEnv collision (both provide /bin/claude)
+	if data.ClaudePackagePath != "" {
+		resolved := "pkgs." + data.ClaudePackagePath
+		filtered := data.AgentPackages[:0]
+		for _, pkg := range data.AgentPackages {
+			if pkg != resolved {
+				filtered = append(filtered, pkg)
+			}
+		}
+		data.AgentPackages = filtered
+	}
+
 	return data
 }
 

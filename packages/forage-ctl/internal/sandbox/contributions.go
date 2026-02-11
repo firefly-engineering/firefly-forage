@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os/user"
 	"path/filepath"
 
@@ -249,9 +250,19 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 		wsBackend = workspace.DetectBackend(metadata.SourceRepo)
 	}
 
+	// Create a properly configured runtime with SandboxesDir for generated file staging
+	rt, err := runtime.New(&runtime.Config{
+		Type:            runtime.RuntimeAuto,
+		ContainerPrefix: config.ContainerPrefix,
+		SandboxesDir:    paths.SandboxesDir,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
+	}
+
 	// Build contribution sources
 	contribResult := buildContributionSources(ContributionSourcesParams{
-		Runtime:       runtime.Global(),
+		Runtime:       rt,
 		Template:      template,
 		Metadata:      metadata,
 		WsBackend:     wsBackend,

@@ -34,10 +34,19 @@ func NewCreator() (*Creator, error) {
 		return nil, fmt.Errorf("failed to load host config: %w", err)
 	}
 
+	rt, err := runtime.New(&runtime.Config{
+		Type:            runtime.RuntimeAuto,
+		ContainerPrefix: config.ContainerPrefix,
+		SandboxesDir:    paths.SandboxesDir,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
+	}
+
 	return &Creator{
 		paths:      paths,
 		hostConfig: hostConfig,
-		rt:         runtime.Global(),
+		rt:         rt,
 	}, nil
 }
 
@@ -244,7 +253,7 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 // startContainer creates and starts the container via the runtime.
 func (c *Creator) startContainer(name, configPath string) error {
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := runtime.Create(runtime.CreateOptions{
+	if err := c.rt.Create(context.Background(), runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,
