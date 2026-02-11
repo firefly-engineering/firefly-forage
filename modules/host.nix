@@ -341,7 +341,7 @@ in
                   else null;
               in {
                 inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
-                packagePath = agent.package.outPath;
+                packagePath = agent.package.pname;
                 hostConfigDir = resolvedHostConfigDir;
                 containerConfigDir = resolvedContainerConfigDir;
                 permissions =
@@ -350,7 +350,7 @@ in
                   } else null;
               }
             ) template.agents;
-            extraPackages = map (p: p.outPath) template.extraPackages;
+            extraPackages = map (p: p.pname) template.extraPackages;
           } // lib.optionalAttrs (
             template.agentIdentity.gitUser != null
             || template.agentIdentity.gitEmail != null

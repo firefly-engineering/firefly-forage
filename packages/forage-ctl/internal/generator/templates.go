@@ -124,7 +124,7 @@ const containerTemplateText = `{ pkgs, ... }: {
 {{- end}}
 {{- if .ClaudePackagePath}}
         (pkgs.writeShellScriptBin "claude" ''
-          exec {{.ClaudePackagePath}}/bin/claude \
+          exec ${pkgs.{{.ClaudePackagePath}}}/bin/claude \
             --append-system-prompt "$(cat {{.SystemPromptFile}})" "$@"
         '')
 {{- end}}
