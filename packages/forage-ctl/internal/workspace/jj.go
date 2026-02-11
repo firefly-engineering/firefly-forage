@@ -1,11 +1,14 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
 
 // JJBackend implements Backend for jj (Jujutsu) repositories
@@ -67,3 +70,47 @@ func (b *JJBackend) Remove(repoPath, name, workspacePath string) error {
 
 	return nil
 }
+
+// ContributeMounts returns mounts for jj workspace mode.
+// Only mounts .jj directory - intentionally omits .git to enforce jj-only operations.
+func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
+	if req.SourceRepo == "" {
+		return nil, nil
+	}
+
+	// Only mount .jj - do NOT mount .git to enforce jj-only operations
+	jjPath := filepath.Join(req.SourceRepo, ".jj")
+	if _, err := os.Stat(jjPath); err != nil {
+		return nil, nil
+	}
+
+	return []injection.Mount{{
+		HostPath:      jjPath,
+		ContainerPath: jjPath,
+		ReadOnly:      false,
+	}}, nil
+}
+
+// ContributePromptFragments returns jj-specific VCS instructions.
+func (b *JJBackend) ContributePromptFragments(ctx context.Context) ([]injection.PromptFragment, error) {
+	return []injection.PromptFragment{{
+		Section:  injection.PromptSectionVCS,
+		Priority: 10,
+		Content:  jjPromptInstructions,
+	}}, nil
+}
+
+const jjPromptInstructions = `This workspace uses jj (Jujutsu) for version control. Use jj commands for all VCS operations:
+- jj status: Show working copy status
+- jj diff: Show changes
+- jj new: Create new change
+- jj describe -m "message": Set commit message
+- jj bookmark set <name>: Update bookmark
+
+This is an isolated jj workspace - changes don't affect other workspaces.`
+
+// Ensure JJBackend implements contribution interfaces
+var (
+	_ injection.MountContributor  = (*JJBackend)(nil)
+	_ injection.PromptContributor = (*JJBackend)(nil)
+)

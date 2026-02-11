@@ -1,11 +1,14 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
 
 const gitBranchPrefix = "forage-"
@@ -139,3 +142,35 @@ func WorktreeExists(repoPath, worktreePath string) bool {
 	}
 	return false
 }
+
+// ContributeMounts returns nil - git worktrees don't need extra mounts.
+// The worktree directory already contains a .git file pointing to the main repo.
+func (b *GitBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
+	return nil, nil
+}
+
+// ContributePromptFragments returns git worktree-specific VCS instructions.
+func (b *GitBackend) ContributePromptFragments(ctx context.Context) ([]injection.PromptFragment, error) {
+	return []injection.PromptFragment{{
+		Section:  injection.PromptSectionVCS,
+		Priority: 10,
+		Content:  gitWorktreePromptInstructions,
+	}}, nil
+}
+
+const gitWorktreePromptInstructions = `This workspace is a git worktree with its own working directory and branch.
+Use standard git commands for VCS operations:
+- git status: Show working tree status
+- git diff: Show changes
+- git add -p: Stage changes interactively
+- git commit -m "message": Create commit on this branch
+- git push -u origin <branch>: Push branch
+
+This is an isolated git worktree - commits on this branch don't affect other worktrees.
+When done, merge your branch or create a pull request.`
+
+// Ensure GitBackend implements contribution interfaces
+var (
+	_ injection.MountContributor  = (*GitBackend)(nil)
+	_ injection.PromptContributor = (*GitBackend)(nil)
+)
