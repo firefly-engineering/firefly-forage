@@ -10,11 +10,11 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 )
 
@@ -86,40 +86,26 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		}
 	}
 
-	// Phase 6: Generate permissions files
-	permsMounts, err := c.generatePermissionsFiles(opts.Name, resources.template)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to generate permissions files: %w", err)
-	}
-
-	// Phase 6.5: Generate system prompt + skill files
-	promptPaths, err := c.generatePromptFiles(opts.Name, ws.effectivePath, metadata, resources.template)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to generate prompt files: %w", err)
-	}
-
-	// Phase 7: Generate and write container config
-	configPath, err := c.writeContainerConfig(opts, resources, ws, secretsPath, permsMounts, identity, promptPaths)
+	// Phase 6: Generate and write container config using contribution system
+	configPath, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
 	if err != nil {
 		cleanup()
 		return nil, err
 	}
 
-	// Phase 8: Create and start container
+	// Phase 7: Create and start container
 	if err := c.startContainer(opts.Name, configPath); err != nil {
 		cleanup()
 		return nil, err
 	}
 
-	// Phase 9: Save metadata
+	// Phase 8: Save metadata
 	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Phase 10: Post-creation setup (wait for SSH)
+	// Phase 9: Post-creation setup (wait for SSH)
 	c.postCreationSetup(metadata)
 
 	return &CreateResult{
@@ -191,14 +177,9 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 	}
 }
 
-// promptFilePaths holds the host paths to generated prompt files.
-type promptFilePaths struct {
-	systemPromptPath string // host path to .system-prompt.md
-	skillsDir        string // host path to .skills/ directory (may be empty)
-}
-
-// writeContainerConfig generates and writes the Nix container configuration.
-func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, permsMounts []generator.PermissionsMount, identity *config.AgentIdentity, prompt *promptFilePaths) (string, error) {
+// writeContainerConfig generates and writes the Nix container configuration using the contribution system.
+func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) (string, error) {
+	// Determine proxy URL
 	proxyURL := ""
 	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
 		proxyURL = c.hostConfig.ProxyURL
@@ -208,25 +189,40 @@ func (c *Creator) writeContainerConfig(opts CreateOptions, resources *resourceAl
 	// Create multiplexer instance
 	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
 
+	// Build contribution sources from all backends
+	contribResult := buildContributionSources(ContributionSourcesParams{
+		Runtime:       c.rt,
+		Template:      resources.template,
+		Metadata:      metadata,
+		WsBackend:     ws.backend,
+		Mux:           mux,
+		Identity:      identity,
+		WorkspacePath: ws.effectivePath,
+		SourceRepo:    ws.sourceRepo,
+		SecretsPath:   secretsPath,
+		ProxyURL:      proxyURL,
+		SandboxName:   opts.Name,
+		HostConfig:    c.hostConfig,
+	})
+
+	// Collect contributions from all sources
+	collector := injection.NewCollector()
+	contributions, err := collector.Collect(ctx, contribResult.Sources)
+	if err != nil {
+		return "", fmt.Errorf("failed to collect contributions: %w", err)
+	}
+
 	containerCfg := &generator.ContainerConfig{
-		Name:              opts.Name,
-		NetworkSlot:       resources.networkSlot,
-		Workspace:         ws.effectivePath,
-		SecretsPath:       secretsPath,
-		AuthorizedKeys:    c.resolveSSHKeys(opts),
-		Template:          resources.template,
-		HostConfig:        c.hostConfig,
-		WorkspaceMode:     string(ws.mode),
-		SourceRepo:        ws.sourceRepo,
-		ProxyURL:          proxyURL,
-		UID:               c.hostConfig.UID,
-		GID:               c.hostConfig.GID,
-		NoMuxConfig:       opts.NoMuxConfig,
-		Mux:               mux,
-		PermissionsMounts: permsMounts,
-		AgentIdentity:     identity,
-		SystemPromptPath:  prompt.systemPromptPath,
-		SkillsPath:        prompt.skillsDir,
+		Name:            opts.Name,
+		NetworkSlot:     resources.networkSlot,
+		AuthorizedKeys:  c.resolveSSHKeys(opts),
+		Template:        resources.template,
+		UID:             c.hostConfig.UID,
+		GID:             c.hostConfig.GID,
+		Mux:             mux,
+		AgentIdentity:   identity,
+		Contributions:   contributions,
+		Reproducibility: contribResult.Reproducibility,
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -376,93 +372,6 @@ func (c *Creator) waitForSSH(host string, timeoutSeconds int) bool {
 	}
 	logging.Warn("SSH not ready after timeout", "timeout", timeoutSeconds)
 	return false
-}
-
-// generatePromptFiles analyzes the workspace and writes system prompt + skill files to the host.
-// These files are bind-mounted into the container before it starts.
-func (c *Creator) generatePromptFiles(name, workspacePath string, metadata *config.SandboxMetadata, template *config.Template) (*promptFilePaths, error) {
-	logging.Debug("analyzing workspace for project-aware skills", "path", workspacePath)
-	analyzer := skills.NewAnalyzer(workspacePath)
-	projectInfo := analyzer.Analyze()
-	logging.Debug("project analysis complete",
-		"type", projectInfo.Type,
-		"buildSystem", projectInfo.BuildSystem,
-		"frameworks", projectInfo.Frameworks)
-
-	result := &promptFilePaths{}
-
-	// Generate and write system prompt
-	promptContent := skills.GenerateSystemPrompt(metadata, template)
-	promptPath := filepath.Join(c.paths.SandboxesDir, name+".system-prompt.md")
-	if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create sandboxes directory: %w", err)
-	}
-	if err := os.WriteFile(promptPath, []byte(promptContent), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write system prompt: %w", err)
-	}
-	result.systemPromptPath = promptPath
-
-	// Generate and write skill files
-	skillFiles := skills.GenerateSkillFiles(metadata, template, projectInfo)
-	if len(skillFiles) > 0 {
-		skillsDir := filepath.Join(c.paths.SandboxesDir, name+".skills")
-		for skillName, content := range skillFiles {
-			skillDir := filepath.Join(skillsDir, skillName)
-			if err := os.MkdirAll(skillDir, 0755); err != nil {
-				return nil, fmt.Errorf("failed to create skill directory %s: %w", skillName, err)
-			}
-			skillPath := filepath.Join(skillDir, "SKILL.md")
-			if err := os.WriteFile(skillPath, []byte(content), 0644); err != nil {
-				return nil, fmt.Errorf("failed to write skill file %s: %w", skillName, err)
-			}
-			logging.Debug("wrote skill file", "skill", skillName, "path", skillPath)
-		}
-		result.skillsDir = skillsDir
-	}
-
-	return result, nil
-}
-
-// generatePermissionsFiles generates agent permissions settings files on the host
-// and returns the mounts needed to bind them into the container.
-func (c *Creator) generatePermissionsFiles(sandboxName string, template *config.Template) ([]generator.PermissionsMount, error) {
-	var mounts []generator.PermissionsMount
-
-	for agentName, agent := range template.Agents {
-		if agent.Permissions == nil {
-			continue
-		}
-
-		policy, ok := generator.GetPermissionsPolicy(agentName)
-		if !ok {
-			logging.Debug("no permissions policy for agent, skipping", "agent", agentName)
-			continue
-		}
-
-		content, err := policy.GenerateSettings(agent.Permissions)
-		if err != nil {
-			return nil, fmt.Errorf("agent %s: %w", agentName, err)
-		}
-		if content == nil {
-			continue
-		}
-
-		hostPath := filepath.Join(c.paths.SandboxesDir, fmt.Sprintf("%s.%s-permissions.json", sandboxName, agentName))
-		if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create sandboxes directory: %w", err)
-		}
-		if err := os.WriteFile(hostPath, content, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write permissions file for %s: %w", agentName, err)
-		}
-		logging.Debug("wrote permissions file", "agent", agentName, "path", hostPath)
-
-		mounts = append(mounts, generator.PermissionsMount{
-			HostPath:      hostPath,
-			ContainerPath: policy.ContainerSettingsPath(),
-		})
-	}
-
-	return mounts, nil
 }
 
 // cleanup removes resources created during a failed sandbox creation.

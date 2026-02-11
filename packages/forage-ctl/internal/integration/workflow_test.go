@@ -19,11 +19,27 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/testutil"
 )
+
+// testContributions creates a minimal set of contributions for testing.
+func testContributions(workspacePath, secretsPath string) *injection.Contributions {
+	return &injection.Contributions{
+		Mounts: []injection.Mount{
+			{HostPath: "/nix/store", ContainerPath: "/nix/store", ReadOnly: true},
+			{HostPath: workspacePath, ContainerPath: "/workspace", ReadOnly: false},
+			{HostPath: secretsPath, ContainerPath: "/run/secrets", ReadOnly: true},
+		},
+		TmpfilesRules: []string{
+			"d /home/agent/.config 0755 agent users -",
+		},
+	}
+}
 
 // TestWorkflow_CreateSandboxWithDirectWorkspace tests creating a sandbox
 // with a direct workspace path (no jj or git-worktree).
@@ -67,17 +83,16 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 		t.Fatalf("failed to load template: %v", err)
 	}
 
+	secretsPath := filepath.Join(env.Paths.SecretsDir, "test-sandbox")
 	containerCfg := &generator.ContainerConfig{
-		Name:           "test-sandbox",
-		NetworkSlot:    networkSlot,
-		Workspace:      workspacePath,
-		SecretsPath:    filepath.Join(env.Paths.SecretsDir, "test-sandbox"),
-		AuthorizedKeys: []string{"ssh-rsa AAAA... test@test"},
-		Template:       template,
-		HostConfig:     env.HostConfig,
-		WorkspaceMode:  "direct",
-		UID:            env.HostConfig.UID,
-		GID:            env.HostConfig.GID,
+		Name:            "test-sandbox",
+		NetworkSlot:     networkSlot,
+		AuthorizedKeys:  []string{"ssh-rsa AAAA... test@test"},
+		Template:        template,
+		UID:             env.HostConfig.UID,
+		GID:             env.HostConfig.GID,
+		Contributions:   testContributions(workspacePath, secretsPath),
+		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)
@@ -266,16 +281,14 @@ func TestWorkflow_NetworkModeConfigs(t *testing.T) {
 			}
 
 			cfg := &generator.ContainerConfig{
-				Name:           "test",
-				NetworkSlot:    1,
-				Workspace:      "/workspace",
-				SecretsPath:    "/secrets",
-				AuthorizedKeys: []string{"ssh-rsa AAAA..."},
-				Template:       template,
-				HostConfig:     &config.HostConfig{UID: 1000, GID: 100},
-				WorkspaceMode:  "direct",
-				UID:            1000,
-				GID:            100,
+				Name:            "test",
+				NetworkSlot:     1,
+				AuthorizedKeys:  []string{"ssh-rsa AAAA..."},
+				Template:        template,
+				UID:             1000,
+				GID:             100,
+				Contributions:   testContributions("/workspace", "/secrets"),
+				Reproducibility: reproducibility.NewNixReproducibility(),
 			}
 
 			result, err := generator.GenerateNixConfig(cfg)
@@ -451,18 +464,27 @@ func TestWorkflow_JJModeConfig(t *testing.T) {
 		},
 	}
 
+	workspacePath := filepath.Join(env.TmpDir, "workspaces", "jj-sandbox")
+	secretsPath := filepath.Join(env.Paths.SecretsDir, "jj-sandbox")
+	jjPath := filepath.Join(repoPath, ".jj")
+
+	// Create contributions with JJ mount
+	contributions := testContributions(workspacePath, secretsPath)
+	contributions.Mounts = append(contributions.Mounts, injection.Mount{
+		HostPath:      jjPath,
+		ContainerPath: jjPath,
+		ReadOnly:      false,
+	})
+
 	cfg := &generator.ContainerConfig{
-		Name:           "jj-sandbox",
-		NetworkSlot:    1,
-		Workspace:      filepath.Join(env.TmpDir, "workspaces", "jj-sandbox"),
-		SecretsPath:    filepath.Join(env.Paths.SecretsDir, "jj-sandbox"),
-		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
-		Template:       template,
-		HostConfig:     env.HostConfig,
-		WorkspaceMode:  "jj",
-		SourceRepo:     repoPath,
-		UID:            env.HostConfig.UID,
-		GID:            env.HostConfig.GID,
+		Name:            "jj-sandbox",
+		NetworkSlot:     1,
+		AuthorizedKeys:  []string{"ssh-rsa AAAA..."},
+		Template:        template,
+		UID:             env.HostConfig.UID,
+		GID:             env.HostConfig.GID,
+		Contributions:   contributions,
+		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(cfg)
@@ -490,18 +512,22 @@ func TestWorkflow_ProxyModeConfig(t *testing.T) {
 		},
 	}
 
+	// Create contributions with proxy env vars (instead of secret reading)
+	contributions := testContributions("/workspace", "/secrets")
+	contributions.EnvVars = []injection.EnvVar{
+		{Name: "ANTHROPIC_BASE_URL", Value: `"http://10.100.1.1:8080"`},
+		{Name: "ANTHROPIC_CUSTOM_HEADERS", Value: `"X-Forage-Sandbox: proxy-sandbox"`},
+	}
+
 	cfg := &generator.ContainerConfig{
-		Name:           "proxy-sandbox",
-		NetworkSlot:    1,
-		Workspace:      "/workspace",
-		SecretsPath:    "/secrets",
-		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
-		Template:       template,
-		HostConfig:     &config.HostConfig{UID: 1000, GID: 100},
-		WorkspaceMode:  "direct",
-		ProxyURL:       "http://10.100.1.1:8080",
-		UID:            1000,
-		GID:            100,
+		Name:            "proxy-sandbox",
+		NetworkSlot:     1,
+		AuthorizedKeys:  []string{"ssh-rsa AAAA..."},
+		Template:        template,
+		UID:             1000,
+		GID:             100,
+		Contributions:   contributions,
+		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(cfg)

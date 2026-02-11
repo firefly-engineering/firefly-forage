@@ -11,7 +11,6 @@
       "/workspace" = { hostPath = "/var/lib/forage/workspaces/test-sandbox"; isReadOnly = false; };
       "/run/secrets" = { hostPath = "/run/secrets/test-sandbox"; isReadOnly = true; };
       "/home/user/myrepo/.jj" = { hostPath = "/home/user/myrepo/.jj"; isReadOnly = false; };
-      "/home/user/myrepo/.git" = { hostPath = "/home/user/myrepo/.git"; isReadOnly = false; };
     };
 
     config = { pkgs, ... }: {
@@ -69,6 +68,7 @@
 
       # Ensure ~/.config is owned by agent (bind mounts may create it as root)
       systemd.tmpfiles.rules = [
+        "d /home/agent/.config 0755 agent users -"
         "d /home/agent/.config 0755 agent users -"
       ];
 

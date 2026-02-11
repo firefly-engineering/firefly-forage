@@ -3,18 +3,17 @@ package sandbox
 import (
 	"context"
 	"os/user"
+	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/agent"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 )
-
-// Ensure context is used
-var _ = context.Background
 
 // ContributionSourcesParams holds parameters for building contribution sources.
 type ContributionSourcesParams struct {
@@ -208,4 +207,81 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 		},
 		Reproducibility: repro,
 	}
+}
+
+// RebuildContainerConfigParams holds parameters for rebuilding a container config.
+type RebuildContainerConfigParams struct {
+	Metadata   *config.SandboxMetadata
+	Template   *config.Template
+	HostConfig *config.HostConfig
+	Paths      *config.Paths
+}
+
+// RebuildContainerConfig rebuilds the container config from metadata using the contribution system.
+// This is useful for commands that need to regenerate configs for existing sandboxes.
+func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigParams) (*generator.ContainerConfig, error) {
+	metadata := params.Metadata
+	template := params.Template
+	hostConfig := params.HostConfig
+	paths := params.Paths
+
+	// Determine secrets path (if secrets are used)
+	secretsPath := ""
+	for _, agent := range template.Agents {
+		if agent.SecretName != "" {
+			secretsPath = filepath.Join(paths.SecretsDir, metadata.Name)
+			break
+		}
+	}
+
+	// Determine proxy URL
+	proxyURL := ""
+	if template.UseProxy && hostConfig.ProxyURL != "" {
+		proxyURL = hostConfig.ProxyURL
+	}
+
+	// Create multiplexer instance
+	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
+
+	// Detect workspace backend from metadata
+	var wsBackend workspace.Backend
+	if metadata.SourceRepo != "" {
+		wsBackend = workspace.DetectBackend(metadata.SourceRepo)
+	}
+
+	// Build contribution sources
+	contribResult := buildContributionSources(ContributionSourcesParams{
+		Runtime:       runtime.Global(),
+		Template:      template,
+		Metadata:      metadata,
+		WsBackend:     wsBackend,
+		Mux:           mux,
+		Identity:      metadata.AgentIdentity,
+		WorkspacePath: metadata.Workspace,
+		SourceRepo:    metadata.SourceRepo,
+		SecretsPath:   secretsPath,
+		ProxyURL:      proxyURL,
+		SandboxName:   metadata.Name,
+		HostConfig:    hostConfig,
+	})
+
+	// Collect contributions
+	collector := injection.NewCollector()
+	contributions, err := collector.Collect(ctx, contribResult.Sources)
+	if err != nil {
+		return nil, err
+	}
+
+	return &generator.ContainerConfig{
+		Name:            metadata.Name,
+		NetworkSlot:     metadata.NetworkSlot,
+		AuthorizedKeys:  hostConfig.AuthorizedKeys,
+		Template:        template,
+		UID:             hostConfig.UID,
+		GID:             hostConfig.GID,
+		Mux:             mux,
+		AgentIdentity:   metadata.AgentIdentity,
+		Contributions:   contributions,
+		Reproducibility: contribResult.Reproducibility,
+	}, nil
 }

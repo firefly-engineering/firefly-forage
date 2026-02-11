@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 )
 
 var networkCmd = &cobra.Command{
@@ -105,21 +107,17 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Regenerate container configuration
+	// Regenerate container configuration using contribution system
 	logInfo("Regenerating container configuration...")
 
-	containerCfg := &generator.ContainerConfig{
-		Name:           name,
-		NetworkSlot:    metadata.NetworkSlot,
-		Workspace:      metadata.Workspace,
-		SecretsPath:    filepath.Join(paths.SecretsDir, name),
-		AuthorizedKeys: hostConfig.AuthorizedKeys,
-		Template:       template,
-		HostConfig:     hostConfig,
-		WorkspaceMode:  metadata.WorkspaceMode,
-		SourceRepo:     metadata.SourceRepo,
-		UID:            hostConfig.UID,
-		GID:            hostConfig.GID,
+	containerCfg, err := sandbox.RebuildContainerConfig(context.Background(), sandbox.RebuildContainerConfigParams{
+		Metadata:   metadata,
+		Template:   template,
+		HostConfig: hostConfig,
+		Paths:      paths,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to rebuild container config: %w", err)
 	}
 
 	nixConfig, err := generator.GenerateNixConfig(containerCfg)

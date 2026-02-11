@@ -7,17 +7,37 @@ import (
 	"testing"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 )
+
+// testContributions creates a minimal set of contributions for testing.
+func testContributions() *injection.Contributions {
+	return &injection.Contributions{
+		Mounts: []injection.Mount{
+			{HostPath: "/nix/store", ContainerPath: "/nix/store", ReadOnly: true},
+			{HostPath: "/home/user/project", ContainerPath: "/workspace", ReadOnly: false},
+			{HostPath: "/run/secrets/test-sandbox", ContainerPath: "/run/secrets", ReadOnly: true},
+		},
+		EnvVars: []injection.EnvVar{
+			{Name: "ANTHROPIC_API_KEY", Value: `"$(cat /run/secrets/anthropic 2>/dev/null || echo '')"`},
+		},
+		Packages: []injection.Package{
+			{Name: "claude-code"},
+		},
+		TmpfilesRules: []string{
+			"d /home/agent/.config 0755 agent users -",
+		},
+	}
+}
 
 // validTestConfig returns a valid ContainerConfig for testing
 func validTestConfig() *ContainerConfig {
 	return &ContainerConfig{
 		Name:        "test-sandbox",
 		NetworkSlot: 1,
-		Workspace:   "/home/user/project",
-		SecretsPath: "/run/secrets/test-sandbox",
 		AuthorizedKeys: []string{
 			"ssh-rsa AAAA... user@host",
 		},
@@ -33,14 +53,10 @@ func validTestConfig() *ContainerConfig {
 				},
 			},
 		},
-		HostConfig: &config.HostConfig{
-			User: "testuser",
-			UID:  1000,
-			GID:  100,
-		},
-		WorkspaceMode: "direct",
-		UID:           1000,
-		GID:           100,
+		UID:             1000,
+		GID:             100,
+		Contributions:   testContributions(),
+		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
 }
 
@@ -99,13 +115,12 @@ func TestGenerateNixConfig(t *testing.T) {
 
 func TestGenerateNixConfig_HostConfigDir(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.Template.Agents["claude"] = config.AgentConfig{
-		PackagePath:        "pkgs.claude-code",
-		SecretName:         "anthropic",
-		AuthEnvVar:         "ANTHROPIC_API_KEY",
-		HostConfigDir:      "/home/user/.claude",
-		ContainerConfigDir: "/home/agent/.claude",
-	}
+	// Add agent config dir mount via contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/home/user/.claude",
+		ContainerPath: "/home/agent/.claude",
+		ReadOnly:      false,
+	})
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -123,14 +138,12 @@ func TestGenerateNixConfig_HostConfigDir(t *testing.T) {
 
 func TestGenerateNixConfig_HostConfigDirReadOnly(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.Template.Agents["claude"] = config.AgentConfig{
-		PackagePath:           "pkgs.claude-code",
-		SecretName:            "anthropic",
-		AuthEnvVar:            "ANTHROPIC_API_KEY",
-		HostConfigDir:         "/home/user/.claude",
-		ContainerConfigDir:    "/home/agent/.claude",
-		HostConfigDirReadOnly: true,
-	}
+	// Add agent config dir mount via contributions as read-only
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/home/user/.claude",
+		ContainerPath: "/home/agent/.claude",
+		ReadOnly:      true,
+	})
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -151,20 +164,29 @@ func TestGenerateNixConfig_MultipleAgentsWithConfigDirs(t *testing.T) {
 	cfg := validTestConfig()
 	cfg.Template.Agents = map[string]config.AgentConfig{
 		"claude": {
-			PackagePath:        "pkgs.claude-code",
-			SecretName:         "anthropic",
-			AuthEnvVar:         "ANTHROPIC_API_KEY",
-			HostConfigDir:      "/home/user/.claude",
-			ContainerConfigDir: "/home/agent/.claude",
+			PackagePath: "pkgs.claude-code",
+			SecretName:  "anthropic",
+			AuthEnvVar:  "ANTHROPIC_API_KEY",
 		},
 		"aider": {
-			PackagePath:        "pkgs.aider",
-			SecretName:         "openai",
-			AuthEnvVar:         "OPENAI_API_KEY",
-			HostConfigDir:      "/home/user/.aider",
-			ContainerConfigDir: "/home/agent/.aider",
+			PackagePath: "pkgs.aider",
+			SecretName:  "openai",
+			AuthEnvVar:  "OPENAI_API_KEY",
 		},
 	}
+	// Add config dir mounts for both agents via contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts,
+		injection.Mount{
+			HostPath:      "/home/user/.claude",
+			ContainerPath: "/home/agent/.claude",
+			ReadOnly:      false,
+		},
+		injection.Mount{
+			HostPath:      "/home/user/.aider",
+			ContainerPath: "/home/agent/.aider",
+			ReadOnly:      false,
+		},
+	)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -188,9 +210,12 @@ func TestGenerateNixConfig_MultipleAgentsWithConfigDirs(t *testing.T) {
 
 func TestGenerateNixConfig_JJMode(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
-	cfg.WorkspaceMode = "jj"
-	cfg.SourceRepo = "/home/user/myrepo"
+	// Add JJ mount to contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/home/user/myrepo/.jj",
+		ContainerPath: "/home/user/myrepo/.jj",
+		ReadOnly:      false,
+	})
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -199,71 +224,34 @@ func TestGenerateNixConfig_JJMode(t *testing.T) {
 
 	// Check JJ bind mount
 	if !strings.Contains(result, "/home/user/myrepo/.jj") {
-		t.Error("Config should contain .jj bind mount for jj mode")
+		t.Error("Config should contain .jj bind mount from contributions")
 	}
 }
 
 func TestGenerateNixConfig_ClaudeDirMount(t *testing.T) {
-	// Create a temp dir to act as the source repo with a .claude/ directory
-	sourceRepo := t.TempDir()
-	claudeDir := filepath.Join(sourceRepo, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		t.Fatalf("failed to create .claude dir: %v", err)
+	// Test that mounts in contributions are applied
+	cfg := validTestConfig()
+	// Add .claude mount to contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/home/user/myrepo/.claude",
+		ContainerPath: "/workspace/.claude",
+		ReadOnly:      false,
+	})
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
 	}
 
-	tests := []struct {
-		name      string
-		mode      string
-		wantMount bool
-	}{
-		{"jj mode", "jj", true},
-		{"git-worktree mode", "git-worktree", true},
-		{"direct mode", "direct", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := validTestConfig()
-			cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
-			cfg.WorkspaceMode = tt.mode
-			cfg.SourceRepo = sourceRepo
-
-			result, err := GenerateNixConfig(cfg)
-			if err != nil {
-				t.Fatalf("GenerateNixConfig failed: %v", err)
-			}
-
-			hasMount := strings.Contains(result, "/workspace/.claude")
-			if tt.wantMount && !hasMount {
-				t.Errorf("expected .claude bind mount in %s mode, but not found", tt.mode)
-			}
-			if !tt.wantMount && hasMount {
-				t.Errorf("did not expect .claude bind mount in %s mode, but found it", tt.mode)
-			}
-		})
+	if !strings.Contains(result, "/workspace/.claude") {
+		t.Error("Config should contain .claude bind mount from contributions")
 	}
 }
 
-func TestGenerateNixConfig_NonClaudeAgent_NoClaudeDir(t *testing.T) {
-	// A non-claude agent should NOT get .claude/ mounted even if it exists
-	sourceRepo := t.TempDir()
-	claudeDir := filepath.Join(sourceRepo, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		t.Fatalf("failed to create .claude dir: %v", err)
-	}
-
+func TestGenerateNixConfig_NoMountWithoutContribution(t *testing.T) {
+	// Without a mount in contributions, the path should not appear
 	cfg := validTestConfig()
-	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
-	cfg.WorkspaceMode = "jj"
-	cfg.SourceRepo = sourceRepo
-	// Replace claude agent with a non-claude agent
-	cfg.Template.Agents = map[string]config.AgentConfig{
-		"opencode": {
-			PackagePath: "pkgs.opencode",
-			SecretName:  "openai",
-			AuthEnvVar:  "OPENAI_API_KEY",
-		},
-	}
+	// Don't add any .claude mount
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -271,26 +259,7 @@ func TestGenerateNixConfig_NonClaudeAgent_NoClaudeDir(t *testing.T) {
 	}
 
 	if strings.Contains(result, "/workspace/.claude") {
-		t.Error("should not mount .claude for non-claude agent")
-	}
-}
-
-func TestGenerateNixConfig_ClaudeDirMount_NoDir(t *testing.T) {
-	// Source repo exists but has no .claude/ directory — mount should not appear
-	sourceRepo := t.TempDir()
-
-	cfg := validTestConfig()
-	cfg.Workspace = "/var/lib/forage/workspaces/test-sandbox"
-	cfg.WorkspaceMode = "jj"
-	cfg.SourceRepo = sourceRepo
-
-	result, err := GenerateNixConfig(cfg)
-	if err != nil {
-		t.Fatalf("GenerateNixConfig failed: %v", err)
-	}
-
-	if strings.Contains(result, "/workspace/.claude") {
-		t.Error("should not mount .claude when directory does not exist in source repo")
+		t.Error("should not mount .claude when not in contributions")
 	}
 }
 
@@ -344,7 +313,18 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 
 func TestGenerateNixConfig_ProxyMode(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.ProxyURL = "http://10.100.1.1:8080"
+	// Add proxy env vars via contributions
+	cfg.Contributions.EnvVars = append(cfg.Contributions.EnvVars,
+		injection.EnvVar{Name: "ANTHROPIC_BASE_URL", Value: `"http://10.100.1.1:8080"`},
+		injection.EnvVar{Name: "ANTHROPIC_AUTH_TOKEN", Value: `"ignored-by-proxy"`},
+		injection.EnvVar{Name: "ANTHROPIC_CUSTOM_HEADERS", Value: `"X-Forage-Sandbox: test-sandbox"`},
+	)
+	// Remove the direct secret reading env var
+	cfg.Contributions.EnvVars = []injection.EnvVar{
+		{Name: "ANTHROPIC_BASE_URL", Value: `"http://10.100.1.1:8080"`},
+		{Name: "ANTHROPIC_AUTH_TOKEN", Value: `"ignored-by-proxy"`},
+		{Name: "ANTHROPIC_CUSTOM_HEADERS", Value: `"X-Forage-Sandbox: test-sandbox"`},
+	}
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -372,7 +352,7 @@ func TestGenerateNixConfig_ProxyMode(t *testing.T) {
 
 func TestGenerateNixConfig_NoProxy(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.ProxyURL = "" // No proxy
+	// Default testContributions has direct secret reading, no proxy env vars
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -416,11 +396,10 @@ func TestContainerConfig_Validate(t *testing.T) {
 			wantErr: "invalid network slot",
 		},
 		{
-			name:    "missing workspace",
-			modify:  func(c *ContainerConfig) { c.Workspace = "" },
-			wantErr: "workspace path is required",
+			name:    "missing contributions",
+			modify:  func(c *ContainerConfig) { c.Contributions = nil },
+			wantErr: "contributions is required",
 		},
-		// SecretsPath is optional - no validation test needed
 		{
 			name:    "missing authorized keys",
 			modify:  func(c *ContainerConfig) { c.AuthorizedKeys = nil },
@@ -432,9 +411,9 @@ func TestContainerConfig_Validate(t *testing.T) {
 			wantErr: "template is required",
 		},
 		{
-			name:    "invalid workspace mode",
-			modify:  func(c *ContainerConfig) { c.WorkspaceMode = "invalid" },
-			wantErr: "invalid workspace mode",
+			name:    "missing reproducibility",
+			modify:  func(c *ContainerConfig) { c.Reproducibility = nil },
+			wantErr: "reproducibility is required",
 		},
 	}
 
@@ -766,8 +745,6 @@ func goldenTestConfig() *ContainerConfig {
 	return &ContainerConfig{
 		Name:        "test-sandbox",
 		NetworkSlot: 1,
-		Workspace:   "/home/user/project",
-		SecretsPath: "/run/secrets/test-sandbox",
 		AuthorizedKeys: []string{
 			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample user@host",
 		},
@@ -783,14 +760,10 @@ func goldenTestConfig() *ContainerConfig {
 				},
 			},
 		},
-		HostConfig: &config.HostConfig{
-			User: "testuser",
-			UID:  1000,
-			GID:  100,
-		},
-		WorkspaceMode: "direct",
-		UID:           1000,
-		GID:           100,
+		UID:             1000,
+		GID:             100,
+		Contributions:   testContributions(),
+		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
 }
 
@@ -818,16 +791,25 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 		{
 			name: "jj_mode",
 			modifyFunc: func(c *ContainerConfig) {
-				c.Workspace = "/var/lib/forage/workspaces/test-sandbox"
-				c.WorkspaceMode = "jj"
-				c.SourceRepo = "/home/user/myrepo"
+				// Change workspace mount to jj workspace path and add .jj mount
+				c.Contributions.Mounts = []injection.Mount{
+					{HostPath: "/nix/store", ContainerPath: "/nix/store", ReadOnly: true},
+					{HostPath: "/var/lib/forage/workspaces/test-sandbox", ContainerPath: "/workspace", ReadOnly: false},
+					{HostPath: "/run/secrets/test-sandbox", ContainerPath: "/run/secrets", ReadOnly: true},
+					{HostPath: "/home/user/myrepo/.jj", ContainerPath: "/home/user/myrepo/.jj", ReadOnly: false},
+				}
 			},
 			goldenFile: "jj_mode_container.nix",
 		},
 		{
 			name: "proxy_mode",
 			modifyFunc: func(c *ContainerConfig) {
-				c.ProxyURL = "http://10.100.1.1:8080"
+				// Replace direct secret reading with proxy env vars
+				c.Contributions.EnvVars = []injection.EnvVar{
+					{Name: "ANTHROPIC_BASE_URL", Value: `"http://10.100.1.1:8080"`},
+					{Name: "ANTHROPIC_AUTH_TOKEN", Value: `"ignored-by-proxy"`},
+					{Name: "ANTHROPIC_CUSTOM_HEADERS", Value: `"X-Forage-Sandbox: test-sandbox"`},
+				}
 			},
 			goldenFile: "proxy_mode_container.nix",
 		},
@@ -852,7 +834,17 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 
 			golden := readGoldenFile(t, tt.goldenFile)
 			if result != golden {
-				t.Errorf("Generated config does not match golden file %s.\nGot:\n%s\nWant:\n%s", tt.goldenFile, result, golden)
+				// To regenerate golden files, run:
+				// UPDATE_GOLDEN=1 go test -run TestGenerateNixConfig_Golden ./internal/generator/...
+				if os.Getenv("UPDATE_GOLDEN") == "1" {
+					path := filepath.Join("testdata", tt.goldenFile)
+					if err := os.WriteFile(path, []byte(result), 0644); err != nil {
+						t.Fatalf("failed to update golden file: %v", err)
+					}
+					t.Logf("Updated golden file: %s", path)
+					return
+				}
+				t.Errorf("Generated config does not match golden file %s.\nRun with UPDATE_GOLDEN=1 to regenerate.\nGot:\n%s\nWant:\n%s", tt.goldenFile, result, golden)
 			}
 		})
 	}
@@ -860,12 +852,15 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 
 func TestGenerateNixConfig_PermissionsMounts(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.PermissionsMounts = []PermissionsMount{
-		{
-			HostPath:      "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json",
-			ContainerPath: "/etc/claude-code/managed-settings.json",
-		},
-	}
+	// Add permissions mount via contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json",
+		ContainerPath: "/etc/claude-code/managed-settings.json",
+		ReadOnly:      true,
+	})
+	cfg.Contributions.TmpfilesRules = append(cfg.Contributions.TmpfilesRules,
+		"d /etc/claude-code 0755 root root -",
+	)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -879,7 +874,7 @@ func TestGenerateNixConfig_PermissionsMounts(t *testing.T) {
 	if !strings.Contains(result, "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json") {
 		t.Error("Config should contain permissions host path")
 	}
-	// Check that the mount is read-only — find the specific mount
+	// Check that the mount is read-only
 	if !strings.Contains(result, `"/etc/claude-code/managed-settings.json" = { hostPath = "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json"; isReadOnly = true; }`) {
 		t.Error("Permissions mount should be read-only")
 	}
@@ -892,7 +887,7 @@ func TestGenerateNixConfig_PermissionsMounts(t *testing.T) {
 
 func TestGenerateNixConfig_NoPermissionsMounts(t *testing.T) {
 	cfg := validTestConfig()
-	// No PermissionsMounts set (default nil)
+	// Default testContributions has no permissions mounts
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -955,6 +950,22 @@ func TestGenerateNixConfig_IdentityWithSSHKey(t *testing.T) {
 		GitEmail:   "agent@example.com",
 		SSHKeyPath: keyPath,
 	}
+	// Add SSH key mounts via contributions (as the identity contributor would)
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts,
+		injection.Mount{
+			HostPath:      keyPath,
+			ContainerPath: "/home/agent/.ssh/id_ed25519",
+			ReadOnly:      true,
+		},
+		injection.Mount{
+			HostPath:      keyPath + ".pub",
+			ContainerPath: "/home/agent/.ssh/id_ed25519.pub",
+			ReadOnly:      true,
+		},
+	)
+	cfg.Contributions.TmpfilesRules = append(cfg.Contributions.TmpfilesRules,
+		"d /home/agent/.ssh 0700 agent users -",
+	)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -971,8 +982,7 @@ func TestGenerateNixConfig_IdentityWithSSHKey(t *testing.T) {
 	if !strings.Contains(result, keyPath+".pub") {
 		t.Error("Config should mount SSH public key")
 	}
-	// Both key mounts should be read-only
-	// SSH config should be written
+	// SSH config should be written via init commands
 	if !strings.Contains(result, "IdentityFile") {
 		t.Error("Config should write SSH config with IdentityFile")
 	}
@@ -1004,7 +1014,15 @@ func TestGenerateNixConfig_NoIdentity(t *testing.T) {
 
 func TestGenerateNixConfig_SystemPromptMount(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
+	// Add system prompt mount via contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md",
+		ContainerPath: "/home/agent/.config/forage/system-prompt.md",
+		ReadOnly:      true,
+	})
+	cfg.Contributions.TmpfilesRules = append(cfg.Contributions.TmpfilesRules,
+		"d /home/agent/.config/forage 0755 agent users -",
+	)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -1026,7 +1044,15 @@ func TestGenerateNixConfig_SystemPromptMount(t *testing.T) {
 
 func TestGenerateNixConfig_SkillsMount(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.SkillsPath = "/var/lib/forage/sandboxes/test-sandbox.skills"
+	// Add skills mount via contributions
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/var/lib/forage/sandboxes/test-sandbox.skills",
+		ContainerPath: "/home/agent/.claude/skills",
+		ReadOnly:      true,
+	})
+	cfg.Contributions.TmpfilesRules = append(cfg.Contributions.TmpfilesRules,
+		"d /home/agent/.claude 0755 agent users -",
+	)
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -1048,14 +1074,21 @@ func TestGenerateNixConfig_SkillsMount(t *testing.T) {
 
 func TestGenerateNixConfig_ClaudeWrapper(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
+	// Remove claude-code from packages since the wrapper replaces it
+	cfg.Contributions.Packages = nil
+	// Add system prompt mount via contributions - this triggers the wrapper
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md",
+		ContainerPath: "/home/agent/.config/forage/system-prompt.md",
+		ReadOnly:      true,
+	})
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
 		t.Fatalf("GenerateNixConfig failed: %v", err)
 	}
 
-	// When SystemPromptPath is set and claude agent exists, should emit wrapper
+	// When a system-prompt.md mount exists and claude agent exists, should emit wrapper
 	if !strings.Contains(result, "writeShellScriptBin") {
 		t.Error("Config should contain writeShellScriptBin wrapper for claude")
 	}
@@ -1065,7 +1098,7 @@ func TestGenerateNixConfig_ClaudeWrapper(t *testing.T) {
 	if !strings.Contains(result, "system-prompt.md") {
 		t.Error("Config should reference system prompt file in wrapper")
 	}
-	// Raw claude package should NOT be in systemPackages
+	// Raw claude package should NOT be in systemPackages when wrapper is used
 	if strings.Contains(result, "        pkgs.claude-code\n") {
 		t.Error("Config should NOT include raw claude package when wrapper is used")
 	}
@@ -1073,7 +1106,7 @@ func TestGenerateNixConfig_ClaudeWrapper(t *testing.T) {
 
 func TestGenerateNixConfig_NoClaudeWrapper_WithoutPrompt(t *testing.T) {
 	cfg := validTestConfig()
-	// No SystemPromptPath — claude should be added as raw package
+	// No system-prompt.md mount — claude should be added as raw package
 
 	result, err := GenerateNixConfig(cfg)
 	if err != nil {
@@ -1090,14 +1123,22 @@ func TestGenerateNixConfig_NoClaudeWrapper_WithoutPrompt(t *testing.T) {
 
 func TestGenerateNixConfig_NonClaudeAgent_NoWrapper(t *testing.T) {
 	cfg := validTestConfig()
-	cfg.SystemPromptPath = "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md"
-	// Replace claude with a non-claude agent
+	// Add system prompt mount but replace claude with a non-claude agent
+	cfg.Contributions.Mounts = append(cfg.Contributions.Mounts, injection.Mount{
+		HostPath:      "/var/lib/forage/sandboxes/test-sandbox.system-prompt.md",
+		ContainerPath: "/home/agent/.config/forage/system-prompt.md",
+		ReadOnly:      true,
+	})
 	cfg.Template.Agents = map[string]config.AgentConfig{
 		"aider": {
 			PackagePath: "pkgs.aider",
 			SecretName:  "openai",
 			AuthEnvVar:  "OPENAI_API_KEY",
 		},
+	}
+	// Replace claude-code package with aider package
+	cfg.Contributions.Packages = []injection.Package{
+		{Name: "aider"},
 	}
 
 	result, err := GenerateNixConfig(cfg)
@@ -1238,7 +1279,7 @@ func TestGenerateNixConfig_DefaultMultiplexer(t *testing.T) {
 // TestGenerateNixConfig_RestrictedNetwork tests restricted network mode separately
 // because it involves DNS resolution which produces dynamic IP addresses.
 func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {
-	cfg := goldenTestConfig()
+	cfg := validTestConfig()
 	cfg.Template.Network = "restricted"
 	cfg.Template.AllowedHosts = []string{"api.anthropic.com", "github.com"}
 

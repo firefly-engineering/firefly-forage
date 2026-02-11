@@ -54,6 +54,7 @@
 
       environment.sessionVariables = {
         ANTHROPIC_BASE_URL = "http://10.100.1.1:8080";
+        ANTHROPIC_AUTH_TOKEN = "ignored-by-proxy";
         ANTHROPIC_CUSTOM_HEADERS = "X-Forage-Sandbox: test-sandbox";
       };
 
@@ -68,6 +69,7 @@
 
       # Ensure ~/.config is owned by agent (bind mounts may create it as root)
       systemd.tmpfiles.rules = [
+        "d /home/agent/.config 0755 agent users -"
         "d /home/agent/.config 0755 agent users -"
       ];
 
