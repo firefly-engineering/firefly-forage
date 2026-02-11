@@ -1,6 +1,7 @@
 package reproducibility
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -78,5 +79,13 @@ func normalizeVersion(version string) string {
 	return strings.ReplaceAll(version, ".", "_")
 }
 
-// Ensure NixReproducibility implements Reproducibility.
-var _ Reproducibility = (*NixReproducibility)(nil)
+// ContributeMounts returns the /nix/store mount.
+func (n *NixReproducibility) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
+	return []injection.Mount{n.StoreMount()}, nil
+}
+
+// Ensure NixReproducibility implements Reproducibility and MountContributor.
+var (
+	_ Reproducibility             = (*NixReproducibility)(nil)
+	_ injection.MountContributor = (*NixReproducibility)(nil)
+)
