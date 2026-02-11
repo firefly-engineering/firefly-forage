@@ -28,13 +28,15 @@ claude-isolated claude              none       Claude Code without network
 Create a sandbox bound to a project directory:
 
 ```bash
-forage-ctl up myproject --template claude --workspace ~/projects/myproject
+forage-ctl up myproject --template claude --repo ~/projects/myproject --direct
 ```
+
+The `--direct` flag mounts the directory directly without VCS isolation. If your project is a JJ or Git repository and you omit `--direct`, Forage will automatically create an isolated workspace.
 
 You'll see output like:
 ```
 ℹ Creating sandbox 'myproject' from template 'claude'
-ℹ Mode: direct workspace
+ℹ Mode: direct
 ℹ Workspace: /home/user/projects/myproject → /workspace
 ℹ SSH port: 2200
 ℹ Network slot: 1 (IP: 192.168.100.11)
@@ -91,8 +93,8 @@ forage-ctl ps
 
 Output:
 ```
-NAME            TEMPLATE   PORT   MODE  WORKSPACE                      STATUS
-myproject       claude     2200   dir   /home/user/projects/myproject  ✓ healthy
+NAME            TEMPLATE   PORT   MODE    WORKSPACE                      STATUS
+myproject       claude     2200   direct  /home/user/projects/myproject  ✓ healthy
 ```
 
 ## Reset if Needed

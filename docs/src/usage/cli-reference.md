@@ -32,7 +32,7 @@ multi           claude,aider        full       Multi-agent sandbox
 Create and start a sandbox.
 
 ```bash
-forage-ctl up <name> --template <template> [--workspace <path> | --repo <path> | --git-worktree <path>]
+forage-ctl up <name> --template <template> --repo <path> [options]
 ```
 
 **Arguments:**
@@ -46,23 +46,41 @@ forage-ctl up <name> --template <template> [--workspace <path> | --repo <path> |
 | Option | Description |
 |--------|-------------|
 | `--template, -t <name>` | Template to use (required) |
-| `--workspace, -w <path>` | Directory to mount at `/workspace` |
-| `--repo, -r <path>` | JJ repository to create workspace from |
-| `--git-worktree, -g <path>` | Git repository to create worktree from |
+| `--repo, -r <path>` | Repository or directory path (required) |
+| `--direct` | Mount directory directly, skipping VCS isolation |
+| `--ssh-key <key>` | SSH public key for sandbox access (can be repeated) |
+| `--ssh-key-path <path>` | Path to SSH private key for agent push access |
+| `--git-user <name>` | Git user.name for agent commits |
+| `--git-email <email>` | Git user.email for agent commits |
+| `--no-mux-config` | Don't mount host multiplexer config into sandbox |
 
-> **Note:** Exactly one of `--workspace`, `--repo`, or `--git-worktree` is required.
+**Workspace Modes:**
+
+The workspace mode is determined automatically based on the `--repo` path and flags:
+
+| Mode | Condition | Behavior |
+|------|-----------|----------|
+| Direct | `--direct` flag used | Mounts directory directly at `/workspace` |
+| JJ workspace | Path contains `.jj/` directory | Creates isolated JJ workspace |
+| Git worktree | Path contains `.git/` directory | Creates git worktree with branch `forage-<name>` |
 
 **Examples:**
 
 ```bash
-# Direct workspace mount
-forage-ctl up myproject -t claude -w ~/projects/myproject
+# Direct mount (no VCS isolation)
+forage-ctl up myproject -t claude --repo ~/projects/myproject --direct
 
-# JJ workspace (creates isolated working copy)
-forage-ctl up agent-a -t claude --repo ~/projects/myrepo
+# JJ workspace (auto-detected, creates isolated working copy)
+forage-ctl up agent-a -t claude --repo ~/projects/jj-repo
 
-# Git worktree (creates isolated worktree with branch forage-<name>)
-forage-ctl up agent-b -t claude --git-worktree ~/projects/myrepo
+# Git worktree (auto-detected, creates isolated worktree)
+forage-ctl up agent-b -t claude --repo ~/projects/git-repo
+
+# With SSH key for push access
+forage-ctl up myproject -t claude --repo ~/projects/myrepo --ssh-key-path ~/.ssh/id_ed25519
+
+# With git identity for commits
+forage-ctl up myproject -t claude --repo ~/projects/myrepo --git-user "Agent" --git-email "agent@example.com"
 ```
 
 ---
@@ -107,10 +125,10 @@ forage-ctl ps
 
 **Output:**
 ```
-NAME            TEMPLATE   PORT   MODE WORKSPACE                    STATUS
-myproject       claude     2200   dir  /home/user/projects/myproj   ✓ healthy
-agent-a         claude     2201   jj   ...forage/workspaces/agent-a ✓ healthy
-agent-b         claude     2202   jj   ...forage/workspaces/agent-b ● stopped
+NAME            TEMPLATE   PORT   MODE        WORKSPACE                         STATUS
+myproject       claude     2200   direct      /home/user/projects/myproj        ✓ healthy
+agent-a         claude     2201   jj          ...forage/workspaces/agent-a      ✓ healthy
+agent-b         claude     2202   git-worktree ...forage/workspaces/agent-b     ● stopped
 ```
 
 **Columns:**
@@ -120,7 +138,7 @@ agent-b         claude     2202   jj   ...forage/workspaces/agent-b ● stopped
 | NAME | Sandbox name |
 | TEMPLATE | Template used |
 | PORT | SSH port |
-| MODE | `dir` (direct workspace), `jj` (JJ workspace), or `git` (git worktree) |
+| MODE | `direct` (direct mount), `jj` (JJ workspace), or `git-worktree` (git worktree) |
 | WORKSPACE | Path mounted at `/workspace` |
 | STATUS | Health status (see below) |
 
@@ -458,6 +476,48 @@ Displays the active container runtime and lists available runtimes on the system
 - `apple` - macOS 13+ (Apple Virtualization.framework)
 - `podman` - Linux, macOS (rootless preferred)
 - `docker` - Linux, macOS, Windows
+
+---
+
+### `gc`
+
+Garbage collect orphaned sandbox resources.
+
+```bash
+forage-ctl gc [--force]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Actually remove orphaned resources (default is dry run) |
+
+This command reconciles disk state with runtime state and removes orphaned resources. Without `--force`, it performs a dry run showing what would be cleaned.
+
+**Detects:**
+
+| Type | Description |
+|------|-------------|
+| Orphaned files | Sandbox files on disk with no matching container |
+| Orphaned containers | Containers in runtime with no matching metadata on disk |
+| Stale metadata | Metadata files for sandboxes whose container no longer exists |
+
+**Examples:**
+
+```bash
+# Dry run - show what would be cleaned
+forage-ctl gc
+
+# Actually clean up orphaned resources
+forage-ctl gc --force
+```
+
+**Use cases:**
+
+- After a system crash that left containers in an inconsistent state
+- When manual cleanup left orphaned files
+- Periodic maintenance to reclaim disk space
 
 ---
 

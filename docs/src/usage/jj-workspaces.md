@@ -4,7 +4,7 @@ Forage integrates with [Jujutsu (jj)](https://github.com/martinvonz/jj) to enabl
 
 ## Overview
 
-When you use `--repo` instead of `--workspace`, Forage:
+When you use `--repo` with a JJ repository (without the `--direct` flag), Forage:
 
 1. Creates a JJ workspace at `/var/lib/forage/workspaces/<name>`
 2. Bind mounts this workspace to `/workspace` in the container
@@ -149,29 +149,38 @@ forage-ctl down agent-a
 
 The changes made in that workspace remain in the repository history—only the workspace is removed.
 
-## Comparison: --workspace vs --repo vs --git-worktree
+## Workspace Modes
 
-| Aspect | `--workspace` | `--repo` | `--git-worktree` |
-|--------|---------------|----------|------------------|
+Forage automatically detects the workspace mode based on the repository type:
+
+| Mode | Condition | Behavior |
+|------|-----------|----------|
+| Direct | `--direct` flag used | Mounts directory directly at `/workspace` |
+| JJ workspace | Path contains `.jj/` | Creates isolated JJ workspace |
+| Git worktree | Path contains `.git/` | Creates git worktree with branch `forage-<name>` |
+
+### Comparison
+
+| Aspect | Direct (`--direct`) | JJ workspace | Git worktree |
+|--------|---------------------|--------------|--------------|
 | Working directory | Direct bind mount | JJ workspace | Git worktree |
 | Multiple sandboxes | Need separate directories | Share same repo | Share same repo |
 | Isolation | File-level (same files) | Change-level (JJ) | Branch-level (git) |
 | VCS | Any (git, jj, etc.) | JJ only | Git only |
 | Cleanup | Removes skill files | Forgets JJ workspace | Removes git worktree |
 
-**Use `--workspace` when:**
+**Use `--direct` when:**
 - Simple single-agent workflow
-- Project doesn't use JJ or git worktrees
-- You want direct file access
+- Project doesn't use JJ or git
+- You want direct file access without VCS isolation
 
-**Use `--repo` when:**
+**Use JJ repos (auto-detected) when:**
 - Multiple agents on same codebase
 - You want change isolation
 - Project uses JJ for version control
 
-**Use `--git-worktree` when:**
+**Use Git repos (auto-detected) when:**
 - Multiple agents on same git repository
-- You prefer git over JJ
 - Each agent works on a separate branch (auto-created as `forage-<name>`)
 
 ## Troubleshooting
