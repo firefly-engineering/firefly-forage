@@ -276,6 +276,10 @@ in
         assertion = cfg.user != "";
         message = "services.firefly-forage.user must be specified";
       }
+      {
+        assertion = lib.hasPrefix "/run/" "/run/forage-secrets";
+        message = "Secrets directory must be under /run (tmpfs) to prevent secrets from persisting on disk";
+      }
     ]
     ++ lib.flatten (
       lib.mapAttrsToList (
@@ -297,6 +301,8 @@ in
       "d ${cfg.stateDir} 0750 ${cfg.user} root -"
       "d ${cfg.stateDir}/sandboxes 0750 ${cfg.user} root -"
       "d ${cfg.stateDir}/workspaces 0750 ${cfg.user} root -"
+      # Secrets directory is under /run (tmpfs on NixOS) so secrets
+      # are never persisted to disk. Do not move this outside /run.
       "d /run/forage-secrets 0700 root root -"
     ];
 
