@@ -9,6 +9,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
@@ -221,7 +222,7 @@ func applyContributions(data *TemplateData, contributions *injection.Contributio
 		for _, pkg := range contributions.Packages {
 			resolved, err := repro.ResolvePackage(pkg)
 			if err != nil {
-				// Skip packages that can't be resolved
+				logging.Warn("skipping unresolvable package", "package", pkg.Name, "error", err)
 				continue
 			}
 			if !existingPkgs[resolved] {
