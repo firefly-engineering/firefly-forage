@@ -36,6 +36,10 @@ type Config struct {
 	// AuditLogPath is the path to write audit logs (empty = no logging)
 	AuditLogPath string
 
+	// APIKeyFilename is the name of the file within each sandbox's secrets
+	// directory that contains the API key. Defaults to "anthropic-api-key".
+	APIKeyFilename string
+
 	// Logger for proxy operations
 	Logger *slog.Logger
 
@@ -72,6 +76,10 @@ func New(cfg *Config) (*Proxy, error) {
 	targetHost := target.Hostname()
 	if cfg.Transport == nil && isInternalHost(targetHost) {
 		return nil, fmt.Errorf("proxy target must not point to internal/link-local addresses: %s", targetHost)
+	}
+
+	if cfg.APIKeyFilename == "" {
+		cfg.APIKeyFilename = "anthropic-api-key"
 	}
 
 	if cfg.Logger == nil {
@@ -200,7 +208,7 @@ func (p *Proxy) LoadAPIKeys() error {
 		if entry.IsDir() {
 			// Each sandbox has a subdirectory with its secrets
 			sandboxName := entry.Name()
-			keyPath := filepath.Join(p.config.SecretsDir, sandboxName, "anthropic-api-key")
+			keyPath := filepath.Join(p.config.SecretsDir, sandboxName, p.config.APIKeyFilename)
 			data, err := os.ReadFile(keyPath)
 			if err != nil {
 				if !os.IsNotExist(err) {
