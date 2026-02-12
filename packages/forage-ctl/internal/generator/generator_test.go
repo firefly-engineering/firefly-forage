@@ -281,7 +281,7 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 		},
 		{
 			network:    "none",
-			shouldHave: []string{"nameservers = [ ]", "defaultGateway = null", "OUTPUT -j DROP"},
+			shouldHave: []string{"nameservers = [ ]", "defaultGateway = null", "policy drop"},
 		},
 		{
 			network:      "restricted",

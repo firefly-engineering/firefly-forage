@@ -168,7 +168,9 @@ func TestGenerateNixNetworkConfig_None(t *testing.T) {
 	expectedStrings := []string{
 		"nameservers = [ ]",
 		"defaultGateway = null",
-		"OUTPUT -j DROP",
+		"policy drop",
+		"networking.nftables",
+		"reject with icmp type admin-prohibited",
 	}
 
 	for _, expected := range expectedStrings {
@@ -221,8 +223,8 @@ func TestGenerateNixNetworkConfig_RestrictedNoHosts(t *testing.T) {
 
 	config := GenerateNixNetworkConfig(cfg)
 
-	// With no allowed hosts, restricted should behave like none
-	if !strings.Contains(config, "OUTPUT -j DROP") {
+	// With no allowed hosts, restricted should behave like none (nftables drop policy)
+	if !strings.Contains(config, "policy drop") {
 		t.Error("restricted mode with no hosts should behave like none mode")
 	}
 }

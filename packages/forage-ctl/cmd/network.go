@@ -114,7 +114,7 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 		Metadata:   metadata,
 		Template:   template,
 		HostConfig: hostConfig,
-		Paths:      paths,
+		Paths:      p,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to rebuild container config: %w", err)

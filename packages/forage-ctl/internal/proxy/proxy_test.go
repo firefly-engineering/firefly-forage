@@ -16,7 +16,7 @@ func TestProxy_AuthInjection(t *testing.T) {
 	// Create a test upstream server that verifies headers
 	var receivedAPIKey string
 	var receivedAuth string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAPIKey = r.Header.Get("X-Api-Key")
 		receivedAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
@@ -39,6 +39,7 @@ func TestProxy_AuthInjection(t *testing.T) {
 		ListenAddr: ":0",
 		SecretsDir: tmpDir,
 		TargetURL:  upstream.URL,
+		Transport:  upstream.Client().Transport,
 	}
 	proxy, err := New(cfg)
 	if err != nil {
@@ -66,15 +67,16 @@ func TestProxy_AuthInjection(t *testing.T) {
 	if receivedAPIKey != "sk-test-key-123" {
 		t.Errorf("expected API key 'sk-test-key-123', got %q", receivedAPIKey)
 	}
-	if receivedAuth != "Bearer sk-test-key-123" {
-		t.Errorf("expected auth header 'Bearer sk-test-key-123', got %q", receivedAuth)
+	// Authorization: Bearer should NOT be set (only X-Api-Key is used)
+	if receivedAuth != "" {
+		t.Errorf("expected no Authorization header, got %q", receivedAuth)
 	}
 }
 
 func TestProxy_NoAPIKey(t *testing.T) {
 	// Create a test upstream server
 	var receivedAPIKey string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAPIKey = r.Header.Get("X-Api-Key")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -86,6 +88,7 @@ func TestProxy_NoAPIKey(t *testing.T) {
 		ListenAddr: ":0",
 		SecretsDir: tmpDir,
 		TargetURL:  upstream.URL,
+		Transport:  upstream.Client().Transport,
 	}
 	proxy, err := New(cfg)
 	if err != nil {
@@ -108,7 +111,7 @@ func TestProxy_NoAPIKey(t *testing.T) {
 func TestProxy_RateLimiting(t *testing.T) {
 	// Create a test upstream server
 	requestCount := 0
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -119,6 +122,7 @@ func TestProxy_RateLimiting(t *testing.T) {
 		ListenAddr:        ":0",
 		SecretsDir:        t.TempDir(),
 		TargetURL:         upstream.URL,
+		Transport:         upstream.Client().Transport,
 		RateLimitRequests: 3,
 		RateLimitWindow:   time.Minute,
 	}
@@ -159,7 +163,7 @@ func TestProxy_RateLimiting(t *testing.T) {
 
 func TestProxy_AuditLogging(t *testing.T) {
 	// Create a test upstream server
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
@@ -171,6 +175,7 @@ func TestProxy_AuditLogging(t *testing.T) {
 		ListenAddr:   ":0",
 		SecretsDir:   tmpDir,
 		TargetURL:    upstream.URL,
+		Transport:    upstream.Client().Transport,
 		AuditLogPath: auditPath,
 	}
 	proxy, err := New(cfg)
@@ -215,7 +220,7 @@ func TestProxy_AuditLogging(t *testing.T) {
 func TestProxy_SandboxHeaderRemoved(t *testing.T) {
 	// Verify X-Forage-Sandbox header is not forwarded
 	var receivedHeaders http.Header
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeaders = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -231,6 +236,7 @@ func TestProxy_SandboxHeaderRemoved(t *testing.T) {
 		ListenAddr: ":0",
 		SecretsDir: tmpDir,
 		TargetURL:  upstream.URL,
+		Transport:  upstream.Client().Transport,
 	}
 	proxy, err := New(cfg)
 	if err != nil {
@@ -288,7 +294,7 @@ func TestProxy_LoadAPIKeys(t *testing.T) {
 	cfg := &Config{
 		ListenAddr: ":0",
 		SecretsDir: tmpDir,
-		TargetURL:  "http://localhost",
+		TargetURL:  "https://api.example.com",
 	}
 	proxy, err := New(cfg)
 	if err != nil {
@@ -321,7 +327,7 @@ func TestProxy_LoadAPIKeys(t *testing.T) {
 
 func TestProxy_UpstreamError(t *testing.T) {
 	// Create an upstream that always errors
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "upstream error"}`))
 	}))
@@ -331,6 +337,7 @@ func TestProxy_UpstreamError(t *testing.T) {
 		ListenAddr: ":0",
 		SecretsDir: t.TempDir(),
 		TargetURL:  upstream.URL,
+		Transport:  upstream.Client().Transport,
 	}
 	proxy, err := New(cfg)
 	if err != nil {
@@ -348,7 +355,7 @@ func TestProxy_UpstreamError(t *testing.T) {
 
 func TestProxy_StreamingResponse(t *testing.T) {
 	// Test that streaming responses work correctly
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher, ok := w.(http.Flusher)
@@ -367,6 +374,7 @@ func TestProxy_StreamingResponse(t *testing.T) {
 		ListenAddr: ":0",
 		SecretsDir: t.TempDir(),
 		TargetURL:  upstream.URL,
+		Transport:  upstream.Client().Transport,
 	}
 	proxy, err := New(cfg)
 	if err != nil {

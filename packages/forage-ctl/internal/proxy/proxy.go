@@ -38,6 +38,10 @@ type Config struct {
 
 	// Logger for proxy operations
 	Logger *slog.Logger
+
+	// Transport is an optional HTTP transport for the reverse proxy.
+	// Used in tests to supply a TLS-aware transport for test servers.
+	Transport http.RoundTripper
 }
 
 // Proxy is an HTTP reverse proxy with auth injection
@@ -62,9 +66,11 @@ func New(cfg *Config) (*Proxy, error) {
 		return nil, fmt.Errorf("proxy target must use HTTPS (got %q) to protect API keys in transit", target.Scheme)
 	}
 
-	// Reject targets that could be used for SSRF against internal services
+	// Reject targets that could be used for SSRF against internal services.
+	// Skip this check when a custom Transport is provided (used in tests
+	// with httptest.NewTLSServer which binds to 127.0.0.1).
 	targetHost := target.Hostname()
-	if isInternalHost(targetHost) {
+	if cfg.Transport == nil && isInternalHost(targetHost) {
 		return nil, fmt.Errorf("proxy target must not point to internal/link-local addresses: %s", targetHost)
 	}
 
@@ -92,6 +98,11 @@ func New(cfg *Config) (*Proxy, error) {
 		},
 		ModifyResponse: p.modifyResponse,
 		ErrorHandler:   p.errorHandler,
+	}
+
+	// Use custom transport if provided (e.g., for TLS test servers)
+	if cfg.Transport != nil {
+		p.reverseProxy.Transport = cfg.Transport
 	}
 
 	// Create rate limiter if configured

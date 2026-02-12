@@ -22,7 +22,6 @@ func init() {
 }
 
 func runPs(cmd *cobra.Command, args []string) error {
-	p := paths()
 	rt := getRuntime()
 
 	sandboxes, err := listSandboxes()
