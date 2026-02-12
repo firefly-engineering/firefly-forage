@@ -166,15 +166,6 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 		ProxyURL:    proxyURL,
 	}
 
-	var initCmdReq *injection.InitCommandRequest
-	if identity != nil {
-		initCmdReq = &injection.InitCommandRequest{
-			GitUser:    identity.GitUser,
-			GitEmail:   identity.GitEmail,
-			SSHKeyPath: identity.SSHKeyPath,
-		}
-	}
-
 	genFileReq := &injection.GeneratedFileRequest{
 		SandboxName:   sandboxName,
 		SourceRepo:    sourceRepo,
@@ -200,7 +191,6 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 			Contributors:         contributors,
 			MountRequest:         mountReq,
 			EnvVarRequest:        envVarReq,
-			InitCommandRequest:   initCmdReq,
 			GeneratedFileRequest: genFileReq,
 			TmpfilesRequest:      tmpfilesReq,
 			GeneratedFileMounter: gfMounter,

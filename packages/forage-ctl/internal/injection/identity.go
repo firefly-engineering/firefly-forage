@@ -63,59 +63,6 @@ func (i *IdentityContributor) ContributeMounts(ctx context.Context, req *MountRe
 	}, nil
 }
 
-// ContributeInitCommands returns git/jj config commands.
-func (i *IdentityContributor) ContributeInitCommands(ctx context.Context, req *InitCommandRequest) ([]string, error) {
-	var commands []string
-
-	// Use request values if provided, falling back to configured values
-	gitUser := i.GitUser
-	gitEmail := i.GitEmail
-	sshKeyPath := i.SSHKeyPath
-
-	if req != nil {
-		if req.GitUser != "" {
-			gitUser = req.GitUser
-		}
-		if req.GitEmail != "" {
-			gitEmail = req.GitEmail
-		}
-		if req.SSHKeyPath != "" {
-			sshKeyPath = req.SSHKeyPath
-		}
-	}
-
-	// Git config commands
-	if gitUser != "" {
-		commands = append(commands, fmt.Sprintf("git config --global user.name %q", gitUser))
-	}
-	if gitEmail != "" {
-		commands = append(commands, fmt.Sprintf("git config --global user.email %q", gitEmail))
-	}
-
-	// JJ config commands (jj uses the same identity)
-	if gitUser != "" {
-		commands = append(commands, fmt.Sprintf("jj config set --user user.name %q", gitUser))
-	}
-	if gitEmail != "" {
-		commands = append(commands, fmt.Sprintf("jj config set --user user.email %q", gitEmail))
-	}
-
-	// SSH config for default key
-	if sshKeyPath != "" {
-		homeDir := i.HomeDir
-		if homeDir == "" {
-			homeDir = "/home/agent"
-		}
-		keyName := filepath.Base(sshKeyPath)
-		keyPath := filepath.Join(homeDir, ".ssh", keyName)
-		// This would typically be handled in the Nix config, but we expose
-		// the key name for reference
-		_ = keyPath
-	}
-
-	return commands, nil
-}
-
 // ContributeTmpfilesRules returns tmpfiles rules for SSH directory.
 func (i *IdentityContributor) ContributeTmpfilesRules(ctx context.Context, req *TmpfilesRequest) ([]string, error) {
 	if i.SSHKeyPath == "" {
@@ -176,8 +123,7 @@ func (i *IdentityContributor) ContributePromptFragments(ctx context.Context) ([]
 
 // Ensure IdentityContributor implements interfaces
 var (
-	_ MountContributor       = (*IdentityContributor)(nil)
-	_ InitCommandContributor = (*IdentityContributor)(nil)
-	_ TmpfilesContributor    = (*IdentityContributor)(nil)
-	_ PromptContributor      = (*IdentityContributor)(nil)
+	_ MountContributor    = (*IdentityContributor)(nil)
+	_ TmpfilesContributor = (*IdentityContributor)(nil)
+	_ PromptContributor   = (*IdentityContributor)(nil)
 )

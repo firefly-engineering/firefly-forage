@@ -15,12 +15,11 @@ func NewCollector() *Collector {
 
 // Contributions is the aggregated result from all contributors.
 type Contributions struct {
-	Mounts           []Mount
-	EnvVars          []EnvVar
-	Packages         []Package
-	InitCommands     []string
-	TmpfilesRules    []string
-	PromptFragments  []PromptFragment
+	Mounts          []Mount
+	EnvVars         []EnvVar
+	Packages        []Package
+	TmpfilesRules   []string
+	PromptFragments []PromptFragment
 }
 
 // CollectionSources holds all the backends that might contribute.
@@ -32,7 +31,6 @@ type CollectionSources struct {
 	// Request contexts for different contribution types
 	MountRequest         *MountRequest
 	EnvVarRequest        *EnvVarRequest
-	InitCommandRequest   *InitCommandRequest
 	GeneratedFileRequest *GeneratedFileRequest
 	TmpfilesRequest      *TmpfilesRequest
 
@@ -74,15 +72,6 @@ func (c *Collector) Collect(ctx context.Context, sources CollectionSources) (*Co
 				return nil, err
 			}
 			result.EnvVars = append(result.EnvVars, envVars...)
-		}
-
-		// Init commands
-		if ic, ok := src.(InitCommandContributor); ok {
-			cmds, err := ic.ContributeInitCommands(ctx, sources.InitCommandRequest)
-			if err != nil {
-				return nil, err
-			}
-			result.InitCommands = append(result.InitCommands, cmds...)
 		}
 
 		// Tmpfiles rules

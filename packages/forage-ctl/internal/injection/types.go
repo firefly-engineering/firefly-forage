@@ -67,13 +67,6 @@ type EnvVarRequest struct {
 	ProxyURL    string
 }
 
-// InitCommandRequest provides context for init commands.
-type InitCommandRequest struct {
-	GitUser    string
-	GitEmail   string
-	SSHKeyPath string
-}
-
 // GeneratedFileRequest provides context for generating files.
 type GeneratedFileRequest struct {
 	SandboxName   string

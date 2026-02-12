@@ -19,11 +19,6 @@ type EnvVarContributor interface {
 	ContributeEnvVars(ctx context.Context, req *EnvVarRequest) ([]EnvVar, error)
 }
 
-// InitCommandContributor can contribute init-time shell commands.
-type InitCommandContributor interface {
-	ContributeInitCommands(ctx context.Context, req *InitCommandRequest) ([]string, error)
-}
-
 // PromptContributor can contribute to agent system prompts.
 type PromptContributor interface {
 	ContributePromptFragments(ctx context.Context) ([]PromptFragment, error)
