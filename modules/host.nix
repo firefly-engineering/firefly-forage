@@ -483,7 +483,9 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       serviceConfig = {
-        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl}/bin/forage-ctl monitor --interval ${cfg.monitor.interval}${
+        ExecStart = "${
+          self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
+        }/bin/forage-ctl monitor --interval ${cfg.monitor.interval}${
           if cfg.monitor.autoRestart then " --auto-restart" else ""
         }";
         Restart = "on-failure";
