@@ -62,10 +62,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
 
 	// Parse workspace mode from flags
-	opts, err := parseCreateOptions(name)
-	if err != nil {
-		return err
-	}
+	opts := parseCreateOptions(name)
 
 	// Create the sandbox using the sandbox package
 	creator, err := sandbox.NewCreator()
@@ -89,16 +86,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 }
 
 // parseCreateOptions parses command flags into CreateOptions.
-func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
+func parseCreateOptions(name string) sandbox.CreateOptions {
 	return sandbox.CreateOptions{
-		Name:         name,
-		Template:     upTemplate,
-		RepoPath:     upRepo,
-		Direct:       upDirect,
-		SSHKeys:      upSSHKeys,
+		Name:        name,
+		Template:    upTemplate,
+		RepoPath:    upRepo,
+		Direct:      upDirect,
+		SSHKeys:     upSSHKeys,
 		NoMuxConfig: upNoMuxConfig,
-		GitUser:      upGitUser,
-		GitEmail:     upGitEmail,
-		SSHKeyPath:   upSSHKeyPath,
-	}, nil
+		GitUser:     upGitUser,
+		GitEmail:    upGitEmail,
+		SSHKeyPath:  upSSHKeyPath,
+	}
 }
