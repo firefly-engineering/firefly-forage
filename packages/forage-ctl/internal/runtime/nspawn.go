@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -287,6 +288,9 @@ func (r *NspawnRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 		} else if strings.HasPrefix(name, r.ContainerPrefix) {
 			// Legacy fallback: strip prefix
 			sandboxName = strings.TrimPrefix(name, r.ContainerPrefix)
+		} else if sn := readForageJSONSandboxName(ctx, name); sn != "" {
+			// Fallback: query /etc/forage.json from running container
+			sandboxName = sn
 		} else {
 			continue // Not a forage container
 		}
@@ -384,6 +388,33 @@ func (r *NspawnRuntime) SSHInteractiveWithHost(host string, command string) erro
 // ContainerInfo returns information about the container environment.
 func (r *NspawnRuntime) ContainerInfo() SandboxContainerInfo {
 	return DefaultContainerInfo()
+}
+
+// forageJSON represents the /etc/forage.json metadata inside a container.
+type forageJSON struct {
+	SandboxName   string `json:"sandboxName"`
+	ContainerName string `json:"containerName"`
+	Runtime       string `json:"runtime"`
+}
+
+// readForageJSONSandboxName attempts to read /etc/forage.json from a running
+// container via machinectl shell. Returns the sandbox name or empty string on failure.
+func readForageJSONSandboxName(ctx context.Context, containerName string) string {
+	cmd := exec.CommandContext(ctx, "sudo", "machinectl", "shell", containerName, "--", "/bin/cat", "/etc/forage.json")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = nil
+
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+
+	var meta forageJSON
+	if err := json.Unmarshal(stdout.Bytes(), &meta); err != nil {
+		return ""
+	}
+
+	return meta.SandboxName
 }
 
 // Ensure NspawnRuntime implements Runtime and GeneratedFileRuntime
