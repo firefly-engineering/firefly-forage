@@ -163,15 +163,6 @@ func skipHeaders(l *list.Model, direction int) {
 	}
 }
 
-// isHeaderSelected returns true if the currently selected item is a headerItem.
-func isHeaderSelected(l *list.Model) bool {
-	if item := l.SelectedItem(); item != nil {
-		_, ok := item.(headerItem)
-		return ok
-	}
-	return false
-}
-
 // navigationDirection returns 1 for down/j keys, -1 for up/k keys.
 func navigationDirection(msg tea.KeyMsg) int {
 	switch {
