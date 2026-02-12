@@ -970,7 +970,7 @@ func TestTemplate_AgentIdentity_RoundTrip(t *testing.T) {
 	}
 
 	templatePath := filepath.Join(tmpDir, "test-template.json")
-	if err := os.WriteFile(templatePath, data, 0644); err != nil {
+	if err = os.WriteFile(templatePath, data, 0644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
@@ -1077,7 +1077,7 @@ func TestTemplate_Multiplexer_RoundTrip(t *testing.T) {
 	}
 
 	templatePath := filepath.Join(tmpDir, "wez-template.json")
-	if err := os.WriteFile(templatePath, data, 0644); err != nil {
+	if err = os.WriteFile(templatePath, data, 0644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 

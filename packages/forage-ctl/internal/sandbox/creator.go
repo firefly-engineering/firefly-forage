@@ -69,7 +69,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 
 	// Resolve and validate agent identity (after template load for template-level identity)
 	identity := c.resolveIdentity(opts, resources.template)
-	if err := config.ValidateAgentIdentity(identity); err != nil {
+	if err = config.ValidateAgentIdentity(identity); err != nil {
 		return nil, fmt.Errorf("invalid agent identity: %w", err)
 	}
 

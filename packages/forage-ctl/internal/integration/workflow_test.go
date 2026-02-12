@@ -125,7 +125,7 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 		CreatedAt:     "2024-01-01T00:00:00Z",
 	}
 
-	if err := config.SaveSandboxMetadata(env.Paths.SandboxesDir, metadata); err != nil {
+	if err = config.SaveSandboxMetadata(env.Paths.SandboxesDir, metadata); err != nil {
 		t.Fatalf("failed to save metadata: %v", err)
 	}
 
@@ -376,7 +376,7 @@ func TestWorkflow_RuntimeMockIntegration(t *testing.T) {
 	}
 
 	// Stop the container
-	if err := env.Runtime.Stop(ctx, "test-sandbox"); err != nil {
+	if err = env.Runtime.Stop(ctx, "test-sandbox"); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
