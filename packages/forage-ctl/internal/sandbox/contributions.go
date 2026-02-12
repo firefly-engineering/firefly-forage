@@ -292,6 +292,7 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 		GID:             hostConfig.GID,
 		Mux:             mux,
 		AgentIdentity:   metadata.AgentIdentity,
+		Runtime:         metadata.Runtime,
 		Contributions:   contributions,
 		Reproducibility: contribResult.Reproducibility,
 	}, nil

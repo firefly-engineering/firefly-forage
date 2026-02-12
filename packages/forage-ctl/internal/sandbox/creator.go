@@ -234,6 +234,7 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 		GID:             c.hostConfig.GID,
 		Mux:             mux,
 		AgentIdentity:   identity,
+		Runtime:         c.rt.Name(),
 		Contributions:   contributions,
 		Reproducibility: contribResult.Reproducibility,
 	}

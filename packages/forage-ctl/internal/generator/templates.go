@@ -26,6 +26,8 @@ type TemplateData struct {
 	SSHKeyName         string   // Basename of SSH key file (empty if no SSH key)
 	SystemPromptFile   string   // Container path of system prompt file (empty if not set)
 	ClaudePackagePath  string   // Nix store path of unwrapped claude package (empty if not wrapping)
+	SandboxName        string   // Sandbox name (for in-container metadata)
+	Runtime            string   // Runtime backend name (for in-container metadata)
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -146,6 +148,12 @@ const containerTemplateText = `{ pkgs, ... }: {
           from = { id = "nixpkgs"; type = "indirect"; };
           to = { type = "path"; path = "${pkgs.path}"; };
         }];
+      };
+
+      environment.etc."forage.json".text = builtins.toJSON {
+        sandboxName = "{{.SandboxName}}";
+        containerName = "{{.ContainerName}}";
+        runtime = "{{.Runtime}}";
       };
 
       # Ensure ~/.config is owned by agent (bind mounts may create it as root)
