@@ -247,16 +247,33 @@ func generateNoneConfig() string {
         # Disable all network interfaces except loopback
         networking.useDHCP = false;
 
-        # Block all outgoing traffic
-        networking.firewall = {
+        # Use nftables with default-drop policy (consistent with restricted mode)
+        networking.nftables = {
           enable = true;
-          allowedTCPPorts = [ 22 ]; # Keep SSH for management
-          extraCommands = ''
-            # Drop all outgoing traffic except to localhost
-            iptables -A OUTPUT -o lo -j ACCEPT
-            iptables -A OUTPUT -j DROP
+          ruleset = ''
+            table inet filter {
+              chain input {
+                type filter hook input priority 0; policy accept;
+              }
+
+              chain output {
+                type filter hook output priority 0; policy drop;
+
+                # Allow loopback only
+                oif "lo" accept
+
+                # Allow established/related (for SSH management)
+                ct state established,related accept
+
+                # Reject everything else
+                reject with icmp type admin-prohibited
+              }
+            }
           '';
-        };`
+        };
+
+        # Disable iptables (using nftables)
+        networking.firewall.enable = false;`
 }
 
 func generateRestrictedConfig(cfg *Config) string {
