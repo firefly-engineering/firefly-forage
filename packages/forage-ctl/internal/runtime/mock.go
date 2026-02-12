@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
 
 // MockRuntime is a mock implementation of Runtime for testing
@@ -21,6 +23,12 @@ type MockRuntime struct {
 
 	// CallLog records all method calls for verification
 	CallLog []MockCall
+
+	// SandboxContainerInfo is returned by ContainerInfo()
+	SandboxContainerInfoValue SandboxContainerInfo
+
+	// GeneratedFileMounter handles MountGeneratedFile calls
+	GeneratedFileMounter GeneratedFileMounter
 }
 
 // MockCall represents a recorded method call
@@ -259,5 +267,38 @@ func (m *MockRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 	return containers, nil
 }
 
-// Ensure MockRuntime implements Runtime
-var _ Runtime = (*MockRuntime)(nil)
+// ContainerInfo returns the sandbox container info for generated file paths.
+func (m *MockRuntime) ContainerInfo() SandboxContainerInfo {
+	if m.SandboxContainerInfoValue != (SandboxContainerInfo{}) {
+		return m.SandboxContainerInfoValue
+	}
+	return DefaultContainerInfo()
+}
+
+// MountGeneratedFile stages a generated file for mounting into the container.
+func (m *MockRuntime) MountGeneratedFile(ctx context.Context, sandboxName string, file injection.GeneratedFile) (injection.Mount, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.record("MountGeneratedFile", sandboxName, file)
+
+	if err, ok := m.Errors["MountGeneratedFile"]; ok {
+		return injection.Mount{}, err
+	}
+
+	if m.GeneratedFileMounter.StagingDir != "" {
+		return m.GeneratedFileMounter.MountGeneratedFile(ctx, sandboxName, file)
+	}
+
+	// Default: return a simple mount without writing to disk
+	return injection.Mount{
+		HostPath:      fmt.Sprintf("/mock/staging/%s%s", sandboxName, file.ContainerPath),
+		ContainerPath: file.ContainerPath,
+		ReadOnly:      file.ReadOnly,
+	}, nil
+}
+
+// Ensure MockRuntime implements Runtime and GeneratedFileRuntime
+var (
+	_ Runtime              = (*MockRuntime)(nil)
+	_ GeneratedFileRuntime = (*MockRuntime)(nil)
+)
