@@ -1,6 +1,11 @@
 // Package workspace provides a common interface for VCS workspace backends
 package workspace
 
+import (
+	"fmt"
+	"regexp"
+)
+
 // Backend provides isolated working directories for a version control system
 type Backend interface {
 	// Name returns the backend name (e.g., "jj", "git-worktree")
@@ -34,6 +39,25 @@ func DetectBackend(path string) Backend {
 	git := &GitBackend{}
 	if git.IsRepo(path) {
 		return git
+	}
+	return nil
+}
+
+// validName matches safe workspace/branch names: alphanumeric, hyphens, underscores, dots.
+var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
+// ValidateName checks that a workspace name is safe for use in branch names,
+// directory paths, and shell commands. This is a defense-in-depth check at the
+// backend interface boundary.
+func ValidateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("workspace name must not be empty")
+	}
+	if len(name) > 128 {
+		return fmt.Errorf("workspace name too long (max 128 characters)")
+	}
+	if !validName.MatchString(name) {
+		return fmt.Errorf("workspace name %q contains invalid characters (allowed: alphanumeric, hyphens, underscores, dots)", name)
 	}
 	return nil
 }

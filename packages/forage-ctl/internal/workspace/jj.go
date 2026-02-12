@@ -46,6 +46,9 @@ func (b *JJBackend) Exists(repoPath, name string) bool {
 }
 
 func (b *JJBackend) Create(repoPath, name, workspacePath string) error {
+	if err := ValidateName(name); err != nil {
+		return fmt.Errorf("invalid workspace name: %w", err)
+	}
 	cmd := exec.Command("jj", "workspace", "add", "-R", repoPath, "--name", name, workspacePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -55,6 +58,9 @@ func (b *JJBackend) Create(repoPath, name, workspacePath string) error {
 }
 
 func (b *JJBackend) Remove(repoPath, name, workspacePath string) error {
+	if err := ValidateName(name); err != nil {
+		return fmt.Errorf("invalid workspace name: %w", err)
+	}
 	// Forget the workspace in jj
 	cmd := exec.Command("jj", "workspace", "forget", name, "-R", repoPath)
 	if err := cmd.Run(); err != nil {

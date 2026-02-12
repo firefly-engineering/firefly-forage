@@ -42,6 +42,9 @@ func (b *GitBackend) Exists(repoPath, name string) bool {
 }
 
 func (b *GitBackend) Create(repoPath, name, workspacePath string) error {
+	if err := ValidateName(name); err != nil {
+		return fmt.Errorf("invalid workspace name: %w", err)
+	}
 	branchName := gitBranchPrefix + name
 
 	// Get the current HEAD to base the new branch on
@@ -69,6 +72,9 @@ func (b *GitBackend) Create(repoPath, name, workspacePath string) error {
 }
 
 func (b *GitBackend) Remove(repoPath, name, workspacePath string) error {
+	if err := ValidateName(name); err != nil {
+		return fmt.Errorf("invalid workspace name: %w", err)
+	}
 	branchName := gitBranchPrefix + name
 
 	// Remove the worktree
