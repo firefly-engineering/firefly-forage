@@ -826,6 +826,17 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 			},
 			goldenFile: "no_network_container.nix",
 		},
+		{
+			name: "read_only_workspace",
+			modifyFunc: func(c *ContainerConfig) {
+				for i := range c.Contributions.Mounts {
+					if c.Contributions.Mounts[i].ContainerPath == "/workspace" {
+						c.Contributions.Mounts[i].ReadOnly = true
+					}
+				}
+			},
+			goldenFile: "read_only_workspace_container.nix",
+		},
 	}
 
 	for _, tt := range tests {

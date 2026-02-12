@@ -314,7 +314,8 @@ type Template struct {
 	UseProxy      bool                   `json:"useProxy,omitempty"`      // Use forage-proxy for API calls
 	AgentIdentity *AgentIdentity         `json:"agentIdentity,omitempty"` // Template-level default agent identity
 	TmuxWindows   []TmuxWindow           `json:"tmuxWindows,omitempty"`   // Explicit tmux window layout
-	Multiplexer   string                 `json:"multiplexer,omitempty"`   // "tmux" (default) or "wezterm"
+	Multiplexer       string                 `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
+	ReadOnlyWorkspace bool                   `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
 }
 
 // AgentPermissions controls agent permission settings.

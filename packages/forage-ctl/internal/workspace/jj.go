@@ -86,7 +86,7 @@ func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRe
 	mounts := []injection.Mount{{
 		HostPath:      jjPath,
 		ContainerPath: jjPath,
-		ReadOnly:      false,
+		ReadOnly:      req.ReadOnlyWorkspace,
 	}}
 
 	// jj uses git as its storage backend, so .git must also be mounted
@@ -95,7 +95,7 @@ func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRe
 		mounts = append(mounts, injection.Mount{
 			HostPath:      gitPath,
 			ContainerPath: gitPath,
-			ReadOnly:      false,
+			ReadOnly:      req.ReadOnlyWorkspace,
 		})
 	}
 

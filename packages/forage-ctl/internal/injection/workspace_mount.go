@@ -30,7 +30,7 @@ func (w *WorkspaceMountContributor) ContributeMounts(ctx context.Context, req *M
 	return []Mount{{
 		HostPath:      w.WorkspacePath,
 		ContainerPath: containerPath,
-		ReadOnly:      false,
+		ReadOnly:      req != nil && req.ReadOnlyWorkspace,
 	}}, nil
 }
 

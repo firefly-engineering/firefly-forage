@@ -155,9 +155,10 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 
 	// Build request contexts
 	mountReq := &injection.MountRequest{
-		WorkspacePath: workspacePath,
-		SourceRepo:    sourceRepo,
-		HostHomeDir:   hostHomeDir,
+		WorkspacePath:     workspacePath,
+		SourceRepo:        sourceRepo,
+		HostHomeDir:       hostHomeDir,
+		ReadOnlyWorkspace: template.ReadOnlyWorkspace,
 	}
 
 	envVarReq := &injection.EnvVarRequest{

@@ -148,6 +148,12 @@ let
         description = "Allowed hosts when network = restricted";
       };
 
+      readOnlyWorkspace = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Mount the workspace as read-only inside the sandbox (filesystem-level enforcement)";
+      };
+
       agentIdentity = {
         gitUser = mkOption {
           type = types.nullOr types.str;
@@ -332,6 +338,7 @@ in
               description
               network
               allowedHosts
+              readOnlyWorkspace
               ;
             agents = mapAttrs (
               agentName: agent:

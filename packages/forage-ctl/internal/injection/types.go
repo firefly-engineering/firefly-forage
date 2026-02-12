@@ -58,9 +58,10 @@ type GeneratedFile struct {
 
 // MountRequest provides context for mount contributions.
 type MountRequest struct {
-	WorkspacePath string
-	SourceRepo    string // empty for direct mode
-	HostHomeDir   string
+	WorkspacePath     string
+	SourceRepo        string // empty for direct mode
+	HostHomeDir       string
+	ReadOnlyWorkspace bool // when true, workspace and VCS mounts are read-only
 }
 
 // EnvVarRequest provides context for env var contributions.

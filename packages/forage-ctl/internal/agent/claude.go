@@ -50,7 +50,7 @@ func (a *ClaudeAgent) ContributeMounts(ctx context.Context, req *injection.Mount
 			mounts = append(mounts, injection.Mount{
 				HostPath:      claudeDir,
 				ContainerPath: filepath.Join("/workspace", ".claude"),
-				ReadOnly:      false,
+				ReadOnly:      req.ReadOnlyWorkspace,
 			})
 		}
 	}
