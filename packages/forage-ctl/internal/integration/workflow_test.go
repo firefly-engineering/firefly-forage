@@ -262,7 +262,7 @@ func TestWorkflow_NetworkModeConfigs(t *testing.T) {
 		{
 			name:         "no network",
 			networkMode:  "none",
-			wantContains: []string{"defaultGateway = null", "nameservers = []"},
+			wantContains: []string{"defaultGateway = null", "nameservers = [ ]"},
 		},
 		{
 			name:         "restricted network",

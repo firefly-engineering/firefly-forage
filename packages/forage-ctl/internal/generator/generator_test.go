@@ -108,7 +108,7 @@ func TestGenerateNixConfig(t *testing.T) {
 	}
 
 	// Check nixpkgs registry uses local store path
-	if !strings.Contains(result, `"path"; path = "${pkgs.path}"`) {
+	if !strings.Contains(result, `path = "${pkgs.path}"`) {
 		t.Error("Config should pin nixpkgs registry to local pkgs.path")
 	}
 
@@ -281,7 +281,7 @@ func TestGenerateNixConfig_NetworkModes(t *testing.T) {
 		},
 		{
 			network:    "none",
-			shouldHave: []string{"nameservers = []", "defaultGateway = null", "OUTPUT -j DROP"},
+			shouldHave: []string{"nameservers = [ ]", "defaultGateway = null", "OUTPUT -j DROP"},
 		},
 		{
 			network:      "restricted",
@@ -892,7 +892,7 @@ func TestGenerateNixConfig_PermissionsMounts(t *testing.T) {
 		t.Error("Config should contain permissions host path")
 	}
 	// Check that the mount is read-only
-	if !strings.Contains(result, `"/etc/claude-code/managed-settings.json" = { hostPath = "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json"; isReadOnly = true; }`) {
+	if !strings.Contains(result, "isReadOnly = true") || !strings.Contains(result, "/var/lib/forage/sandboxes/test-sandbox.claude-permissions.json") {
 		t.Error("Permissions mount should be read-only")
 	}
 

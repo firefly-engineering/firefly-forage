@@ -1,4 +1,8 @@
-{ self, extra-container, nixpkgs }:
+{
+  self,
+  extra-container,
+  nixpkgs,
+}:
 {
   config,
   lib,
@@ -20,8 +24,10 @@ let
 
   # Resolve ~ to the configured user's home directory
   userHome = config.users.users.${cfg.user}.home or "/home/${cfg.user}";
-  resolveTilde = path:
-    if path == null then null
+  resolveTilde =
+    path:
+    if path == null then
+      null
     else if hasPrefix "~/" path then
       userHome + (builtins.substring 1 (builtins.stringLength path - 1) path)
     else if path == "~" then
@@ -31,11 +37,12 @@ let
 
   # Derive container config dir from host path if not specified
   # e.g., ~/.claude -> /home/agent/.claude
-  deriveContainerPath = hostPath:
+  deriveContainerPath =
+    hostPath:
     let
       baseName = baseNameOf hostPath;
     in
-      "/home/agent/${baseName}";
+    "/home/agent/${baseName}";
 
   # Agent definition type
   agentType = types.submodule {
@@ -79,27 +86,33 @@ let
       };
 
       permissions = mkOption {
-        type = types.nullOr (types.submodule {
-          options = {
-            skipAll = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Bypass all permission checks";
+        type = types.nullOr (
+          types.submodule {
+            options = {
+              skipAll = mkOption {
+                type = types.bool;
+                default = false;
+                description = "Bypass all permission checks";
+              };
+              allow = mkOption {
+                type = types.listOf types.str;
+                default = [ ];
+                description = "Permission rules to auto-approve (agent-specific format)";
+                example = [
+                  "Bash(npm run *)"
+                  "Edit"
+                  "Read"
+                ];
+              };
+              deny = mkOption {
+                type = types.listOf types.str;
+                default = [ ];
+                description = "Permission rules to always block";
+                example = [ "Bash(rm -rf *)" ];
+              };
             };
-            allow = mkOption {
-              type = types.listOf types.str;
-              default = [];
-              description = "Permission rules to auto-approve (agent-specific format)";
-              example = [ "Bash(npm run *)" "Edit" "Read" ];
-            };
-            deny = mkOption {
-              type = types.listOf types.str;
-              default = [];
-              description = "Permission rules to always block";
-              example = [ "Bash(rm -rf *)" ];
-            };
-          };
-        });
+          }
+        );
         default = null;
         description = "Agent permission rules. When null, no permission settings are generated.";
       };
@@ -263,17 +276,20 @@ in
         assertion = cfg.user != "";
         message = "services.firefly-forage.user must be specified";
       }
-    ] ++ lib.flatten (lib.mapAttrsToList (
-      templateName: template:
+    ]
+    ++ lib.flatten (
+      lib.mapAttrsToList (
+        templateName: template:
         lib.mapAttrsToList (
           agentName: agent:
-            # Only validate secret reference if secretName is specified
-            lib.optional (agent.secretName != null) {
-              assertion = cfg.secrets ? ${agent.secretName};
-              message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
-            }
+          # Only validate secret reference if secretName is specified
+          lib.optional (agent.secretName != null) {
+            assertion = cfg.secrets ? ${agent.secretName};
+            message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
+          }
         ) template.agents
-    ) cfg.templates);
+      ) cfg.templates
+    );
 
     # Ensure state directory exists
     # The configured user needs access to sandboxes and workspaces directories
@@ -297,10 +313,10 @@ in
     };
 
     # Generate host configuration file and template configurations
-    environment.etc =
-      {
-        "firefly-forage/config.json" = {
-          text = builtins.toJSON ({
+    environment.etc = {
+      "firefly-forage/config.json" = {
+        text = builtins.toJSON (
+          {
             user = cfg.user;
             uid = config.users.users.${cfg.user}.uid;
             gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
@@ -308,73 +324,93 @@ in
             secrets = cfg.secrets;
             stateDir = cfg.stateDir;
             # Path to extra-container command
-            extraContainerPath = "${extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/extra-container";
+            extraContainerPath = "${
+              extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default
+            }/bin/extra-container";
             # Nixpkgs path for extra-container --nixpkgs-path
             nixpkgsPath = "${nixpkgs}";
             # Nixpkgs revision for registry pinning
             nixpkgsRev = nixpkgs.rev or "unknown";
-          } // lib.optionalAttrs (
-            cfg.agentIdentity.gitUser != null
-            || cfg.agentIdentity.gitEmail != null
-            || cfg.agentIdentity.sshKeyPath != null
-          ) {
-            agentIdentity = lib.filterAttrs (_: v: v != null) {
-              gitUser = cfg.agentIdentity.gitUser;
-              gitEmail = cfg.agentIdentity.gitEmail;
-              sshKeyPath =
-                if cfg.agentIdentity.sshKeyPath != null
-                then resolveTilde (toString cfg.agentIdentity.sshKeyPath)
-                else null;
-            };
-          });
-        };
-      }
-      // mapAttrs (
-        name: template: {
-          target = "firefly-forage/templates/${name}.json";
-          text = builtins.toJSON ({
-            inherit name;
-            inherit (template)
-              description
-              network
-              allowedHosts
-              readOnlyWorkspace
-              ;
-            agents = mapAttrs (
-              agentName: agent:
-              let
-                resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
-                resolvedContainerConfigDir =
-                  if agent.containerConfigDir != null then agent.containerConfigDir
-                  else if resolvedHostConfigDir != null then deriveContainerPath resolvedHostConfigDir
-                  else null;
-              in {
-                inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
-                packagePath = agent.package.pname;
-                hostConfigDir = resolvedHostConfigDir;
-                containerConfigDir = resolvedContainerConfigDir;
-                permissions =
-                  if agent.permissions != null then {
-                    inherit (agent.permissions) skipAll allow deny;
-                  } else null;
+          }
+          //
+            lib.optionalAttrs
+              (
+                cfg.agentIdentity.gitUser != null
+                || cfg.agentIdentity.gitEmail != null
+                || cfg.agentIdentity.sshKeyPath != null
+              )
+              {
+                agentIdentity = lib.filterAttrs (_: v: v != null) {
+                  gitUser = cfg.agentIdentity.gitUser;
+                  gitEmail = cfg.agentIdentity.gitEmail;
+                  sshKeyPath =
+                    if cfg.agentIdentity.sshKeyPath != null then
+                      resolveTilde (toString cfg.agentIdentity.sshKeyPath)
+                    else
+                      null;
+                };
               }
-            ) template.agents;
-            extraPackages = map (p: p.pname) template.extraPackages;
-          } // lib.optionalAttrs (
-            template.agentIdentity.gitUser != null
-            || template.agentIdentity.gitEmail != null
-            || template.agentIdentity.sshKeyPath != null
-          ) {
-            agentIdentity = lib.filterAttrs (_: v: v != null) {
-              gitUser = template.agentIdentity.gitUser;
-              gitEmail = template.agentIdentity.gitEmail;
-              sshKeyPath =
-                if template.agentIdentity.sshKeyPath != null
-                then resolveTilde (toString template.agentIdentity.sshKeyPath)
-                else null;
-            };
-          });
+        );
+      };
+    }
+    // mapAttrs (name: template: {
+      target = "firefly-forage/templates/${name}.json";
+      text = builtins.toJSON (
+        {
+          inherit name;
+          inherit (template)
+            description
+            network
+            allowedHosts
+            readOnlyWorkspace
+            ;
+          agents = mapAttrs (
+            agentName: agent:
+            let
+              resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
+              resolvedContainerConfigDir =
+                if agent.containerConfigDir != null then
+                  agent.containerConfigDir
+                else if resolvedHostConfigDir != null then
+                  deriveContainerPath resolvedHostConfigDir
+                else
+                  null;
+            in
+            {
+              inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
+              packagePath = agent.package.pname;
+              hostConfigDir = resolvedHostConfigDir;
+              containerConfigDir = resolvedContainerConfigDir;
+              permissions =
+                if agent.permissions != null then
+                  {
+                    inherit (agent.permissions) skipAll allow deny;
+                  }
+                else
+                  null;
+            }
+          ) template.agents;
+          extraPackages = map (p: p.pname) template.extraPackages;
         }
-      ) cfg.templates;
+        //
+          lib.optionalAttrs
+            (
+              template.agentIdentity.gitUser != null
+              || template.agentIdentity.gitEmail != null
+              || template.agentIdentity.sshKeyPath != null
+            )
+            {
+              agentIdentity = lib.filterAttrs (_: v: v != null) {
+                gitUser = template.agentIdentity.gitUser;
+                gitEmail = template.agentIdentity.gitEmail;
+                sshKeyPath =
+                  if template.agentIdentity.sshKeyPath != null then
+                    resolveTilde (toString template.agentIdentity.sshKeyPath)
+                  else
+                    null;
+              };
+            }
+      );
+    }) cfg.templates;
   };
 }

@@ -241,22 +241,22 @@ func GenerateNixNetworkConfig(cfg *Config) string {
 
 func generateNoneConfig() string {
 	return `# No network access
-      networking.nameservers = [];
-      networking.defaultGateway = null;
+        networking.nameservers = [ ];
+        networking.defaultGateway = null;
 
-      # Disable all network interfaces except loopback
-      networking.useDHCP = false;
+        # Disable all network interfaces except loopback
+        networking.useDHCP = false;
 
-      # Block all outgoing traffic
-      networking.firewall = {
-        enable = true;
-        allowedTCPPorts = [ 22 ];  # Keep SSH for management
-        extraCommands = ''
-          # Drop all outgoing traffic except to localhost
-          iptables -A OUTPUT -o lo -j ACCEPT
-          iptables -A OUTPUT -j DROP
-        '';
-      };`
+        # Block all outgoing traffic
+        networking.firewall = {
+          enable = true;
+          allowedTCPPorts = [ 22 ]; # Keep SSH for management
+          extraCommands = ''
+            # Drop all outgoing traffic except to localhost
+            iptables -A OUTPUT -o lo -j ACCEPT
+            iptables -A OUTPUT -j DROP
+          '';
+        };`
 }
 
 func generateRestrictedConfig(cfg *Config) string {
@@ -301,92 +301,92 @@ func generateRestrictedConfig(cfg *Config) string {
 	}
 
 	return fmt.Sprintf(`# Restricted network - only allowed hosts
-      networking.defaultGateway = "%s";
-      networking.nameservers = [ "127.0.0.1" ];  # Use local DNS filter
+        networking.defaultGateway = "%s";
+        networking.nameservers = [ "127.0.0.1" ]; # Use local DNS filter
 
-      # DNS filtering with dnsmasq
-      services.dnsmasq = {
-        enable = true;
-        settings = {
-          # Don't use system resolv.conf
-          no-resolv = true;
+        # DNS filtering with dnsmasq
+        services.dnsmasq = {
+          enable = true;
+          settings = {
+            # Don't use system resolv.conf
+            no-resolv = true;
 
-          # Listen only on localhost
-          listen-address = "127.0.0.1";
-          bind-interfaces = true;
+            # Listen only on localhost
+            listen-address = "127.0.0.1";
+            bind-interfaces = true;
 
-          # Forward allowed domains to public DNS
-          server = [
-            %s
-          ];
+            # Forward allowed domains to public DNS
+            server = [
+              %s
+            ];
 
-          # Block all other queries
-          address = "/#/";
+            # Block all other queries
+            address = "/#/";
 
-          # Cache settings
-          cache-size = 1000;
+            # Cache settings
+            cache-size = 1000;
 
-          # Security
-          domain-needed = true;
-          bogus-priv = true;
+            # Security
+            domain-needed = true;
+            bogus-priv = true;
+          };
         };
-      };
 
-      # nftables for egress filtering
-      networking.nftables = {
-        enable = true;
-        ruleset = ''
-          table inet filter {
-            set allowed_ipv4 {
-              type ipv4_addr
-              flags interval
-              elements = { %s }
+        # nftables for egress filtering
+        networking.nftables = {
+          enable = true;
+          ruleset = ''
+            table inet filter {
+              set allowed_ipv4 {
+                type ipv4_addr
+                flags interval
+                elements = { %s }
+              }
+
+              set allowed_ipv6 {
+                type ipv6_addr
+                flags interval
+                elements = { %s }
+              }
+
+              chain input {
+                type filter hook input priority 0; policy accept;
+              }
+
+              chain forward {
+                type filter hook forward priority 0; policy accept;
+              }
+
+              chain output {
+                type filter hook output priority 0; policy drop;
+
+                # Allow loopback
+                oif "lo" accept
+
+                # Allow established/related
+                ct state established,related accept
+
+                # Allow ICMP
+                ip protocol icmp accept
+                ip6 nexthdr icmpv6 accept
+
+                # Allow DNS to local resolver
+                tcp dport 53 ip daddr 127.0.0.1 accept
+                udp dport 53 ip daddr 127.0.0.1 accept
+
+                # Allow connections to allowed hosts
+                ip daddr @allowed_ipv4 accept
+                ip6 daddr @allowed_ipv6 accept
+
+                # Reject everything else
+                reject with icmp type admin-prohibited
+              }
             }
+          '';
+        };
 
-            set allowed_ipv6 {
-              type ipv6_addr
-              flags interval
-              elements = { %s }
-            }
-
-            chain input {
-              type filter hook input priority 0; policy accept;
-            }
-
-            chain forward {
-              type filter hook forward priority 0; policy accept;
-            }
-
-            chain output {
-              type filter hook output priority 0; policy drop;
-
-              # Allow loopback
-              oif "lo" accept
-
-              # Allow established/related
-              ct state established,related accept
-
-              # Allow ICMP
-              ip protocol icmp accept
-              ip6 nexthdr icmpv6 accept
-
-              # Allow DNS to local resolver
-              tcp dport 53 ip daddr 127.0.0.1 accept
-              udp dport 53 ip daddr 127.0.0.1 accept
-
-              # Allow connections to allowed hosts
-              ip daddr @allowed_ipv4 accept
-              ip6 daddr @allowed_ipv6 accept
-
-              # Reject everything else
-              reject with icmp type admin-prohibited
-            }
-          }
-        '';
-      };
-
-      # Disable iptables (using nftables instead)
-      networking.firewall.enable = false;`,
+        # Disable iptables (using nftables instead)
+        networking.firewall.enable = false;`,
 		gatewayIP,
 		formatNixList(dnsServers),
 		strings.Join(allowedIPv4, ", "),
@@ -396,9 +396,12 @@ func generateRestrictedConfig(cfg *Config) string {
 
 func generateFullConfig(slot int) string {
 	return fmt.Sprintf(`# Full network access
-      networking.defaultGateway = "10.100.%d.1";
-      networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
-      networking.firewall.allowedTCPPorts = [ 22 ];`, slot)
+        networking.defaultGateway = "10.100.%d.1";
+        networking.nameservers = [
+          "1.1.1.1"
+          "8.8.8.8"
+        ];
+        networking.firewall.allowedTCPPorts = [ 22 ];`, slot)
 }
 
 func formatNixList(items []string) string {
@@ -409,5 +412,5 @@ func formatNixList(items []string) string {
 	for i, item := range items {
 		quoted[i] = fmt.Sprintf("%q", item)
 	}
-	return strings.Join(quoted, "\n            ")
+	return strings.Join(quoted, "\n              ")
 }

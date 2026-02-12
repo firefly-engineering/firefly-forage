@@ -155,17 +155,16 @@ in
         };
 
         # Packages available in the container
-        environment.systemPackages =
-          [
-            pkgs.tmux
-            pkgs.git
-            pkgs.curl
-            pkgs.vim
-            pkgs.coreutils
-            pkgs.bash
-          ]
-          ++ agentWrappers
-          ++ extraPackages;
+        environment.systemPackages = [
+          pkgs.tmux
+          pkgs.git
+          pkgs.curl
+          pkgs.vim
+          pkgs.coreutils
+          pkgs.bash
+        ]
+        ++ agentWrappers
+        ++ extraPackages;
 
         # Set PATH for agent
         environment.variables = {

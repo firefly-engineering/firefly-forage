@@ -17,20 +17,20 @@ func (w *Wezterm) NixPackages() []string { return []string{"wezterm"} }
 
 func (w *Wezterm) InitScript(windows []Window) string {
 	var sb strings.Builder
-	sb.WriteString("            wezterm-mux-server --daemonize\n")
+	sb.WriteString("              wezterm-mux-server --daemonize\n")
 	for i, win := range windows {
 		if i == 0 {
 			// The mux server creates a default tab; set its title.
-			fmt.Fprintf(&sb, "            wezterm cli set-tab-title %s\n", shellQuote(win.Name))
+			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellQuote(win.Name))
 		} else {
-			fmt.Fprintf(&sb, "            wezterm cli spawn --cwd /workspace\n")
-			fmt.Fprintf(&sb, "            wezterm cli set-tab-title %s\n", shellQuote(win.Name))
+			fmt.Fprintf(&sb, "              wezterm cli spawn --cwd /workspace\n")
+			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellQuote(win.Name))
 		}
 		if win.Command != "" {
-			fmt.Fprintf(&sb, "            wezterm cli send-text --no-paste %s\n", shellQuote(win.Command+"\n"))
+			fmt.Fprintf(&sb, "              wezterm cli send-text --no-paste %s\n", shellQuote(win.Command+"\n"))
 		}
 	}
-	sb.WriteString("            true")
+	sb.WriteString("              true")
 	return sb.String()
 }
 

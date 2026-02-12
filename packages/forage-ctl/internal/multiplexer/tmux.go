@@ -35,15 +35,15 @@ func (t *Tmux) InitScript(windows []Window) string {
 	var sb strings.Builder
 	for i, w := range windows {
 		if i == 0 {
-			fmt.Fprintf(&sb, "            tmux new-session -d -s %s -c /workspace -n %s\n", SessionName, w.Name)
+			fmt.Fprintf(&sb, "              tmux new-session -d -s %s -c /workspace -n %s\n", SessionName, w.Name)
 		} else {
-			fmt.Fprintf(&sb, "            tmux new-window -t %s -n %s -c /workspace\n", SessionName, w.Name)
+			fmt.Fprintf(&sb, "              tmux new-window -t %s -n %s -c /workspace\n", SessionName, w.Name)
 		}
 		if w.Command != "" {
-			fmt.Fprintf(&sb, "            tmux send-keys -t %s:%s %s Enter\n", SessionName, w.Name, shellQuote(w.Command))
+			fmt.Fprintf(&sb, "              tmux send-keys -t %s:%s %s Enter\n", SessionName, w.Name, shellQuote(w.Command))
 		}
 	}
-	sb.WriteString("            true")
+	sb.WriteString("              true")
 	return sb.String()
 }
 

@@ -70,7 +70,8 @@ func shellQuote(s string) string {
 }
 
 // containerTemplate is the main Go template for generating NixOS container configurations.
-const containerTemplateText = `{ pkgs, ... }: {
+const containerTemplateText = `{ pkgs, ... }:
+{
   containers.{{.ContainerName}} = {
     autoStart = true;
     ephemeral = true;
@@ -80,128 +81,141 @@ const containerTemplateText = `{ pkgs, ... }: {
 
     bindMounts = {
 {{- range .BindMounts}}
-      "{{.Path}}" = { hostPath = "{{.HostPath}}"; isReadOnly = {{.ReadOnly | nixBool}}; };
+      "{{.Path}}" = {
+        hostPath = "{{.HostPath}}";
+        isReadOnly = {{.ReadOnly | nixBool}};
+      };
 {{- end}}
     };
 
-    config = { pkgs, ... }: {
-      system.stateVersion = "{{.StateVersion}}";
-      nixpkgs.config.allowUnfree = true;
-      networking.hostName = "{{.Hostname}}";
-      {{.NetworkConfig}}
-      users.users.agent = {
-        isNormalUser = true;
-        home = "/home/agent";
-        shell = "${pkgs.bash}/bin/bash";
-        uid = {{.UID}};
-        group = "users";
-        extraGroups = [ "wheel" ];
-        openssh.authorizedKeys.keys = [
+    config =
+      { pkgs, ... }:
+      {
+        system.stateVersion = "{{.StateVersion}}";
+        nixpkgs.config.allowUnfree = true;
+        networking.hostName = "{{.Hostname}}";
+        {{.NetworkConfig}}
+        users.users.agent = {
+          isNormalUser = true;
+          home = "/home/agent";
+          shell = "${pkgs.bash}/bin/bash";
+          uid = {{.UID}};
+          group = "users";
+          extraGroups = [ "wheel" ];
+          openssh.authorizedKeys.keys = [
 {{- range .AuthorizedKeys}}
-          {{. | printf "%q"}}
+            {{. | printf "%q"}}
 {{- end}}
-        ];
-      };
-      users.groups.users.gid = {{.GID}};
-
-      security.sudo.wheelNeedsPassword = false;
-
-      services.openssh = {
-        enable = true;
-        ports = [ 22 ];
-        settings = {
-          PasswordAuthentication = false;
-          PermitRootLogin = "no";
+          ];
         };
-      };
+        users.groups.users.gid = {{.GID}};
 
-      environment.systemPackages = with pkgs; [
-        git
-        jujutsu
+        security.sudo.wheelNeedsPassword = false;
+
+        services.openssh = {
+          enable = true;
+          ports = [ 22 ];
+          settings = {
+            PasswordAuthentication = false;
+            PermitRootLogin = "no";
+          };
+        };
+
+        environment.systemPackages = with pkgs; [
+          git
+          jujutsu
 {{- range .MuxPackages}}
-        {{.}}
+          {{.}}
 {{- end}}
-        neovim
-        ripgrep
-        fd
+          neovim
+          ripgrep
+          fd
 {{- range .AgentPackages}}
-        {{.}}
+          {{.}}
 {{- end}}
 {{- if .ClaudePackagePath}}
-        (pkgs.writeShellScriptBin "claude" ''
-          exec ${pkgs.{{.ClaudePackagePath}}}/bin/claude \
-            --append-system-prompt "$(cat {{.SystemPromptFile}})" "$@"
-        '')
+          (pkgs.writeShellScriptBin "claude" ''
+            exec ${pkgs.{{.ClaudePackagePath}}}/bin/claude \
+              --append-system-prompt "$(cat {{.SystemPromptFile}})" "$@"
+          '')
 {{- end}}
-      ];
+        ];
 {{if .EnvVars}}
-      environment.sessionVariables = {
+        environment.sessionVariables = {
 {{- range .EnvVars}}
-        {{.Name}} = {{.Value}};
+          {{.Name}} = {{.Value}};
 {{- end}}
-      };
-{{end}}
-      environment.etc."nix/registry.json".text = builtins.toJSON {
-        version = 2;
-        flakes = [{
-          exact = true;
-          from = { id = "nixpkgs"; type = "indirect"; };
-          to = { type = "path"; path = "${pkgs.path}"; };
-        }];
-      };
-
-      environment.etc."forage.json".text = builtins.toJSON {
-        sandboxName = "{{.SandboxName}}";
-        containerName = "{{.ContainerName}}";
-        runtime = "{{.Runtime}}";
-      };
-
-      # Ensure ~/.config is owned by agent (bind mounts may create it as root)
-      systemd.tmpfiles.rules = [
-        "d /home/agent/.config 0755 agent users -"
-{{- range .ExtraTmpfilesRules}}
-        "{{.}}"
-{{- end}}
-      ];
-
-      systemd.services.forage-init = {
-        description = "Forage Sandbox Initialization";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          User = "agent";
-          WorkingDirectory = "/workspace";
-          ExecStart = "${pkgs.writeShellScript "forage-init" ''
-{{.MuxInitScript}}
-          ''}";
         };
-      };
+{{end}}
+        environment.etc."nix/registry.json".text = builtins.toJSON {
+          version = 2;
+          flakes = [
+            {
+              exact = true;
+              from = {
+                id = "nixpkgs";
+                type = "indirect";
+              };
+              to = {
+                type = "path";
+                path = "${pkgs.path}";
+              };
+            }
+          ];
+        };
+
+        environment.etc."forage.json".text = builtins.toJSON {
+          sandboxName = "{{.SandboxName}}";
+          containerName = "{{.ContainerName}}";
+          runtime = "{{.Runtime}}";
+        };
+
+        # Ensure ~/.config is owned by agent (bind mounts may create it as root)
+        systemd.tmpfiles.rules = [
+          "d /home/agent/.config 0755 agent users -"
+{{- range .ExtraTmpfilesRules}}
+          "{{.}}"
+{{- end}}
+        ];
+
+        systemd.services.forage-init = {
+          description = "Forage Sandbox Initialization";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "network.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "agent";
+            WorkingDirectory = "/workspace";
+            ExecStart = "${pkgs.writeShellScript "forage-init" ''
+{{.MuxInitScript}}
+            ''}";
+          };
+        };
 {{- if or .GitUser .GitEmail .SSHKeyName}}
-      systemd.services.forage-agent-identity = {
-        description = "Forage Agent Identity Setup";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          User = "agent";
-          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh /home/agent/.config/jj && " +
+        systemd.services.forage-agent-identity = {
+          description = "Forage Agent Identity Setup";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "network.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "agent";
+            ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh /home/agent/.config/jj && " +
 {{- if .GitUser}}
-            "${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscape}} && " +
-            "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscape}} && " +
+              "${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscape}} && " +
+              "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscape}} && " +
 {{- end}}
 {{- if .GitEmail}}
-            "${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscape}} && " +
-            "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscape}} && " +
+              "${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscape}} && " +
+              "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscape}} && " +
 {{- end}}
 {{- if .SSHKeyName}}
-            "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
+              "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
 {{- end}}
-            "true'";
+              "true'";
+          };
         };
-      };
 {{- end}}
-    };
+      };
   };
 }
 `

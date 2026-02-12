@@ -166,7 +166,7 @@ func TestGenerateNixNetworkConfig_None(t *testing.T) {
 	config := GenerateNixNetworkConfig(cfg)
 
 	expectedStrings := []string{
-		"nameservers = []",
+		"nameservers = [ ]",
 		"defaultGateway = null",
 		"OUTPUT -j DROP",
 	}

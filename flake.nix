@@ -99,13 +99,14 @@
         {
           # NixOS VM integration test using the actual module
           # Only available on Linux systems
-          vm-integration = if isLinux then
-            import ./tests/vm-integration.nix { inherit pkgs self; }
-          else
-            # Placeholder for non-Linux systems
-            pkgs.runCommand "vm-integration-unsupported" { } ''
-              echo "VM integration tests are only supported on Linux" > $out
-            '';
+          vm-integration =
+            if isLinux then
+              import ./tests/vm-integration.nix { inherit pkgs self; }
+            else
+              # Placeholder for non-Linux systems
+              pkgs.runCommand "vm-integration-unsupported" { } ''
+                echo "VM integration tests are only supported on Linux" > $out
+              '';
         }
       );
     };
