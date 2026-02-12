@@ -144,7 +144,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiKey := p.getAPIKey(sandboxName)
 		if apiKey != "" {
 			r.Header.Set("X-Api-Key", apiKey)
-			r.Header.Set("Authorization", "Bearer "+apiKey)
+			// Only set X-Api-Key (used by Anthropic API). Do not also
+			// set Authorization: Bearer as it doubles leakage surface.
 			// Remove the sandbox header before forwarding
 			r.Header.Del("X-Forage-Sandbox")
 		}
