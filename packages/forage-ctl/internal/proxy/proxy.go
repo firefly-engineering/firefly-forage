@@ -365,12 +365,21 @@ func (rl *rateLimiter) stop() {
 	close(rl.stopClean)
 }
 
-// auditLogger logs requests to a file
+// auditLogger logs requests to a file with size-based rotation.
 type auditLogger struct {
-	file *os.File
-	enc  *json.Encoder
-	mu   sync.Mutex
+	path    string
+	maxSize int64 // max file size in bytes before rotation (0 = no limit)
+	file    *os.File
+	enc     *json.Encoder
+	size    int64
+	mu      sync.Mutex
+	logger  *slog.Logger
 }
+
+const (
+	defaultAuditMaxSize = 50 * 1024 * 1024 // 50 MiB
+	auditKeepFiles      = 3                 // keep current + 3 rotated files
+)
 
 type auditEntry struct {
 	Timestamp   time.Time     `json:"timestamp"`
@@ -388,16 +397,62 @@ func newAuditLogger(path string) (*auditLogger, error) {
 	if err != nil {
 		return nil, err
 	}
+	info, _ := f.Stat()
+	var size int64
+	if info != nil {
+		size = info.Size()
+	}
 	return &auditLogger{
-		file: f,
-		enc:  json.NewEncoder(f),
+		path:    path,
+		maxSize: defaultAuditMaxSize,
+		file:    f,
+		enc:     json.NewEncoder(f),
+		size:    size,
+		logger:  slog.Default(),
 	}, nil
 }
 
 func (al *auditLogger) log(entry auditEntry) {
 	al.mu.Lock()
 	defer al.mu.Unlock()
-	_ = al.enc.Encode(entry) // Best-effort audit logging
+
+	if err := al.enc.Encode(entry); err != nil {
+		al.logger.Warn("audit log write failed", "error", err)
+		return
+	}
+
+	// Approximate size tracking (exact size not critical)
+	al.size += 256 // average entry size estimate
+	if al.maxSize > 0 && al.size >= al.maxSize {
+		al.rotate()
+	}
+}
+
+func (al *auditLogger) rotate() {
+	al.file.Close()
+
+	// Shift existing rotated files: .3 -> deleted, .2 -> .3, .1 -> .2, current -> .1
+	for i := auditKeepFiles; i > 0; i-- {
+		old := fmt.Sprintf("%s.%d", al.path, i)
+		if i == auditKeepFiles {
+			os.Remove(old)
+		}
+		if i > 1 {
+			prev := fmt.Sprintf("%s.%d", al.path, i-1)
+			os.Rename(prev, old)
+		} else {
+			os.Rename(al.path, old)
+		}
+	}
+
+	f, err := os.OpenFile(al.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		al.logger.Warn("audit log rotation failed", "error", err)
+		return
+	}
+	al.file = f
+	al.enc = json.NewEncoder(f)
+	al.size = 0
 }
 
 func (al *auditLogger) close() error {
