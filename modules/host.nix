@@ -287,6 +287,26 @@ in
         example = "/run/secrets/agent-ssh-key";
       };
     };
+
+    monitor = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable background health monitoring of sandboxes";
+      };
+
+      interval = mkOption {
+        type = types.str;
+        default = "60";
+        description = "Health check interval in seconds";
+      };
+
+      autoRestart = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Automatically restart unhealthy containers";
+      };
+    };
   };
 
   # Import extra-container module at the module level
@@ -456,5 +476,20 @@ in
             }
       );
     }) cfg.templates;
+
+    # Health monitor systemd service
+    systemd.services.forage-monitor = mkIf cfg.monitor.enable {
+      description = "Firefly Forage Health Monitor";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      serviceConfig = {
+        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl}/bin/forage-ctl monitor --interval ${cfg.monitor.interval}${
+          if cfg.monitor.autoRestart then " --auto-restart" else ""
+        }";
+        Restart = "on-failure";
+        RestartSec = "10s";
+        User = cfg.user;
+      };
+    };
   };
 }
