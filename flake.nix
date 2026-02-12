@@ -70,7 +70,7 @@
               golangci-lint
 
               # Nix tooling
-              nixfmt
+              nixfmt-tree
               nil
 
               # Documentation
@@ -87,7 +87,7 @@
         }
       );
 
-      formatter = forAllSystems (system: (pkgsFor system).nixfmt);
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt-tree);
 
       # Integration tests (VM tests only work on Linux)
       checks = forAllSystems (

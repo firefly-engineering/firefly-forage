@@ -34,7 +34,7 @@ test-vm:
 
 # Format all code
 fmt:
-    nix fmt
+    nix fmt -- .
     @just packages/forage-ctl/fmt
 
 # Run Go linter

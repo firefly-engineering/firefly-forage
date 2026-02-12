@@ -44,7 +44,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Check Nix formatting
-        run: nix fmt -- --check .
+        run: nix fmt -- --ci .
 
   build:
     runs-on: ubuntu-latest
