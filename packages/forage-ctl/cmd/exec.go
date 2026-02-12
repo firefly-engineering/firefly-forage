@@ -51,8 +51,8 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return errors.SSHError("ssh not found", err)
 	}
 
-	// Construct the command string
-	cmdStr := execArgs[0]
+	// Construct the command string with all arguments quoted
+	cmdStr := shellQuote(execArgs[0])
 	for _, arg := range execArgs[1:] {
 		cmdStr += " " + shellQuote(arg)
 	}
