@@ -88,6 +88,10 @@ systemd-nspawn is not a security boundary like a VM. Kernel vulnerabilities coul
 - Additional seccomp filtering
 - SELinux/AppArmor policies
 
+### DNS Resolution Timing
+
+In `restricted` mode, allowed host IPs are resolved at sandbox creation time and baked into nftables rules. If a host's IPs change (e.g., CDN rotation), the rules become stale and connectivity may break until the sandbox is reconfigured with `forage-ctl network`.
+
 ### Network Exfiltration
 
 Even with `network = "none"`, agents could potentially:

@@ -29,7 +29,13 @@ type ResolvedHost struct {
 	IPs      []string
 }
 
-// ResolveHosts resolves hostnames to IP addresses
+// ResolveHosts resolves hostnames to IP addresses at config generation time.
+//
+// KNOWN LIMITATION: IPs are resolved once and baked into nftables rules.
+// If a host's IPs change (e.g., CDN rotation), the container's nftables
+// rules will become stale and connectivity may break until the sandbox is
+// reconfigured. A future improvement could periodically re-resolve hosts
+// or use DNS-based nftables filtering.
 func ResolveHosts(hosts []string) ([]ResolvedHost, error) {
 	var resolved []ResolvedHost
 
