@@ -261,6 +261,9 @@ func (p *Proxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) 
 
 // Close closes the proxy and releases resources
 func (p *Proxy) Close() error {
+	if p.rateLimiter != nil {
+		p.rateLimiter.stop()
+	}
 	if p.auditLog != nil {
 		return p.auditLog.close()
 	}
@@ -284,14 +287,18 @@ type rateLimiter struct {
 	window      time.Duration
 	requests    map[string][]time.Time
 	mu          sync.Mutex
+	stopClean   chan struct{}
 }
 
 func newRateLimiter(maxRequests int, window time.Duration) *rateLimiter {
-	return &rateLimiter{
+	rl := &rateLimiter{
 		maxRequests: maxRequests,
 		window:      window,
 		requests:    make(map[string][]time.Time),
+		stopClean:   make(chan struct{}),
 	}
+	go rl.cleanupLoop()
+	return rl
 }
 
 func (rl *rateLimiter) allow(key string) bool {
@@ -317,6 +324,45 @@ func (rl *rateLimiter) allow(key string) bool {
 
 	rl.requests[key] = append(valid, now)
 	return true
+}
+
+// cleanupLoop periodically removes stale entries from the requests map
+// to prevent unbounded memory growth from inactive sandboxes.
+func (rl *rateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(rl.window * 2)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			rl.cleanup()
+		case <-rl.stopClean:
+			return
+		}
+	}
+}
+
+func (rl *rateLimiter) cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	windowStart := time.Now().Add(-rl.window)
+	for key, reqs := range rl.requests {
+		var valid []time.Time
+		for _, t := range reqs {
+			if t.After(windowStart) {
+				valid = append(valid, t)
+			}
+		}
+		if len(valid) == 0 {
+			delete(rl.requests, key)
+		} else {
+			rl.requests[key] = valid
+		}
+	}
+}
+
+func (rl *rateLimiter) stop() {
+	close(rl.stopClean)
 }
 
 // auditLogger logs requests to a file
