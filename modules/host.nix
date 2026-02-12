@@ -315,6 +315,7 @@ in
     # Generate host configuration file and template configurations
     environment.etc = {
       "firefly-forage/config.json" = {
+        mode = "0640";
         text = builtins.toJSON (
           {
             user = cfg.user;
