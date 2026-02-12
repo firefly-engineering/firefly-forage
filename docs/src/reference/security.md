@@ -62,7 +62,7 @@ This makes casual credential discovery harder, but doesn't prevent a determined 
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent exfiltrates API keys | Auth obfuscation via wrappers |
+| Agent exfiltrates API keys | API proxy (keeps secrets on host); obfuscation via wrappers (UX convenience, not a security boundary) |
 | Agent accesses host filesystem | Container isolation, explicit bind mounts only |
 | Agent makes unwanted network calls | Network isolation modes |
 | Agent runs dangerous commands | Permission rules (`allow`/`deny`) via managed settings |
@@ -184,9 +184,13 @@ Additional seccomp profiles to restrict:
 For review tasks where the agent shouldn't modify files:
 
 ```nix
-# Future
-workspace.readOnly = true;
+templates.review = {
+  readOnlyWorkspace = true;
+  # ...
+};
 ```
+
+This is implemented and enforces filesystem-level read-only mounting of `/workspace`.
 
 ## Reporting Security Issues
 

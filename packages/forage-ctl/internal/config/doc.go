@@ -14,9 +14,10 @@
 //
 //	type HostConfig struct {
 //	    User           string            // SSH user for sandboxes
-//	    PortRange      PortRange         // Allowed SSH port range
+//	    UID            int               // Host user's UID
+//	    GID            int               // Host user's GID
 //	    AuthorizedKeys []string          // SSH public keys
-//	    Secrets        map[string]string // API keys by name
+//	    Secrets        map[string]string // Secret paths by name
 //	}
 //
 // # Templates
