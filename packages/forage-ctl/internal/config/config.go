@@ -418,6 +418,7 @@ type SandboxMetadata struct {
 	AgentIdentity   *AgentIdentity `json:"agentIdentity,omitempty"`   // Resolved agent identity
 	Multiplexer     string         `json:"multiplexer,omitempty"`     // "tmux" (default) or "wezterm"
 	ContainerName   string         `json:"containerName,omitempty"`   // Short container name (e.g. "f42"); empty for legacy sandboxes
+	Runtime         string         `json:"runtime,omitempty"`         // Runtime backend used (e.g. "nspawn", "docker", "podman")
 }
 
 // ContainerIP returns the container's IP address based on its network slot.

@@ -186,6 +186,7 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 		AgentIdentity:   identity,
 		Multiplexer:     resources.template.Multiplexer,
 		ContainerName:   config.ContainerNameForSlot(resources.networkSlot),
+		Runtime:         c.rt.Name(),
 	}
 }
 
