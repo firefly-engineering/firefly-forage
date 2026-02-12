@@ -111,6 +111,13 @@ func (r *DockerRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", hostPort, containerPort))
 	}
 
+	// Add labels for orphan detection
+	args = append(args,
+		"--label", "forage.sandbox-name="+opts.Name,
+		"--label", "forage.runtime="+r.Command,
+		"--label", "forage.container-name="+containerName,
+	)
+
 	// Add extra args
 	args = append(args, opts.ExtraArgs...)
 
