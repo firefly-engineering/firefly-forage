@@ -126,17 +126,19 @@ environment.etc."nix/registry.json".text = builtins.toJSON {
 
 **Implementation:** The host module exposes its nixpkgs input revision via `config.json`, and the container config generator injects this into each sandbox's registry.
 
-### Instance Tracking: Stateless
+### Instance Tracking: Metadata-Driven
 
-Instead of maintaining state files, we derive instance information from:
-- Running systemd-nspawn containers (machinectl list)
-- Container naming convention: `forage-{name}`
-- Introspection of bind mounts for workspace info
+Sandbox state is tracked via metadata files in `/var/lib/firefly-forage/sandboxes/`:
+- Each sandbox has a `{name}.json` metadata file and a `{name}.nix` config
+- Runtime state (running/stopped) is derived from the container runtime (machinectl)
+- Container naming convention: configurable, defaults to `forage-{name}`
+- Generated files (skills, permissions) are staged in `{name}.generated/` directories
+- The `gc` command reconciles metadata with actual container state
 
 Benefits:
-- No state to corrupt or get out of sync
-- System is the source of truth
-- Simpler implementation
+- Metadata enables rich operations (workspace mode, template, network slot)
+- Runtime state is always from the source of truth (container runtime)
+- gc provides eventual consistency if metadata drifts
 
 ### User Identity: Same UID as Host
 
@@ -436,18 +438,30 @@ firefly-forage/
 ├── README.md                     # User documentation
 │
 ├── modules/
-│   ├── host.nix                  # NixOS module for host machine
-│   └── sandbox.nix               # Container configuration generator
+│   └── host.nix                  # NixOS module for host machine
 │
 ├── lib/
-│   ├── mkSandbox.nix             # Sandbox template builder
-│   ├── mkAgentWrapper.nix        # Auth wrapper generator
-│   └── types.nix                 # Custom types for options
+│   ├── default.nix               # Library entry point (mkSandboxConfig, mkAgentWrapper, etc.)
+│   ├── mkSandboxConfig.nix       # Container NixOS configuration generator
+│   └── skills.nix                # Skill content generation
+│
+├── docs/                         # Documentation (mdBook)
 │
 └── packages/
-    └── forage-ctl/               # CLI management tool
+    └── forage-ctl/               # CLI management tool (Go)
         ├── default.nix
-        └── forage-ctl.sh
+        ├── main.go
+        ├── cmd/                   # CLI commands
+        └── internal/              # Business logic
+            ├── config/            # Configuration loading
+            ├── generator/         # Nix config generation
+            ├── injection/         # Contribution/injection system
+            ├── network/           # Network isolation
+            ├── proxy/             # API proxy
+            ├── runtime/           # Container runtimes
+            ├── sandbox/           # Sandbox lifecycle
+            ├── skills/            # Project analysis for skills
+            └── workspace/         # VCS workspace backends
 ```
 
 ## Configuration Interface
@@ -798,7 +812,7 @@ Abstract the container backend to support multiple platforms.
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent exfiltrates API keys | Auth obfuscation via wrappers |
+| Agent exfiltrates API keys | API proxy (keeps secrets on host); auth wrappers provide UX convenience only |
 | Agent accesses host filesystem | Container isolation, bind mounts only |
 | Agent makes unwanted network calls | Network isolation modes |
 | Agent corrupts sandbox | Ephemeral root, easy reset |
