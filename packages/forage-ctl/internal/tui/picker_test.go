@@ -355,6 +355,9 @@ func TestPickerResultWithCreateOptions(t *testing.T) {
 		},
 	}
 
+	if result.Action != ActionNew {
+		t.Errorf("Action = %v, want ActionNew", result.Action)
+	}
 	if result.CreateOptions == nil {
 		t.Fatal("CreateOptions should not be nil")
 	}
