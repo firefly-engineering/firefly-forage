@@ -51,7 +51,14 @@ func (t *Tmux) AttachCommand() string {
 	// Use tmux control mode (-CC) when the host terminal supports it,
 	// unless explicitly disabled.
 	if !t.DisableControlMode && terminal.SupportsControlMode() {
-		return fmt.Sprintf("tmux -CC attach-session -t %s || tmux -CC new-session -s %s -c /workspace", SessionName, SessionName)
+		// We must avoid calling tmux -CC on a command that might fail,
+		// because a failed -CC invocation emits DCS protocol bytes that
+		// cause wezterm to enter and immediately exit control mode,
+		// tearing down the pane before the || fallback can run.
+		// Use has-session (no -CC) to probe first, then exec exactly
+		// one -CC command.
+		return fmt.Sprintf("tmux has-session -t %s 2>/dev/null && exec tmux -CC attach-session -t %s; exec tmux -CC new-session -s %s -c /workspace",
+			SessionName, SessionName, SessionName)
 	}
 	return fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s -c /workspace", SessionName, SessionName)
 }
