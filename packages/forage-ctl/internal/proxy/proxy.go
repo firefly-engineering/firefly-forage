@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -54,6 +55,17 @@ func New(cfg *Config) (*Proxy, error) {
 	target, err := url.Parse(cfg.TargetURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target URL: %w", err)
+	}
+
+	// Validate the target URL scheme to prevent plaintext key transmission
+	if target.Scheme != "https" {
+		return nil, fmt.Errorf("proxy target must use HTTPS (got %q) to protect API keys in transit", target.Scheme)
+	}
+
+	// Reject targets that could be used for SSRF against internal services
+	targetHost := target.Hostname()
+	if isInternalHost(targetHost) {
+		return nil, fmt.Errorf("proxy target must not point to internal/link-local addresses: %s", targetHost)
 	}
 
 	if cfg.Logger == nil {
@@ -205,6 +217,21 @@ func (p *Proxy) identifySandbox(remoteAddr string) string {
 	// We'd need to maintain a mapping of slots to sandbox names
 	// For now, require explicit X-Forage-Sandbox header
 	return ""
+}
+
+// isInternalHost returns true if the host resolves to a loopback, link-local,
+// or private address that could be used for SSRF attacks.
+func isInternalHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// Try resolving hostname
+		ips, err := net.LookupIP(host)
+		if err != nil || len(ips) == 0 {
+			return false
+		}
+		ip = ips[0]
+	}
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }
 
 func (p *Proxy) modifyResponse(resp *http.Response) error {
