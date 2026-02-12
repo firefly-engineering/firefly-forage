@@ -19,7 +19,9 @@
       inherit name;
       runtimeInputs = [ package ];
       text = ''
-        # Load auth from secret file (not visible in environment)
+        # Load auth from secret file into environment variable.
+        # Note: exported vars are visible via env/proc. This is
+        # obfuscation for UX convenience, not a security boundary.
         if [ -f "${secretPath}" ]; then
           export ${authEnvVar}="$(cat "${secretPath}")"
         else
