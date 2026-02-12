@@ -448,7 +448,7 @@ type auditLogger struct {
 
 const (
 	defaultAuditMaxSize = 50 * 1024 * 1024 // 50 MiB
-	auditKeepFiles      = 3                 // keep current + 3 rotated files
+	auditKeepFiles      = 3                // keep current + 3 rotated files
 )
 
 type auditEntry struct {
@@ -499,7 +499,7 @@ func (al *auditLogger) log(entry auditEntry) {
 }
 
 func (al *auditLogger) rotate() {
-	al.file.Close()
+	_ = al.file.Close()
 
 	// Shift existing rotated files: .3 -> deleted, .2 -> .3, .1 -> .2, current -> .1
 	for i := auditKeepFiles; i > 0; i-- {
@@ -509,9 +509,9 @@ func (al *auditLogger) rotate() {
 		}
 		if i > 1 {
 			prev := fmt.Sprintf("%s.%d", al.path, i-1)
-			os.Rename(prev, old)
+			_ = os.Rename(prev, old)
 		} else {
-			os.Rename(al.path, old)
+			_ = os.Rename(al.path, old)
 		}
 	}
 

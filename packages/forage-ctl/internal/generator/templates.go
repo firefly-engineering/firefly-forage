@@ -18,18 +18,18 @@ type TemplateData struct {
 	NetworkConfig      string // Pre-rendered from network package
 	AgentPackages      []string
 	EnvVars            []EnvVar
-	MuxPackages        []string // Multiplexer packages to install (e.g. ["tmux"] or ["wezterm"])
-	MuxInitScript      string   // Pre-rendered init script from multiplexer backend
-	UID                int      // Host user's UID for the container agent user
-	GID                int      // Host user's GID for the container agent user
-	ExtraTmpfilesRules []string // Additional systemd tmpfiles rules
-	GitUser            string   // Git user.name for agent identity
-	GitEmail           string   // Git user.email for agent identity
-	SSHKeyName         string   // Basename of SSH key file (empty if no SSH key)
-	SystemPromptFile   string   // Container path of system prompt file (empty if not set)
-	ClaudePackagePath  string   // Nix store path of unwrapped claude package (empty if not wrapping)
-	SandboxName        string                // Sandbox name (for in-container metadata)
-	Runtime            string                // Runtime backend name (for in-container metadata)
+	MuxPackages        []string               // Multiplexer packages to install (e.g. ["tmux"] or ["wezterm"])
+	MuxInitScript      string                 // Pre-rendered init script from multiplexer backend
+	UID                int                    // Host user's UID for the container agent user
+	GID                int                    // Host user's GID for the container agent user
+	ExtraTmpfilesRules []string               // Additional systemd tmpfiles rules
+	GitUser            string                 // Git user.name for agent identity
+	GitEmail           string                 // Git user.email for agent identity
+	SSHKeyName         string                 // Basename of SSH key file (empty if no SSH key)
+	SystemPromptFile   string                 // Container path of system prompt file (empty if not set)
+	ClaudePackagePath  string                 // Nix store path of unwrapped claude package (empty if not wrapping)
+	SandboxName        string                 // Sandbox name (for in-container metadata)
+	Runtime            string                 // Runtime backend name (for in-container metadata)
 	ResourceLimits     *config.ResourceLimits // Optional resource limits for systemd
 }
 

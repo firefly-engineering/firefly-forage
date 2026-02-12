@@ -126,8 +126,74 @@ const jjPromptInstructions = `This workspace uses jj (Jujutsu) for version contr
 
 This is an isolated jj workspace - changes don't affect other workspaces.`
 
+// Snapshot creates a named jj bookmark at the current workspace revision.
+func (b *JJBackend) Snapshot(repoPath, name, snapshotName string) error {
+	if err := ValidateName(snapshotName); err != nil {
+		return fmt.Errorf("invalid snapshot name: %w", err)
+	}
+	bookmarkName := snapshotPrefix + name + "-" + snapshotName
+	cmd := exec.Command("jj", "bookmark", "create", bookmarkName, "-r", "@", "-R", repoPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot bookmark: %s: %w", string(output), err)
+	}
+	return nil
+}
+
+// RestoreSnapshot moves the workspace to a previously bookmarked snapshot.
+func (b *JJBackend) RestoreSnapshot(repoPath, name, snapshotName string) error {
+	if err := ValidateName(snapshotName); err != nil {
+		return fmt.Errorf("invalid snapshot name: %w", err)
+	}
+	bookmarkName := snapshotPrefix + name + "-" + snapshotName
+	cmd := exec.Command("jj", "edit", bookmarkName, "-R", repoPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %s: %w", string(output), err)
+	}
+	return nil
+}
+
+// ListSnapshots returns all forage snapshots for a workspace.
+func (b *JJBackend) ListSnapshots(repoPath, name string) ([]SnapshotInfo, error) {
+	prefix := snapshotPrefix + name + "-"
+	cmd := exec.Command("jj", "bookmark", "list", "-R", repoPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list bookmarks: %w", err)
+	}
+
+	var snapshots []SnapshotInfo
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// jj bookmark list output format: "bookmarkname: changeID commitID"
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) < 1 {
+			continue
+		}
+		bname := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(bname, prefix) {
+			continue
+		}
+		snapName := strings.TrimPrefix(bname, prefix)
+		var changeID string
+		if len(parts) > 1 {
+			changeID = strings.TrimSpace(parts[1])
+		}
+		snapshots = append(snapshots, SnapshotInfo{
+			Name:     snapName,
+			ChangeID: changeID,
+		})
+	}
+	return snapshots, nil
+}
+
 // Ensure JJBackend implements contribution interfaces
 var (
 	_ injection.MountContributor  = (*JJBackend)(nil)
 	_ injection.PromptContributor = (*JJBackend)(nil)
+	_ Snapshotter                 = (*JJBackend)(nil)
 )

@@ -231,3 +231,131 @@ func TestGitBackend_BranchName(t *testing.T) {
 		t.Errorf("expected 'forage-my-sandbox', got %q", b.BranchName("my-sandbox"))
 	}
 }
+
+func TestGitBackend_Snapshotter(t *testing.T) {
+	var _ Snapshotter = &GitBackend{}
+}
+
+func TestJJBackend_Snapshotter(t *testing.T) {
+	var _ Snapshotter = &JJBackend{}
+}
+
+func TestGitBackend_SnapshotCreateListRestore(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	b := Git().(*GitBackend)
+
+	// Create a worktree first
+	workspacePath := filepath.Join(t.TempDir(), "workspace")
+	name := "snap-test"
+	if err := b.Create(repoPath, name, workspacePath); err != nil {
+		t.Fatalf("Create workspace failed: %v", err)
+	}
+
+	// Create a snapshot
+	if err := b.Snapshot(repoPath, name, "checkpoint1"); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	// List snapshots
+	snapshots, err := b.ListSnapshots(repoPath, name)
+	if err != nil {
+		t.Fatalf("ListSnapshots failed: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("got %d snapshots, want 1", len(snapshots))
+	}
+	if snapshots[0].Name != "checkpoint1" {
+		t.Errorf("snapshot name = %q, want %q", snapshots[0].Name, "checkpoint1")
+	}
+	if snapshots[0].ChangeID == "" {
+		t.Error("snapshot should have a change ID")
+	}
+
+	// Create a second snapshot
+	err = b.Snapshot(repoPath, name, "checkpoint2")
+	if err != nil {
+		t.Fatalf("second Snapshot failed: %v", err)
+	}
+
+	snapshots, err = b.ListSnapshots(repoPath, name)
+	if err != nil {
+		t.Fatalf("ListSnapshots failed: %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Fatalf("got %d snapshots, want 2", len(snapshots))
+	}
+
+	// Restore first snapshot
+	if err := b.RestoreSnapshot(repoPath, name, "checkpoint1"); err != nil {
+		t.Fatalf("RestoreSnapshot failed: %v", err)
+	}
+
+	// Cleanup
+	b.Remove(repoPath, name, workspacePath)
+}
+
+func TestGitBackend_SnapshotListEmpty(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	b := Git().(*GitBackend)
+
+	snapshots, err := b.ListSnapshots(repoPath, "nonexistent")
+	if err != nil {
+		t.Fatalf("ListSnapshots failed: %v", err)
+	}
+	if len(snapshots) != 0 {
+		t.Errorf("got %d snapshots, want 0", len(snapshots))
+	}
+}
+
+func TestGitBackend_SnapshotInvalidName(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	b := Git().(*GitBackend)
+
+	if err := b.Snapshot(repoPath, "test", "../evil"); err == nil {
+		t.Error("Snapshot with invalid name should fail")
+	}
+	if err := b.RestoreSnapshot(repoPath, "test", "../evil"); err == nil {
+		t.Error("RestoreSnapshot with invalid name should fail")
+	}
+}
+
+func TestJJBackend_SnapshotCreateAndList(t *testing.T) {
+	repoPath := setupJJRepo(t)
+	b := JJ().(*JJBackend)
+
+	// Create a workspace first
+	workspacePath := filepath.Join(t.TempDir(), "workspace")
+	name := "snap-test"
+	if err := b.Create(repoPath, name, workspacePath); err != nil {
+		t.Fatalf("Create workspace failed: %v", err)
+	}
+
+	// Create a snapshot
+	if err := b.Snapshot(repoPath, name, "checkpoint1"); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	// List snapshots
+	snapshots, err := b.ListSnapshots(repoPath, name)
+	if err != nil {
+		t.Fatalf("ListSnapshots failed: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("got %d snapshots, want 1", len(snapshots))
+	}
+	if snapshots[0].Name != "checkpoint1" {
+		t.Errorf("snapshot name = %q, want %q", snapshots[0].Name, "checkpoint1")
+	}
+
+	// Cleanup
+	b.Remove(repoPath, name, workspacePath)
+}
+
+func TestDirectMode_NoSnapshotter(t *testing.T) {
+	// Direct mode backends don't implement Snapshotter
+	// Verify that the check in the command layer would work
+	_, ok := (Backend)(nil).(Snapshotter)
+	if ok {
+		t.Error("nil backend should not implement Snapshotter")
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -157,27 +156,49 @@ func ReadHostUserGitIdentity(username string) *AgentIdentity {
 	return nil
 }
 
-// parseGitConfigIdentity extracts user.name and user.email from a git config file
-// using `git config` to handle the full INI format correctly (quoted values,
-// includes, subsections, etc.).
+// parseGitConfigIdentity extracts user.name and user.email from a git config file.
+// Uses a simple INI parser to avoid requiring git at runtime.
 func parseGitConfigIdentity(path string) *AgentIdentity {
-	gitUser := gitConfigGet(path, "user.name")
-	gitEmail := gitConfigGet(path, "user.email")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var gitUser, gitEmail string
+	inUserSection := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			// Normalize section header: [user] or [USER] etc.
+			inUserSection = strings.EqualFold(strings.TrimRight(strings.TrimLeft(line, "["), "]"), "user")
+			continue
+		}
+		if !inUserSection {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		// Git config values may be quoted
+		val = strings.Trim(val, `"`)
+		switch strings.ToLower(key) {
+		case "name":
+			gitUser = val
+		case "email":
+			gitEmail = val
+		}
+	}
 
 	if gitUser == "" && gitEmail == "" {
 		return nil
 	}
 	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
-}
-
-// gitConfigGet reads a single value from a git config file.
-func gitConfigGet(path, key string) string {
-	cmd := exec.Command("git", "config", "--file", path, "--get", key)
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // parseJJConfigIdentity extracts user.name and user.email from a jj config file (TOML format).
@@ -290,7 +311,7 @@ type TmuxWindow struct {
 type ResourceLimits struct {
 	CPUQuota  string `json:"cpuQuota,omitempty"`  // CPU quota (e.g. "200%" for 2 cores)
 	MemoryMax string `json:"memoryMax,omitempty"` // Memory limit (e.g. "4G")
-	TasksMax  int    `json:"tasksMax,omitempty"`   // Maximum number of tasks/processes
+	TasksMax  int    `json:"tasksMax,omitempty"`  // Maximum number of tasks/processes
 }
 
 // IsEmpty returns true if no resource limits are configured.

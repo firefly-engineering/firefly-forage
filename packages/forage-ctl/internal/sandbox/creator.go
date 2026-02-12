@@ -73,7 +73,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	defer unlock()
 
 	// Check runtime capabilities and warn about unsupported features
-	warnings := c.checkCapabilities(opts)
+	warnings := c.checkCapabilities()
 
 	// Phase 2: Load resources and allocate ports
 	resources, err := c.loadResources(opts)
@@ -591,19 +591,19 @@ func acquireSandboxLock(sandboxesDir string) (func(), error) {
 	}
 
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
 
 	return func() {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		f.Close()
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
 	}, nil
 }
 
 // checkCapabilities checks runtime capabilities against the sandbox configuration
 // and returns warnings for unsupported features. It does not block creation.
-func (c *Creator) checkCapabilities(opts CreateOptions) []string {
+func (c *Creator) checkCapabilities() []string {
 	caps := runtime.GetCapabilities(c.rt)
 	var warnings []string
 

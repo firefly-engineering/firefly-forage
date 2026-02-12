@@ -59,11 +59,11 @@ func (l *Logger) Log(event Event) error {
 		return fmt.Errorf("failed to create audit log directory: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -98,7 +98,7 @@ func (l *Logger) Events(sandbox string) ([]Event, error) {
 		}
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var events []Event
 	scanner := bufio.NewScanner(f)

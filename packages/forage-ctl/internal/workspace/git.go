@@ -175,8 +175,74 @@ Use standard git commands for VCS operations:
 This is an isolated git worktree - commits on this branch don't affect other worktrees.
 When done, merge your branch or create a pull request.`
 
+// Snapshot creates a git tag at the current HEAD of the worktree.
+func (b *GitBackend) Snapshot(repoPath, name, snapshotName string) error {
+	if err := ValidateName(snapshotName); err != nil {
+		return fmt.Errorf("invalid snapshot name: %w", err)
+	}
+	tagName := snapshotPrefix + name + "-" + snapshotName
+	// Tag the current HEAD in the main repo, referencing the worktree branch
+	branchName := gitBranchPrefix + name
+	cmd := exec.Command("git", "-C", repoPath, "tag", tagName, branchName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot tag: %s: %w", string(output), err)
+	}
+	return nil
+}
+
+// RestoreSnapshot checks out a previously tagged snapshot in the worktree.
+func (b *GitBackend) RestoreSnapshot(repoPath, name, snapshotName string) error {
+	if err := ValidateName(snapshotName); err != nil {
+		return fmt.Errorf("invalid snapshot name: %w", err)
+	}
+	tagName := snapshotPrefix + name + "-" + snapshotName
+	branchName := gitBranchPrefix + name
+	// Reset the worktree branch to the tagged commit
+	cmd := exec.Command("git", "-C", repoPath, "update-ref", "refs/heads/"+branchName, tagName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %s: %w", string(output), err)
+	}
+	return nil
+}
+
+// ListSnapshots returns all forage snapshots for a workspace.
+func (b *GitBackend) ListSnapshots(repoPath, name string) ([]SnapshotInfo, error) {
+	prefix := snapshotPrefix + name + "-"
+	cmd := exec.Command("git", "-C", repoPath, "tag", "-l", prefix+"*")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tags: %w", err)
+	}
+
+	var snapshots []SnapshotInfo
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		snapName := strings.TrimPrefix(line, prefix)
+
+		// Get the commit hash for the tag
+		hashCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--short", line)
+		hashOutput, err := hashCmd.Output()
+		var changeID string
+		if err == nil {
+			changeID = strings.TrimSpace(string(hashOutput))
+		}
+
+		snapshots = append(snapshots, SnapshotInfo{
+			Name:     snapName,
+			ChangeID: changeID,
+		})
+	}
+	return snapshots, nil
+}
+
 // Ensure GitBackend implements contribution interfaces
 var (
 	_ injection.MountContributor  = (*GitBackend)(nil)
 	_ injection.PromptContributor = (*GitBackend)(nil)
+	_ Snapshotter                 = (*GitBackend)(nil)
 )

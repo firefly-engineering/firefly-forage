@@ -62,6 +62,28 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// Snapshotter is an optional interface for backends that support
+// creating and restoring VCS-level snapshots of workspace state.
+type Snapshotter interface {
+	// Snapshot creates a named snapshot of the current workspace state.
+	Snapshot(repoPath, name, snapshotName string) error
+
+	// RestoreSnapshot restores a workspace to a previously saved snapshot.
+	RestoreSnapshot(repoPath, name, snapshotName string) error
+
+	// ListSnapshots returns all snapshots for a workspace.
+	ListSnapshots(repoPath, name string) ([]SnapshotInfo, error)
+}
+
+// SnapshotInfo describes a single snapshot.
+type SnapshotInfo struct {
+	Name     string
+	ChangeID string // jj change ID or git commit hash
+}
+
+// snapshotPrefix is the naming prefix for snapshot bookmarks/tags.
+const snapshotPrefix = "forage-snap-"
+
 // WorkspaceInfo contains information about a created workspace
 type WorkspaceInfo struct {
 	// Path is the filesystem path to the workspace
