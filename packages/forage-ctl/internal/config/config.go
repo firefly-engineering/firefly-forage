@@ -359,6 +359,11 @@ func (t *Template) Validate() error {
 	return nil
 }
 
+// secretNameRegex validates secret names to prevent shell injection.
+// Secret names are used in shell commands like $(cat /run/secrets/<name> ...),
+// so they must be restricted to safe filename characters.
+var secretNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
+
 // Validate checks that the AgentConfig is valid.
 func (a *AgentConfig) Validate() error {
 	if a.PackagePath == "" {
@@ -368,6 +373,11 @@ func (a *AgentConfig) Validate() error {
 	// If one of secretName/authEnvVar is set, both must be set
 	if (a.SecretName != "") != (a.AuthEnvVar != "") {
 		return fmt.Errorf("secretName and authEnvVar must both be set or both be empty")
+	}
+
+	// Validate secret name format to prevent shell injection
+	if a.SecretName != "" && !secretNameRegex.MatchString(a.SecretName) {
+		return fmt.Errorf("invalid secretName %q: must start with a letter and contain only letters, digits, dots, hyphens, or underscores", a.SecretName)
 	}
 
 	// Either secret-based auth OR credential mount is required
