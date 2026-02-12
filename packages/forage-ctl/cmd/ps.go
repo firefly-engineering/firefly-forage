@@ -49,7 +49,6 @@ func runPs(cmd *cobra.Command, args []string) error {
 			sb.Name, sb.Template, sb.ContainerIP(), mode, sb.Workspace, statusStr)
 	}
 
-	_ = p // keep paths() call for consistency
 	return w.Flush()
 }
 
