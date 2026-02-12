@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -45,7 +46,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 	logInfo("Starting container...")
 
 	// The container config should still exist in the sandboxes directory
-	configPath := fmt.Sprintf("%s/%s.nix", p.SandboxesDir, name)
+	configPath := filepath.Join(p.SandboxesDir, name+".nix")
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
 	if err := app.Default.Create(runtime.CreateOptions{
 		Name:       name,
