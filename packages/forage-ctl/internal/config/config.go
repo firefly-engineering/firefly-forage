@@ -245,15 +245,15 @@ func parseJJConfigIdentity(path string) *AgentIdentity {
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
 	User               string            `json:"user"`
-	UID                int               `json:"uid"`                      // Host user's UID
-	GID                int               `json:"gid"`                      // Host user's GID
+	UID                int               `json:"uid"` // Host user's UID
+	GID                int               `json:"gid"` // Host user's GID
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
 	Secrets            map[string]string `json:"secrets"`
 	StateDir           string            `json:"stateDir"`
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsPath        string            `json:"nixpkgsPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
-	ProxyURL           string            `json:"proxyUrl,omitempty"`       // URL of the forage-proxy server
+	ProxyURL           string            `json:"proxyUrl,omitempty"`      // URL of the forage-proxy server
 	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"` // Host-level default agent identity
 }
 
@@ -305,15 +305,15 @@ type TmuxWindow struct {
 
 // Template represents a sandbox template configuration
 type Template struct {
-	Name          string                 `json:"name"`
-	Description   string                 `json:"description"`
-	Network       string                 `json:"network"`
-	AllowedHosts  []string               `json:"allowedHosts"`
-	Agents        map[string]AgentConfig `json:"agents"`
-	ExtraPackages []string               `json:"extraPackages"`
-	UseProxy      bool                   `json:"useProxy,omitempty"`      // Use forage-proxy for API calls
-	AgentIdentity *AgentIdentity         `json:"agentIdentity,omitempty"` // Template-level default agent identity
-	TmuxWindows   []TmuxWindow           `json:"tmuxWindows,omitempty"`   // Explicit tmux window layout
+	Name              string                 `json:"name"`
+	Description       string                 `json:"description"`
+	Network           string                 `json:"network"`
+	AllowedHosts      []string               `json:"allowedHosts"`
+	Agents            map[string]AgentConfig `json:"agents"`
+	ExtraPackages     []string               `json:"extraPackages"`
+	UseProxy          bool                   `json:"useProxy,omitempty"`          // Use forage-proxy for API calls
+	AgentIdentity     *AgentIdentity         `json:"agentIdentity,omitempty"`     // Template-level default agent identity
+	TmuxWindows       []TmuxWindow           `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
 	Multiplexer       string                 `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
 	ReadOnlyWorkspace bool                   `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
 }

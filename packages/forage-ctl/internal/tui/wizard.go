@@ -54,12 +54,12 @@ type wizardModel struct {
 	nameInput textinput.Model
 
 	// Step 4: advanced
-	advCursor      advancedField
-	direct         bool
+	advCursor     advancedField
+	direct        bool
 	noMuxConfig   bool
-	gitUserInput   textinput.Model
-	gitEmailInput  textinput.Model
-	sshKeyInput    textinput.Model
+	gitUserInput  textinput.Model
+	gitEmailInput textinput.Model
+	sshKeyInput   textinput.Model
 
 	// Collected values
 	selectedPath     string
@@ -365,14 +365,14 @@ func (w *wizardModel) updateConfirm(msg tea.Msg) (bool, *CreateOptions, tea.Cmd)
 		switch keyMsg.String() {
 		case "enter", "y":
 			return true, &CreateOptions{
-				Name:         w.selectedName,
-				Template:     w.selectedTemplate,
-				RepoPath:     w.selectedPath,
-				Direct:       w.direct,
+				Name:        w.selectedName,
+				Template:    w.selectedTemplate,
+				RepoPath:    w.selectedPath,
+				Direct:      w.direct,
 				NoMuxConfig: w.noMuxConfig,
-				GitUser:      strings.TrimSpace(w.gitUserInput.Value()),
-				GitEmail:     strings.TrimSpace(w.gitEmailInput.Value()),
-				SSHKeyPath:   strings.TrimSpace(w.sshKeyInput.Value()),
+				GitUser:     strings.TrimSpace(w.gitUserInput.Value()),
+				GitEmail:    strings.TrimSpace(w.gitEmailInput.Value()),
+				SSHKeyPath:  strings.TrimSpace(w.sshKeyInput.Value()),
 			}, nil
 		case "n":
 			// Restart wizard

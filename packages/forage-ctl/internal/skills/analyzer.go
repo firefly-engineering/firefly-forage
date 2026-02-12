@@ -307,19 +307,19 @@ func vcsSkillTemplate(metadata *config.SandboxMetadata, info *ProjectInfo) (stri
 
 // systemPromptData is the template data for the system prompt.
 type systemPromptData struct {
-	Name          string
-	Template      string
-	WorkspaceMode string
-	SourceRepo    string
-	GitBranch     string
-	Network       string
-	AllowedHosts  []string
-	HasIdentity   bool
-	GitUser       string
-	GitEmail      string
-	SSHKeyPath    string
-	Agents        []agentEntry
-	UseProxy      bool
+	Name            string
+	Template        string
+	WorkspaceMode   string
+	SourceRepo      string
+	GitBranch       string
+	Network         string
+	AllowedHosts    []string
+	HasIdentity     bool
+	GitUser         string
+	GitEmail        string
+	SSHKeyPath      string
+	Agents          []agentEntry
+	UseProxy        bool
 	MuxInstructions string
 }
 

@@ -30,7 +30,7 @@ const (
 type screen int
 
 const (
-	screenList   screen = iota
+	screenList screen = iota
 	screenWizard
 )
 
@@ -42,14 +42,14 @@ type PickerOptions struct {
 
 // CreateOptions holds wizard-collected values for sandbox creation.
 type CreateOptions struct {
-	Name         string
-	Template     string
-	RepoPath     string
-	Direct       bool
+	Name        string
+	Template    string
+	RepoPath    string
+	Direct      bool
 	NoMuxConfig bool
-	GitUser      string
-	GitEmail     string
-	SSHKeyPath   string
+	GitUser     string
+	GitEmail    string
+	SSHKeyPath  string
 }
 
 // PickerResult holds the result of the picker

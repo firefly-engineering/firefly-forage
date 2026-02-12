@@ -26,7 +26,7 @@ func (t *Tmux) Type() Type { return TypeTmux }
 func (t *Tmux) NixPackages() []string { return []string{"tmux"} }
 
 // shellQuote returns a single-quoted shell string, escaping any embedded
-// single quotes using the '\'' idiom.
+// single quotes using the '\” idiom.
 func shellQuote(s string) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }

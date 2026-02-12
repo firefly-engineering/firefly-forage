@@ -8,7 +8,7 @@ import (
 // TemplateData holds all data needed to render the container Nix configuration.
 type TemplateData struct {
 	ContainerName      string
-	Hostname           string   // Hostname inside the container (the sandbox name)
+	Hostname           string // Hostname inside the container (the sandbox name)
 	NetworkSlot        int
 	StateVersion       string
 	BindMounts         []BindMount

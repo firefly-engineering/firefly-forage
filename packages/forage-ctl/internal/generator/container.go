@@ -25,11 +25,11 @@ type ContainerConfig struct {
 	NetworkSlot    int
 	AuthorizedKeys []string
 	Template       *config.Template
-	UID            int                      // Host user's UID for the container agent user
-	GID            int                      // Host user's GID for the container agent user
-	Mux            multiplexer.Multiplexer  // Multiplexer instance (created by caller)
-	AgentIdentity  *config.AgentIdentity    // Optional agent identity for git authorship (used for Nix template)
-	Runtime        string                   // Runtime backend name (e.g. "nspawn", "docker", "podman")
+	UID            int                     // Host user's UID for the container agent user
+	GID            int                     // Host user's GID for the container agent user
+	Mux            multiplexer.Multiplexer // Multiplexer instance (created by caller)
+	AgentIdentity  *config.AgentIdentity   // Optional agent identity for git authorship (used for Nix template)
+	Runtime        string                  // Runtime backend name (e.g. "nspawn", "docker", "podman")
 
 	// Contributions from the injection collector (required).
 	// Contains all mounts, packages, env vars, and tmpfiles rules.
