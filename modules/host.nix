@@ -280,7 +280,7 @@ in
 
     # Install forage-ctl
     environment.systemPackages = [
-      self.packages.${pkgs.system}.forage-ctl
+      self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
     ];
 
     # Enable NAT for container networking (only if externalInterface is set)
@@ -302,7 +302,7 @@ in
             secrets = cfg.secrets;
             stateDir = cfg.stateDir;
             # Path to extra-container command
-            extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
+            extraContainerPath = "${extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/extra-container";
             # Nixpkgs path for extra-container --nixpkgs-path
             nixpkgsPath = "${pkgs.path}";
             # Nixpkgs revision for registry pinning
