@@ -122,12 +122,14 @@ When a sandbox is removed with `forage-ctl down`:
 - **JJ mode (`--repo`)**: The entire workspace directory is removed, including skills
 - **Git worktree mode (`--git-worktree`)**: The worktree is removed, including skills
 
-## Customization (Future)
+## Dynamic Skill Generation
 
-Future versions will support:
+Skills are dynamically generated based on project analysis. The skills analyzer (`internal/skills/analyzer.go`) detects:
 
-- Custom skill templates per sandbox template
-- Project-specific skill overrides
-- Dynamic skill generation based on project analysis
+- **Project type**: Go, Rust, Python, Node/TypeScript, Nix, and more
+- **Build system**: detected build commands (e.g., `go build`, `cargo build`, `npm run build`)
+- **Test commands**: detected test runners (e.g., `go test ./...`, `cargo test`, `pytest`)
+- **Frameworks**: detected web frameworks and libraries
+- **VCS**: Git or JJ repository detection
 
-For now, the injected skills are generated automatically based on the template configuration and workspace mode.
+Based on detection results, the injected skill content includes project-specific guidance for the agent (build/test commands, VCS workflow tips, etc.).
