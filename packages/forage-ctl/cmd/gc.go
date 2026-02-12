@@ -36,10 +36,16 @@ func init() {
 	rootCmd.AddCommand(gcCmd)
 }
 
+// orphanedContainer represents a container in the runtime with no metadata on disk.
+type orphanedContainer struct {
+	name        string // sandbox name from runtime
+	recoveredBy string // how the sandbox name was identified (empty if from runtime directly)
+}
+
 // gcResult tracks what gc found and would/did clean up.
 type gcResult struct {
-	orphanedSandboxNames []string // sandbox names with files on disk but no container
-	orphanedContainers   []string // container names in runtime but no metadata on disk
+	orphanedSandboxNames []string            // sandbox names with files on disk but no container
+	orphanedContainers   []orphanedContainer // containers in runtime but no metadata on disk
 }
 
 func (r *gcResult) empty() bool {
@@ -92,7 +98,7 @@ func runGC(cmd *cobra.Command, args []string) error {
 	// Orphaned containers: in runtime but no metadata on disk
 	for name := range containerSet {
 		if _, ok := metadataSet[name]; !ok {
-			result.orphanedContainers = append(result.orphanedContainers, name)
+			result.orphanedContainers = append(result.orphanedContainers, orphanedContainer{name: name})
 		}
 	}
 
@@ -191,8 +197,12 @@ func printGCDryRun(result *gcResult) {
 
 	if len(result.orphanedContainers) > 0 {
 		fmt.Println("Orphaned containers (no matching metadata):")
-		for _, name := range result.orphanedContainers {
-			fmt.Printf("  %s\n", name)
+		for _, oc := range result.orphanedContainers {
+			if oc.recoveredBy != "" {
+				fmt.Printf("  %s (identified via %s)\n", oc.name, oc.recoveredBy)
+			} else {
+				fmt.Printf("  %s\n", oc.name)
+			}
 		}
 		fmt.Println()
 	}
@@ -219,12 +229,16 @@ func executeGC(ctx context.Context, result *gcResult, p *config.Paths, rt interf
 	}
 
 	// Destroy orphaned containers
-	for _, name := range result.orphanedContainers {
-		logInfo("Destroying orphaned container: %s", name)
-		if err := rt.Destroy(ctx, name); err != nil {
-			logWarning("Failed to destroy container %s: %v", name, err)
+	for _, oc := range result.orphanedContainers {
+		if oc.recoveredBy != "" {
+			logInfo("Destroying orphaned container: %s (identified via %s)", oc.name, oc.recoveredBy)
 		} else {
-			logging.Debug("destroyed orphaned container", "name", name)
+			logInfo("Destroying orphaned container: %s", oc.name)
+		}
+		if err := rt.Destroy(ctx, oc.name); err != nil {
+			logWarning("Failed to destroy container %s: %v", oc.name, err)
+		} else {
+			logging.Debug("destroyed orphaned container", "name", oc.name)
 		}
 	}
 

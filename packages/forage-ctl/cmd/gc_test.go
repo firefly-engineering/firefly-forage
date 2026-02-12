@@ -260,7 +260,7 @@ func TestGC_Force_DestroysOrphanedContainers(t *testing.T) {
 
 	// Call executeGC directly
 	result := &gcResult{
-		orphanedContainers: []string{"ghost"},
+		orphanedContainers: []orphanedContainer{{name: "ghost"}},
 	}
 	metadataSet := make(map[string]*config.SandboxMetadata)
 
@@ -318,7 +318,7 @@ func TestGC_NoOrphans(t *testing.T) {
 	}
 	for name := range containerSet {
 		if _, ok := metadataSet[name]; !ok {
-			result.orphanedContainers = append(result.orphanedContainers, name)
+			result.orphanedContainers = append(result.orphanedContainers, orphanedContainer{name: name})
 		}
 	}
 
