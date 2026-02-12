@@ -235,8 +235,9 @@ func isInternalHost(host string) bool {
 }
 
 func (p *Proxy) modifyResponse(resp *http.Response) error {
-	// Add CORS headers if needed
-	resp.Header.Set("Access-Control-Allow-Origin", "*")
+	// No CORS headers - the proxy should only be accessed by sandboxes
+	// directly, not from browsers. Adding Access-Control-Allow-Origin: *
+	// would allow any website to make API calls through the proxy.
 	return nil
 }
 
