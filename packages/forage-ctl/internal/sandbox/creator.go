@@ -523,7 +523,7 @@ func readSSHPublicKeys() []string {
 		keyPath := filepath.Join(sshDir, entry.Name())
 		content, err := os.ReadFile(keyPath)
 		if err != nil {
-			logging.Debug("failed to read key file", "path", keyPath, "error", err)
+			logging.Debug("failed to read key file", "file", entry.Name(), "error", err)
 			continue
 		}
 
