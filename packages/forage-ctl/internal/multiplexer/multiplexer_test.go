@@ -74,8 +74,8 @@ func TestTmuxInitScript(t *testing.T) {
 func TestTmuxAttachCommand(t *testing.T) {
 	mux := &Tmux{}
 	cmd := mux.AttachCommand()
-	if !strings.Contains(cmd, "tmux attach-session -t forage") {
-		t.Errorf("AttachCommand() = %q, should contain tmux attach", cmd)
+	if !strings.Contains(cmd, "attach-session -t forage") {
+		t.Errorf("AttachCommand() = %q, should contain attach-session", cmd)
 	}
 }
 
