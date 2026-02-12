@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 func TestDockerRuntime_Name(t *testing.T) {
@@ -22,7 +24,8 @@ func TestDockerRuntime_Name(t *testing.T) {
 	}
 }
 
-func TestDockerRuntime_containerName(t *testing.T) {
+func TestDockerRuntime_containerName_Fallback(t *testing.T) {
+	// Without SandboxesDir, falls back to prefix + name
 	rt := &DockerRuntime{
 		Command:         "docker",
 		ContainerPrefix: "forage-",
@@ -44,6 +47,31 @@ func TestDockerRuntime_containerName(t *testing.T) {
 				t.Errorf("containerName(%q) = %q, want %q", tt.sandboxName, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDockerRuntime_containerName_FromMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	meta := &config.SandboxMetadata{
+		Name:          "review",
+		Template:      "test",
+		NetworkSlot:   5,
+		ContainerName: "f5",
+	}
+	if err := config.SaveSandboxMetadata(tmpDir, meta); err != nil {
+		t.Fatalf("Failed to save metadata: %v", err)
+	}
+
+	rt := &DockerRuntime{
+		Command:         "docker",
+		ContainerPrefix: "forage-",
+		SandboxesDir:    tmpDir,
+	}
+
+	got := rt.containerName("review")
+	if got != "f5" {
+		t.Errorf("containerName(%q) = %q, want %q", "review", got, "f5")
 	}
 }
 

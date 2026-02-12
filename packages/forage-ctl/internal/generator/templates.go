@@ -8,6 +8,7 @@ import (
 // TemplateData holds all data needed to render the container Nix configuration.
 type TemplateData struct {
 	ContainerName      string
+	Hostname           string   // Hostname inside the container (the sandbox name)
 	NetworkSlot        int
 	StateVersion       string
 	BindMounts         []BindMount
@@ -84,6 +85,7 @@ const containerTemplateText = `{ pkgs, ... }: {
     config = { pkgs, ... }: {
       system.stateVersion = "{{.StateVersion}}";
       nixpkgs.config.allowUnfree = true;
+      networking.hostName = "{{.Hostname}}";
       {{.NetworkConfig}}
       users.users.agent = {
         isNormalUser = true;

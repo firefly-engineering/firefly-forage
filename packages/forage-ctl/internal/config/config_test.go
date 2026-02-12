@@ -51,6 +51,38 @@ func TestContainerName(t *testing.T) {
 	}
 }
 
+func TestContainerNameForSlot(t *testing.T) {
+	tests := []struct {
+		slot int
+		want string
+	}{
+		{1, "f1"},
+		{42, "f42"},
+		{254, "f254"},
+	}
+
+	for _, tt := range tests {
+		got := ContainerNameForSlot(tt.slot)
+		if got != tt.want {
+			t.Errorf("ContainerNameForSlot(%d) = %q, want %q", tt.slot, got, tt.want)
+		}
+	}
+}
+
+func TestResolvedContainerName(t *testing.T) {
+	// New sandbox with ContainerName set
+	meta := &SandboxMetadata{Name: "review", ContainerName: "f5"}
+	if got := meta.ResolvedContainerName(); got != "f5" {
+		t.Errorf("ResolvedContainerName() = %q, want %q", got, "f5")
+	}
+
+	// Legacy sandbox without ContainerName
+	legacy := &SandboxMetadata{Name: "review"}
+	if got := legacy.ResolvedContainerName(); got != "forage-review" {
+		t.Errorf("ResolvedContainerName() = %q, want %q", got, "forage-review")
+	}
+}
+
 func TestLoadHostConfig(t *testing.T) {
 	// Create a temporary directory
 	tmpDir := t.TempDir()

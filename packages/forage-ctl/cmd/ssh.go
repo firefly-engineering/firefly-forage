@@ -40,21 +40,22 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	}
 
 	// wezterm path: detect terminal, use native connect or error
+	containerName := metadata.ResolvedContainerName()
 	if os.Getenv("TERM_PROGRAM") == "WezTerm" {
-		return weztermConnect(name)
+		return weztermConnect(containerName)
 	}
 
 	return fmt.Errorf("sandbox %q uses wezterm multiplexing\n"+
-		"  Connect with: wezterm connect forage-%s\n"+
-		"  Or configure an SSH domain in ~/.wezterm.lua", name, name)
+		"  Connect with: wezterm connect %s\n"+
+		"  Or configure an SSH domain in ~/.wezterm.lua", name, containerName)
 }
 
-// weztermConnect execs wezterm connect for the named sandbox.
-func weztermConnect(name string) error {
+// weztermConnect execs wezterm connect for the named container.
+func weztermConnect(containerName string) error {
 	binary, err := exec.LookPath("wezterm")
 	if err != nil {
 		return fmt.Errorf("wezterm not found in PATH: %w", err)
 	}
-	argv := []string{"wezterm", "connect", "forage-" + name}
+	argv := []string{"wezterm", "connect", containerName}
 	return syscall.Exec(binary, argv, os.Environ())
 }

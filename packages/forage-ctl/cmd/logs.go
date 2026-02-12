@@ -29,7 +29,12 @@ func init() {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	containerName := config.ContainerName(name)
+	paths := config.DefaultPaths()
+	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	if err != nil {
+		return fmt.Errorf("sandbox not found: %s", name)
+	}
+	containerName := metadata.ResolvedContainerName()
 
 	journalctlPath, err := exec.LookPath("journalctl")
 	if err != nil {

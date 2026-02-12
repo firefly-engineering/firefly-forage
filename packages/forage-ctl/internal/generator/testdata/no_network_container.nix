@@ -1,5 +1,5 @@
 { pkgs, ... }: {
-  containers.forage-test-sandbox = {
+  containers.f1 = {
     autoStart = true;
     ephemeral = true;
     privateNetwork = true;
@@ -15,6 +15,7 @@
     config = { pkgs, ... }: {
       system.stateVersion = "24.05";
       nixpkgs.config.allowUnfree = true;
+      networking.hostName = "test-sandbox";
       # No network access
       networking.nameservers = [];
       networking.defaultGateway = null;

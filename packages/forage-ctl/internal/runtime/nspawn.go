@@ -49,8 +49,15 @@ func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir, nixpkgs
 	}
 }
 
-// containerName returns the full container name for a sandbox
+// containerName returns the full container name for a sandbox.
+// It loads metadata to use the short container name if available,
+// falling back to the legacy prefix+name format.
 func (r *NspawnRuntime) containerName(sandboxName string) string {
+	if r.SandboxesDir != "" {
+		if meta, err := config.LoadSandboxMetadata(r.SandboxesDir, sandboxName); err == nil {
+			return meta.ResolvedContainerName()
+		}
+	}
 	return r.ContainerPrefix + sandboxName
 }
 
@@ -250,6 +257,9 @@ func (r *NspawnRuntime) ExecInteractive(ctx context.Context, name string, comman
 
 // List returns all containers managed by this runtime
 func (r *NspawnRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
+	// Build reverse mapping: container name → sandbox name from metadata
+	reverseMap := buildContainerReverseMap(r.SandboxesDir)
+
 	cmd := exec.CommandContext(ctx, "machinectl", "list", "--no-legend", "--no-pager")
 	output, err := cmd.Output()
 	if err != nil {
@@ -270,13 +280,16 @@ func (r *NspawnRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 		}
 
 		name := fields[0]
-		// Only include containers with our prefix
-		if !strings.HasPrefix(name, r.ContainerPrefix) {
-			continue
-		}
 
-		// Strip prefix to get sandbox name
-		sandboxName := strings.TrimPrefix(name, r.ContainerPrefix)
+		var sandboxName string
+		if sn, ok := reverseMap[name]; ok {
+			sandboxName = sn
+		} else if strings.HasPrefix(name, r.ContainerPrefix) {
+			// Legacy fallback: strip prefix
+			sandboxName = strings.TrimPrefix(name, r.ContainerPrefix)
+		} else {
+			continue // Not a forage container
+		}
 
 		info, _ := r.Status(ctx, sandboxName)
 		if info != nil {

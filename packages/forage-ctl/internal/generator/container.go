@@ -85,7 +85,8 @@ func GenerateNixConfig(cfg *ContainerConfig) (string, error) {
 // All mounts, packages, env vars, and tmpfiles rules come from Contributions.
 func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 	data := &TemplateData{
-		ContainerName:  config.ContainerName(cfg.Name),
+		ContainerName:  config.ContainerNameForSlot(cfg.NetworkSlot),
+		Hostname:       cfg.Name,
 		NetworkSlot:    cfg.NetworkSlot,
 		StateVersion:   NixOSStateVersion,
 		AuthorizedKeys: cfg.AuthorizedKeys,

@@ -68,9 +68,14 @@ func TestGenerateNixConfig(t *testing.T) {
 		t.Fatalf("GenerateNixConfig failed: %v", err)
 	}
 
-	// Check container name
-	if !strings.Contains(result, "containers.forage-test-sandbox") {
-		t.Error("Config should contain container name with prefix")
+	// Check container name (derived from network slot, not sandbox name)
+	if !strings.Contains(result, "containers.f1") {
+		t.Error("Config should contain short container name derived from network slot")
+	}
+
+	// Check hostname is set to sandbox name
+	if !strings.Contains(result, `networking.hostName = "test-sandbox"`) {
+		t.Error("Config should set hostname to sandbox name")
 	}
 
 	// Check NO port forwarding (we use direct container IP access now)
@@ -1358,7 +1363,7 @@ func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {
 
 	// Check for key structural elements (IPs may vary due to DNS resolution)
 	required := []string{
-		"containers.forage-test-sandbox",
+		"containers.f1",
 		"nftables",
 		"dnsmasq",
 		"allowed_ipv4",

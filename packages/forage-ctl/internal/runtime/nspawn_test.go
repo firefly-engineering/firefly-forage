@@ -16,7 +16,8 @@ func TestNspawnRuntime_Name(t *testing.T) {
 	}
 }
 
-func TestNspawnRuntime_containerName(t *testing.T) {
+func TestNspawnRuntime_containerName_Fallback(t *testing.T) {
+	// Without SandboxesDir, falls back to prefix + name
 	rt := NewNspawnRuntime("/nix/store/.../extra-container", "forage-", "", "")
 
 	tests := []struct {
@@ -35,6 +36,49 @@ func TestNspawnRuntime_containerName(t *testing.T) {
 				t.Errorf("containerName(%q) = %q, want %q", tt.sandboxName, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNspawnRuntime_containerName_FromMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Save metadata with a short container name
+	meta := &config.SandboxMetadata{
+		Name:          "review",
+		Template:      "test",
+		NetworkSlot:   5,
+		ContainerName: "f5",
+	}
+	if err := config.SaveSandboxMetadata(tmpDir, meta); err != nil {
+		t.Fatalf("Failed to save metadata: %v", err)
+	}
+
+	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+
+	got := rt.containerName("review")
+	if got != "f5" {
+		t.Errorf("containerName(%q) = %q, want %q", "review", got, "f5")
+	}
+}
+
+func TestNspawnRuntime_containerName_LegacyMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Save metadata without ContainerName (legacy sandbox)
+	meta := &config.SandboxMetadata{
+		Name:        "old-sandbox",
+		Template:    "test",
+		NetworkSlot: 3,
+	}
+	if err := config.SaveSandboxMetadata(tmpDir, meta); err != nil {
+		t.Fatalf("Failed to save metadata: %v", err)
+	}
+
+	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+
+	got := rt.containerName("old-sandbox")
+	if got != "forage-old-sandbox" {
+		t.Errorf("containerName(%q) = %q, want %q", "old-sandbox", got, "forage-old-sandbox")
 	}
 }
 

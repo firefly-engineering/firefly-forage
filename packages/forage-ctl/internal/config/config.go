@@ -417,6 +417,7 @@ type SandboxMetadata struct {
 	GitBranch       string         `json:"gitBranch,omitempty"`       // Git branch name for worktree
 	AgentIdentity   *AgentIdentity `json:"agentIdentity,omitempty"`   // Resolved agent identity
 	Multiplexer     string         `json:"multiplexer,omitempty"`     // "tmux" (default) or "wezterm"
+	ContainerName   string         `json:"containerName,omitempty"`   // Short container name (e.g. "f42"); empty for legacy sandboxes
 }
 
 // ContainerIP returns the container's IP address based on its network slot.
@@ -639,7 +640,26 @@ func SandboxExists(sandboxesDir, name string) bool {
 	return err == nil
 }
 
-// ContainerName returns the container name for a sandbox
+// ContainerName returns the legacy container name for a sandbox.
+// Deprecated: Use ContainerNameForSlot for new sandboxes or
+// SandboxMetadata.ResolvedContainerName for existing ones.
 func ContainerName(sandboxName string) string {
 	return ContainerPrefix + sandboxName
+}
+
+// ContainerNameForSlot returns a short container name derived from the network slot.
+// This produces names like "f1", "f42", "f254" that fit within the 11-character
+// limit imposed by NixOS containers with privateNetwork.
+func ContainerNameForSlot(slot int) string {
+	return fmt.Sprintf("f%d", slot)
+}
+
+// ResolvedContainerName returns the container name to use for this sandbox.
+// Returns the new short ContainerName if set, otherwise falls back to the
+// legacy "forage-{name}" format for backward compatibility.
+func (m *SandboxMetadata) ResolvedContainerName() string {
+	if m.ContainerName != "" {
+		return m.ContainerName
+	}
+	return ContainerPrefix + m.Name
 }

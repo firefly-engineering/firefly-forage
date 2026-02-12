@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 )
 
@@ -28,19 +29,24 @@ type DockerRuntime struct {
 	// StagingDir is the directory for staging generated files
 	StagingDir string
 
+	// SandboxesDir is the directory containing sandbox metadata files
+	// Used to resolve container names from metadata
+	SandboxesDir string
+
 	// GeneratedFileMounter handles staging of generated files
 	GeneratedFileMounter
 }
 
 // NewDockerRuntime creates a new Docker/Podman runtime.
 // It auto-detects which command is available.
-func NewDockerRuntime(containerPrefix string) (*DockerRuntime, error) {
+func NewDockerRuntime(containerPrefix, sandboxesDir string) (*DockerRuntime, error) {
 	// Try podman first (preferred for rootless)
 	if _, err := exec.LookPath("podman"); err == nil {
 		return &DockerRuntime{
 			Command:         "podman",
 			ContainerPrefix: containerPrefix,
 			UseRootless:     true,
+			SandboxesDir:    sandboxesDir,
 		}, nil
 	}
 
@@ -50,14 +56,22 @@ func NewDockerRuntime(containerPrefix string) (*DockerRuntime, error) {
 			Command:         "docker",
 			ContainerPrefix: containerPrefix,
 			UseRootless:     false,
+			SandboxesDir:    sandboxesDir,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("neither podman nor docker found in PATH")
 }
 
-// containerName returns the full container name for a sandbox
+// containerName returns the full container name for a sandbox.
+// It loads metadata to use the short container name if available,
+// falling back to the legacy prefix+name format.
 func (r *DockerRuntime) containerName(sandboxName string) string {
+	if r.SandboxesDir != "" {
+		if meta, err := config.LoadSandboxMetadata(r.SandboxesDir, sandboxName); err == nil {
+			return meta.ResolvedContainerName()
+		}
+	}
 	return r.ContainerPrefix + sandboxName
 }
 
@@ -298,7 +312,11 @@ func (r *DockerRuntime) ExecInteractive(ctx context.Context, name string, comman
 
 // List returns all containers managed by this runtime
 func (r *DockerRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
-	output, err := r.runCmd(ctx, "ps", "-a", "--format", "{{.Names}}", "--filter", fmt.Sprintf("name=%s", r.ContainerPrefix))
+	// Build reverse mapping: container name → sandbox name from metadata
+	reverseMap := buildContainerReverseMap(r.SandboxesDir)
+
+	// List all containers (both legacy prefix-named and new short-named)
+	output, err := r.runCmd(ctx, "ps", "-a", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}
@@ -311,8 +329,15 @@ func (r *DockerRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 			continue
 		}
 
-		// Strip prefix to get sandbox name
-		sandboxName := strings.TrimPrefix(name, r.ContainerPrefix)
+		var sandboxName string
+		if sn, ok := reverseMap[name]; ok {
+			sandboxName = sn
+		} else if strings.HasPrefix(name, r.ContainerPrefix) {
+			// Legacy fallback: strip prefix
+			sandboxName = strings.TrimPrefix(name, r.ContainerPrefix)
+		} else {
+			continue // Not a forage container
+		}
 
 		info, _ := r.Status(ctx, sandboxName)
 		if info != nil {

@@ -33,6 +33,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 )
 
@@ -43,10 +44,14 @@ type AppleRuntime struct {
 
 	// BinaryPath is the path to the container CLI
 	BinaryPath string
+
+	// SandboxesDir is the directory containing sandbox metadata files
+	// Used to resolve container names from metadata
+	SandboxesDir string
 }
 
 // NewAppleRuntime creates a new Apple Container runtime.
-func NewAppleRuntime(containerPrefix string) (*AppleRuntime, error) {
+func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error) {
 	// Apple Container only works on macOS
 	if goruntime.GOOS != "darwin" {
 		return nil, fmt.Errorf("Apple Container is only available on macOS")
@@ -61,11 +66,19 @@ func NewAppleRuntime(containerPrefix string) (*AppleRuntime, error) {
 	return &AppleRuntime{
 		ContainerPrefix: containerPrefix,
 		BinaryPath:      binaryPath,
+		SandboxesDir:    sandboxesDir,
 	}, nil
 }
 
-// containerName returns the full container name for a sandbox
+// containerName returns the full container name for a sandbox.
+// It loads metadata to use the short container name if available,
+// falling back to the legacy prefix+name format.
 func (r *AppleRuntime) containerName(sandboxName string) string {
+	if r.SandboxesDir != "" {
+		if meta, err := config.LoadSandboxMetadata(r.SandboxesDir, sandboxName); err == nil {
+			return meta.ResolvedContainerName()
+		}
+	}
 	return r.ContainerPrefix + sandboxName
 }
 
@@ -302,7 +315,11 @@ func (r *AppleRuntime) ExecInteractive(ctx context.Context, name string, command
 
 // List returns all containers managed by this runtime
 func (r *AppleRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
-	output, err := r.runCmd(ctx, "ps", "-a", "--format", "{{.Names}}", "--filter", fmt.Sprintf("name=%s", r.ContainerPrefix))
+	// Build reverse mapping: container name → sandbox name from metadata
+	reverseMap := buildContainerReverseMap(r.SandboxesDir)
+
+	// List all containers
+	output, err := r.runCmd(ctx, "ps", "-a", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +332,15 @@ func (r *AppleRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 			continue
 		}
 
-		// Strip prefix to get sandbox name
-		sandboxName := strings.TrimPrefix(name, r.ContainerPrefix)
+		var sandboxName string
+		if sn, ok := reverseMap[name]; ok {
+			sandboxName = sn
+		} else if strings.HasPrefix(name, r.ContainerPrefix) {
+			// Legacy fallback: strip prefix
+			sandboxName = strings.TrimPrefix(name, r.ContainerPrefix)
+		} else {
+			continue // Not a forage container
+		}
 
 		info, _ := r.Status(ctx, sandboxName)
 		if info != nil {

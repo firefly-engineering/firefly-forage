@@ -12,6 +12,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,8 +102,10 @@ func TestWorkflow_CreateSandboxWithDirectWorkspace(t *testing.T) {
 	}
 
 	// Verify generated config contains expected elements
+	// Container name is derived from network slot (f{slot}), not sandbox name
+	expectedContainerName := fmt.Sprintf("containers.f%d", networkSlot)
 	checks := []string{
-		"containers.forage-test-sandbox",
+		expectedContainerName,
 		workspacePath,
 		"ssh-rsa AAAA",
 	}

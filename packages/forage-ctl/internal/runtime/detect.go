@@ -36,7 +36,7 @@ type Config struct {
 	NixpkgsPath string
 
 	// SandboxesDir is the directory containing sandbox metadata files
-	// Used by nspawn runtime to look up SSH ports from persisted metadata
+	// Used by all runtimes to resolve container names from metadata
 	SandboxesDir string
 }
 
@@ -170,10 +170,10 @@ func New(cfg *Config) (Runtime, error) {
 		return NewNspawnRuntime(path, cfg.ContainerPrefix, cfg.SandboxesDir, cfg.NixpkgsPath), nil
 
 	case RuntimeDocker, RuntimePodman:
-		return NewDockerRuntime(cfg.ContainerPrefix)
+		return NewDockerRuntime(cfg.ContainerPrefix, cfg.SandboxesDir)
 
 	case RuntimeApple:
-		return NewAppleRuntime(cfg.ContainerPrefix)
+		return NewAppleRuntime(cfg.ContainerPrefix, cfg.SandboxesDir)
 
 	default:
 		return nil, fmt.Errorf("unknown runtime type: %s", runtimeType)

@@ -104,16 +104,16 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		return nil, err
 	}
 
-	// Phase 7: Create and start container
-	if err := c.startContainer(opts.Name, configPath); err != nil {
-		cleanup()
-		return nil, err
-	}
-
-	// Phase 8: Save metadata
+	// Phase 7: Save metadata (before container creation so runtime can resolve container name)
 	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Phase 8: Create and start container
+	if err := c.startContainer(opts.Name, configPath); err != nil {
+		cleanup()
+		return nil, err
 	}
 
 	// Phase 9: Post-creation setup (wait for SSH)
@@ -185,6 +185,7 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 		GitBranch:       ws.gitBranch,
 		AgentIdentity:   identity,
 		Multiplexer:     resources.template.Multiplexer,
+		ContainerName:   config.ContainerNameForSlot(resources.networkSlot),
 	}
 }
 
