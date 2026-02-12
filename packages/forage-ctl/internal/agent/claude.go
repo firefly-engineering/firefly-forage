@@ -82,20 +82,28 @@ func (a *ClaudeAgent) ContributeMounts(ctx context.Context, req *injection.Mount
 
 // ContributeEnvVars returns environment variables for Claude authentication.
 func (a *ClaudeAgent) ContributeEnvVars(ctx context.Context, req *injection.EnvVarRequest) ([]injection.EnvVar, error) {
-	// If using proxy, the proxy contributor handles env vars
+	var envVars []injection.EnvVar
+
+	// Enable agent teams in all Claude sandboxes
+	envVars = append(envVars, injection.EnvVar{
+		Name:  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+		Value: `"1"`,
+	})
+
+	// If using proxy, the proxy contributor handles auth env vars
 	if req.ProxyURL != "" {
-		return nil, nil
+		return envVars, nil
 	}
 
 	// If using secrets, set up the auth env var
 	if a.config.AuthEnvVar != "" && a.config.SecretName != "" && req.SecretsPath != "" {
-		return []injection.EnvVar{{
+		envVars = append(envVars, injection.EnvVar{
 			Name:  a.config.AuthEnvVar,
 			Value: fmt.Sprintf(`"$(cat /run/secrets/%s 2>/dev/null || echo '')"`, a.config.SecretName),
-		}}, nil
+		})
 	}
 
-	return nil, nil
+	return envVars, nil
 }
 
 // ContributeGeneratedFiles returns generated files for Claude configuration.
