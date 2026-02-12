@@ -7,8 +7,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 var templatesCmd = &cobra.Command{
@@ -22,9 +20,9 @@ func init() {
 }
 
 func runTemplates(cmd *cobra.Command, args []string) error {
-	paths := config.DefaultPaths()
+	p := paths()
 
-	templates, err := config.ListTemplates(paths.TemplatesDir)
+	templates, err := config.ListTemplates(p.TemplatesDir)
 	if err != nil {
 		return fmt.Errorf("failed to list templates: %w", err)
 	}

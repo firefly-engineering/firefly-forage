@@ -47,7 +47,7 @@ func init() {
 func runNetwork(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	modeStr := args[1]
-	paths := config.DefaultPaths()
+	p := paths()
 
 	// Validate mode
 	var mode network.Mode
@@ -65,19 +65,19 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	logging.Debug("changing network mode", "sandbox", name, "mode", mode)
 
 	// Load sandbox metadata
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
+	metadata, err := config.LoadSandboxMetadata(p.SandboxesDir, name)
 	if err != nil {
 		return errors.SandboxNotFound(name)
 	}
 
 	// Load host config
-	hostConfig, err := config.LoadHostConfig(paths.ConfigDir)
+	hostConfig, err := config.LoadHostConfig(p.ConfigDir)
 	if err != nil {
 		return errors.ConfigError("failed to load host config", err)
 	}
 
 	// Load template
-	template, err := config.LoadTemplate(paths.TemplatesDir, metadata.Template)
+	template, err := config.LoadTemplate(p.TemplatesDir, metadata.Template)
 	if err != nil {
 		return errors.TemplateNotFound(metadata.Template)
 	}
@@ -126,7 +126,7 @@ func runNetwork(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write updated container config
-	configPath := filepath.Join(paths.SandboxesDir, name+".nix")
+	configPath := filepath.Join(p.SandboxesDir, name+".nix")
 	logging.Debug("writing updated container config", "path", configPath)
 	if err := os.WriteFile(configPath, []byte(nixConfig), 0644); err != nil {
 		return errors.ContainerFailed("write config", err)
