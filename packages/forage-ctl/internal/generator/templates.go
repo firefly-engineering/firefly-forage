@@ -3,6 +3,8 @@ package generator
 import (
 	"strings"
 	"text/template"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 // TemplateData holds all data needed to render the container Nix configuration.
@@ -26,8 +28,9 @@ type TemplateData struct {
 	SSHKeyName         string   // Basename of SSH key file (empty if no SSH key)
 	SystemPromptFile   string   // Container path of system prompt file (empty if not set)
 	ClaudePackagePath  string   // Nix store path of unwrapped claude package (empty if not wrapping)
-	SandboxName        string   // Sandbox name (for in-container metadata)
-	Runtime            string   // Runtime backend name (for in-container metadata)
+	SandboxName        string                // Sandbox name (for in-container metadata)
+	Runtime            string                // Runtime backend name (for in-container metadata)
+	ResourceLimits     *config.ResourceLimits // Optional resource limits for systemd
 }
 
 // BindMount represents a bind mount entry in the Nix config.
@@ -190,6 +193,26 @@ const containerTemplateText = `{ pkgs, ... }:
             ''}";
           };
         };
+{{- if .ResourceLimits}}
+        systemd.services.forage-resources = {
+          description = "Forage Resource Limits (no-op anchor for resource control)";
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.coreutils}/bin/true";
+            RemainAfterExit = true;
+{{- if .ResourceLimits.CPUQuota}}
+            CPUQuota = "{{.ResourceLimits.CPUQuota}}";
+{{- end}}
+{{- if .ResourceLimits.MemoryMax}}
+            MemoryMax = "{{.ResourceLimits.MemoryMax}}";
+{{- end}}
+{{- if .ResourceLimits.TasksMax}}
+            TasksMax = {{.ResourceLimits.TasksMax}};
+{{- end}}
+          };
+        };
+{{- end}}
 {{- if or .GitUser .GitEmail .SSHKeyName}}
         systemd.services.forage-agent-identity = {
           description = "Forage Agent Identity Setup";

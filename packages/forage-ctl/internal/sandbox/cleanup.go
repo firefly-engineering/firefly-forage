@@ -33,6 +33,9 @@ type CleanupOptions struct {
 
 	// CleanupMetadata if true, removes the sandbox metadata file.
 	CleanupMetadata bool
+
+	// CleanupAuditLog if true, removes the sandbox audit log.
+	CleanupAuditLog bool
 }
 
 // DefaultCleanupOptions returns options that clean up everything.
@@ -45,6 +48,7 @@ func DefaultCleanupOptions() CleanupOptions {
 		CleanupSkills:      true,
 		CleanupPermissions: true,
 		CleanupMetadata:    true,
+		CleanupAuditLog:    true,
 	}
 }
 
@@ -133,6 +137,14 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 		generatedDir := filepath.Join(paths.SandboxesDir, name+".generated")
 		if err := os.RemoveAll(generatedDir); err != nil {
 			logging.Warn("failed to remove generated files directory", "path", generatedDir, "error", err)
+		}
+	}
+
+	// Remove audit log
+	if opts.CleanupAuditLog {
+		auditPath := filepath.Join(paths.StateDir, "sandboxes", name+".events.jsonl")
+		if err := os.Remove(auditPath); err != nil && !os.IsNotExist(err) {
+			logging.Warn("failed to remove audit log", "path", auditPath, "error", err)
 		}
 	}
 

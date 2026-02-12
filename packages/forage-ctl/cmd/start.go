@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/audit"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 )
 
@@ -34,6 +35,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err := app.Default.Start(name); err != nil {
 		return errors.ContainerFailed("start", err)
 	}
+
+	auditLog := audit.NewLogger(paths().StateDir)
+	_ = auditLog.LogEvent(audit.EventStart, name, "")
 
 	logSuccess("Started sandbox %s", name)
 	return nil

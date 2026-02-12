@@ -837,6 +837,17 @@ func TestGenerateNixConfig_Golden(t *testing.T) {
 			},
 			goldenFile: "read_only_workspace_container.nix",
 		},
+		{
+			name: "resource_limits",
+			modifyFunc: func(c *ContainerConfig) {
+				c.ResourceLimits = &config.ResourceLimits{
+					CPUQuota:  "200%",
+					MemoryMax: "4G",
+					TasksMax:  512,
+				}
+			},
+			goldenFile: "resource_limits_container.nix",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1362,6 +1373,95 @@ func TestGenerateNixConfig_DefaultMultiplexer(t *testing.T) {
 
 // TestGenerateNixConfig_RestrictedNetwork tests restricted network mode separately
 // because it involves DNS resolution which produces dynamic IP addresses.
+func TestGenerateNixConfig_ResourceLimits(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.ResourceLimits = &config.ResourceLimits{
+		CPUQuota:  "200%",
+		MemoryMax: "4G",
+		TasksMax:  512,
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if !strings.Contains(result, "forage-resources") {
+		t.Error("Config should contain forage-resources service")
+	}
+	if !strings.Contains(result, `CPUQuota = "200%"`) {
+		t.Error("Config should contain CPUQuota")
+	}
+	if !strings.Contains(result, `MemoryMax = "4G"`) {
+		t.Error("Config should contain MemoryMax")
+	}
+	if !strings.Contains(result, "TasksMax = 512") {
+		t.Error("Config should contain TasksMax")
+	}
+}
+
+func TestGenerateNixConfig_ResourceLimitsPartial(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.ResourceLimits = &config.ResourceLimits{
+		MemoryMax: "2G",
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if !strings.Contains(result, "forage-resources") {
+		t.Error("Config should contain forage-resources service")
+	}
+	if !strings.Contains(result, `MemoryMax = "2G"`) {
+		t.Error("Config should contain MemoryMax")
+	}
+	if strings.Contains(result, "CPUQuota") {
+		t.Error("Config should not contain CPUQuota when not set")
+	}
+	if strings.Contains(result, "TasksMax") {
+		t.Error("Config should not contain TasksMax when not set")
+	}
+}
+
+func TestGenerateNixConfig_NoResourceLimits(t *testing.T) {
+	cfg := validTestConfig()
+	// No resource limits by default
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	if strings.Contains(result, "forage-resources") {
+		t.Error("Config should not contain forage-resources when no resource limits")
+	}
+}
+
+func TestResourceLimits_IsEmpty(t *testing.T) {
+	tests := []struct {
+		name     string
+		limits   *config.ResourceLimits
+		expected bool
+	}{
+		{"nil", nil, true},
+		{"empty struct", &config.ResourceLimits{}, true},
+		{"cpuQuota only", &config.ResourceLimits{CPUQuota: "200%"}, false},
+		{"memoryMax only", &config.ResourceLimits{MemoryMax: "4G"}, false},
+		{"tasksMax only", &config.ResourceLimits{TasksMax: 512}, false},
+		{"all set", &config.ResourceLimits{CPUQuota: "100%", MemoryMax: "1G", TasksMax: 256}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.limits.IsEmpty(); got != tt.expected {
+				t.Errorf("IsEmpty() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {
 	cfg := validTestConfig()
 	cfg.Template.Network = "restricted"

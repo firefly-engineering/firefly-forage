@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/audit"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
@@ -71,6 +72,9 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 	defer unlock()
 
+	// Check runtime capabilities and warn about unsupported features
+	warnings := c.checkCapabilities(opts)
+
 	// Phase 2: Load resources and allocate ports
 	resources, err := c.loadResources(opts)
 	if err != nil {
@@ -129,11 +133,16 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	// Phase 9: Post-creation setup (wait for SSH)
 	c.postCreationSetup(metadata)
 
+	// Log creation event
+	auditLogger := audit.NewLogger(c.paths.StateDir)
+	_ = auditLogger.LogEvent(audit.EventCreate, opts.Name, "template="+opts.Template)
+
 	return &CreateResult{
-		Name:        opts.Name,
-		ContainerIP: metadata.ContainerIP(),
-		Workspace:   ws.effectivePath,
-		Metadata:    metadata,
+		Name:               opts.Name,
+		ContainerIP:        metadata.ContainerIP(),
+		Workspace:          ws.effectivePath,
+		Metadata:           metadata,
+		CapabilityWarnings: warnings,
 	}, nil
 }
 
@@ -235,6 +244,15 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 		return "", fmt.Errorf("failed to collect contributions: %w", err)
 	}
 
+	// Pass resource limits if runtime supports them
+	var resourceLimits *config.ResourceLimits
+	caps := runtime.GetCapabilities(c.rt)
+	if caps.ResourceLimits && resources.template.ResourceLimits != nil {
+		resourceLimits = resources.template.ResourceLimits
+	} else if resources.template.ResourceLimits != nil && !resources.template.ResourceLimits.IsEmpty() {
+		logging.Warn("runtime does not support resource limits; ignoring resource limit configuration")
+	}
+
 	containerCfg := &generator.ContainerConfig{
 		Name:            opts.Name,
 		NetworkSlot:     resources.networkSlot,
@@ -245,6 +263,7 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 		Mux:             mux,
 		AgentIdentity:   identity,
 		Runtime:         c.rt.Name(),
+		ResourceLimits:  resourceLimits,
 		Contributions:   contributions,
 		Reproducibility: contribResult.Reproducibility,
 	}
@@ -580,6 +599,32 @@ func acquireSandboxLock(sandboxesDir string) (func(), error) {
 		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 		f.Close()
 	}, nil
+}
+
+// checkCapabilities checks runtime capabilities against the sandbox configuration
+// and returns warnings for unsupported features. It does not block creation.
+func (c *Creator) checkCapabilities(opts CreateOptions) []string {
+	caps := runtime.GetCapabilities(c.rt)
+	var warnings []string
+
+	if !caps.NixOSConfig {
+		warnings = append(warnings, "Runtime "+c.rt.Name()+" does not support NixOS config generation; container may have reduced functionality")
+	}
+	if !caps.NetworkIsolation {
+		warnings = append(warnings, "Runtime "+c.rt.Name()+" does not support network isolation; network mode filtering will not be enforced")
+	}
+	if !caps.SSHAccess {
+		warnings = append(warnings, "Runtime "+c.rt.Name()+" does not support SSH access; use exec instead")
+	}
+	if !caps.GeneratedFiles {
+		warnings = append(warnings, "Runtime "+c.rt.Name()+" does not support generated file mounting; skills and permissions may not be available")
+	}
+
+	for _, w := range warnings {
+		logging.Warn(w)
+	}
+
+	return warnings
 }
 
 // isValidSSHKey checks if a string looks like a valid SSH public key

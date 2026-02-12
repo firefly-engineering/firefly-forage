@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
@@ -418,6 +419,50 @@ func readForageJSONSandboxName(ctx context.Context, containerName string) string
 	return meta.SandboxName
 }
 
-// Ensure NspawnRuntime implements Runtime and GeneratedFileRuntime
+// GracefulStop sends SIGTERM via machinectl terminate, waits up to timeout
+// for the container to stop, then forces poweroff if still running.
+func (r *NspawnRuntime) GracefulStop(ctx context.Context, name string, timeout time.Duration) error {
+	containerName := r.containerName(name)
+	logging.Debug("graceful stop", "container", containerName, "timeout", timeout)
+
+	// Send SIGTERM to container init via machinectl terminate
+	cmd := exec.CommandContext(ctx, "sudo", "machinectl", "terminate", containerName)
+	if err := cmd.Run(); err != nil {
+		logging.Debug("terminate failed, trying poweroff", "error", err)
+		return r.Stop(ctx, name)
+	}
+
+	// Poll until stopped or timeout
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		running, err := r.IsRunning(ctx, name)
+		if err != nil || !running {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Force stop if still running
+	logging.Warn("container did not stop gracefully, forcing poweroff", "container", containerName)
+	return r.Stop(ctx, name)
+}
+
+// Capabilities returns the full set of capabilities for nspawn.
+// NixOS nspawn containers support all features.
+func (r *NspawnRuntime) Capabilities() Capabilities {
+	return Capabilities{
+		NixOSConfig:      true,
+		NetworkIsolation: true,
+		EphemeralRoot:    true,
+		SSHAccess:        true,
+		GeneratedFiles:   true,
+		ResourceLimits:   true,
+		GracefulShutdown: true,
+	}
+}
+
+// Ensure NspawnRuntime implements Runtime, GeneratedFileRuntime, CapableRuntime, and GracefulStopper
 var _ Runtime = (*NspawnRuntime)(nil)
 var _ GeneratedFileRuntime = (*NspawnRuntime)(nil)
+var _ CapableRuntime = (*NspawnRuntime)(nil)
+var _ GracefulStopper = (*NspawnRuntime)(nil)

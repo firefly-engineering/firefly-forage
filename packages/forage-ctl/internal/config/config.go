@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -156,46 +157,27 @@ func ReadHostUserGitIdentity(username string) *AgentIdentity {
 	return nil
 }
 
-// parseGitConfigIdentity extracts user.name and user.email from a git config file.
+// parseGitConfigIdentity extracts user.name and user.email from a git config file
+// using `git config` to handle the full INI format correctly (quoted values,
+// includes, subsections, etc.).
 func parseGitConfigIdentity(path string) *AgentIdentity {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	var gitUser, gitEmail string
-	inUserSection := false
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "[user]" {
-			inUserSection = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			inUserSection = false
-			continue
-		}
-		if !inUserSection {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		switch key {
-		case "name":
-			gitUser = val
-		case "email":
-			gitEmail = val
-		}
-	}
+	gitUser := gitConfigGet(path, "user.name")
+	gitEmail := gitConfigGet(path, "user.email")
 
 	if gitUser == "" && gitEmail == "" {
 		return nil
 	}
 	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
+}
+
+// gitConfigGet reads a single value from a git config file.
+func gitConfigGet(path, key string) string {
+	cmd := exec.Command("git", "config", "--file", path, "--get", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // parseJJConfigIdentity extracts user.name and user.email from a jj config file (TOML format).
@@ -303,6 +285,22 @@ type TmuxWindow struct {
 	Command string `json:"command"`
 }
 
+// ResourceLimits configures cgroup resource constraints for the container.
+// All fields are optional; zero/empty values mean no limit.
+type ResourceLimits struct {
+	CPUQuota  string `json:"cpuQuota,omitempty"`  // CPU quota (e.g. "200%" for 2 cores)
+	MemoryMax string `json:"memoryMax,omitempty"` // Memory limit (e.g. "4G")
+	TasksMax  int    `json:"tasksMax,omitempty"`   // Maximum number of tasks/processes
+}
+
+// IsEmpty returns true if no resource limits are configured.
+func (r *ResourceLimits) IsEmpty() bool {
+	if r == nil {
+		return true
+	}
+	return r.CPUQuota == "" && r.MemoryMax == "" && r.TasksMax == 0
+}
+
 // Template represents a sandbox template configuration
 type Template struct {
 	Name              string                 `json:"name"`
@@ -316,6 +314,7 @@ type Template struct {
 	TmuxWindows       []TmuxWindow           `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
 	Multiplexer       string                 `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
 	ReadOnlyWorkspace bool                   `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
+	ResourceLimits    *ResourceLimits        `json:"resourceLimits,omitempty"`    // Container resource limits
 }
 
 // AgentPermissions controls agent permission settings.

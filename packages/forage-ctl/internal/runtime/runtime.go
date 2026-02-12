@@ -6,6 +6,7 @@ package runtime
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // ContainerStatus represents the state of a container
@@ -86,6 +87,51 @@ type Runtime interface {
 
 	// List returns all containers managed by this runtime
 	List(ctx context.Context) ([]*ContainerInfo, error)
+}
+
+// Capabilities describes what features a runtime supports.
+// Runtimes return this from the Capabilities() method so callers can
+// gate features or warn when a template requests unsupported functionality.
+type Capabilities struct {
+	NixOSConfig      bool // Can generate NixOS container configs
+	NetworkIsolation bool // Supports network mode filtering
+	EphemeralRoot    bool // Root filesystem is ephemeral
+	SSHAccess        bool // Supports SSH into container
+	GeneratedFiles   bool // Supports generated file mounting
+	ResourceLimits   bool // Supports cgroup resource limits
+	GracefulShutdown bool // Supports graceful stop signals
+}
+
+// CapableRuntime is an optional interface that runtimes can implement to
+// advertise their capabilities. Runtimes that do not implement this are
+// assumed to have full capabilities.
+type CapableRuntime interface {
+	Capabilities() Capabilities
+}
+
+// GetCapabilities returns the capabilities of a runtime.
+// If the runtime implements CapableRuntime, its declared capabilities are returned.
+// Otherwise, all capabilities are assumed to be true (backward compatibility).
+func GetCapabilities(rt Runtime) Capabilities {
+	if cr, ok := rt.(CapableRuntime); ok {
+		return cr.Capabilities()
+	}
+	return Capabilities{
+		NixOSConfig:      true,
+		NetworkIsolation: true,
+		EphemeralRoot:    true,
+		SSHAccess:        true,
+		GeneratedFiles:   true,
+		ResourceLimits:   true,
+		GracefulShutdown: true,
+	}
+}
+
+// GracefulStopper is an optional interface for runtimes that support
+// graceful shutdown with a configurable timeout. If not implemented,
+// callers should fall back to Stop() for immediate termination.
+type GracefulStopper interface {
+	GracefulStop(ctx context.Context, name string, timeout time.Duration) error
 }
 
 // SSHRuntime extends Runtime with SSH-based access capabilities.

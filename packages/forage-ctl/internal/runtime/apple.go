@@ -351,5 +351,20 @@ func (r *AppleRuntime) List(ctx context.Context) ([]*ContainerInfo, error) {
 	return containers, nil
 }
 
-// Ensure AppleRuntime implements Runtime
+// Capabilities returns the capabilities of Apple Container runtime.
+// Apple Container has limited capabilities compared to nspawn.
+func (r *AppleRuntime) Capabilities() Capabilities {
+	return Capabilities{
+		NixOSConfig:      false,
+		NetworkIsolation: false,
+		EphemeralRoot:    true,
+		SSHAccess:        false,
+		GeneratedFiles:   false,
+		ResourceLimits:   false,
+		GracefulShutdown: true,
+	}
+}
+
+// Ensure AppleRuntime implements Runtime and CapableRuntime
 var _ Runtime = (*AppleRuntime)(nil)
+var _ CapableRuntime = (*AppleRuntime)(nil)

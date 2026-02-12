@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
@@ -297,8 +298,27 @@ func (m *MockRuntime) MountGeneratedFile(ctx context.Context, sandboxName string
 	}, nil
 }
 
-// Ensure MockRuntime implements Runtime and GeneratedFileRuntime
+// GracefulStop implements GracefulStopper for MockRuntime.
+func (m *MockRuntime) GracefulStop(ctx context.Context, name string, timeout time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.record("GracefulStop", name, timeout)
+
+	if err, ok := m.Errors["GracefulStop"]; ok {
+		return err
+	}
+
+	if container, ok := m.Containers[name]; ok {
+		container.Status = StatusStopped
+		return nil
+	}
+
+	return fmt.Errorf("container not found: %s", name)
+}
+
+// Ensure MockRuntime implements Runtime, GeneratedFileRuntime, and GracefulStopper
 var (
 	_ Runtime              = (*MockRuntime)(nil)
 	_ GeneratedFileRuntime = (*MockRuntime)(nil)
+	_ GracefulStopper      = (*MockRuntime)(nil)
 )

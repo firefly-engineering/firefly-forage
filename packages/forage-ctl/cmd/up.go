@@ -77,6 +77,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return errors.New(errors.ExitGeneralError, err.Error())
 	}
 
+	for _, w := range result.CapabilityWarnings {
+		logWarning("  %s", w)
+	}
+
 	logSuccess("Sandbox %s created", name)
 	fmt.Printf("  IP: %s\n", result.ContainerIP)
 	fmt.Printf("  Workspace: %s\n", result.Workspace)

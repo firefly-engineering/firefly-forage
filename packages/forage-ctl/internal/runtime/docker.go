@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
@@ -360,6 +361,37 @@ func (r *DockerRuntime) ContainerInfo() SandboxContainerInfo {
 	return DefaultContainerInfo()
 }
 
-// Ensure DockerRuntime implements Runtime and GeneratedFileRuntime
+// GracefulStop uses docker/podman stop with a configurable timeout.
+func (r *DockerRuntime) GracefulStop(ctx context.Context, name string, timeout time.Duration) error {
+	containerName := r.containerName(name)
+	logging.Debug("graceful stop", "container", containerName, "timeout", timeout)
+
+	seconds := int(timeout.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+
+	_, err := r.runCmd(ctx, "stop", "--time", fmt.Sprintf("%d", seconds), containerName)
+	return err
+}
+
+// Capabilities returns the capabilities of Docker/Podman runtimes.
+// Docker/Podman lack NixOS config generation, network isolation (nftables-based),
+// and SSH access.
+func (r *DockerRuntime) Capabilities() Capabilities {
+	return Capabilities{
+		NixOSConfig:      false,
+		NetworkIsolation: false,
+		EphemeralRoot:    true,
+		SSHAccess:        false,
+		GeneratedFiles:   true,
+		ResourceLimits:   true,
+		GracefulShutdown: true,
+	}
+}
+
+// Ensure DockerRuntime implements Runtime, GeneratedFileRuntime, CapableRuntime, and GracefulStopper
 var _ Runtime = (*DockerRuntime)(nil)
 var _ GeneratedFileRuntime = (*DockerRuntime)(nil)
+var _ CapableRuntime = (*DockerRuntime)(nil)
+var _ GracefulStopper = (*DockerRuntime)(nil)

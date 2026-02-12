@@ -64,6 +64,9 @@ type CreateResult struct {
 
 	// Metadata is the full sandbox metadata
 	Metadata *config.SandboxMetadata
+
+	// CapabilityWarnings lists features the runtime doesn't support
+	CapabilityWarnings []string
 }
 
 // workspaceBackendFor returns the appropriate workspace backend for a mode.

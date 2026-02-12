@@ -31,6 +31,9 @@ type ContainerConfig struct {
 	AgentIdentity  *config.AgentIdentity   // Optional agent identity for git authorship (used for Nix template)
 	Runtime        string                  // Runtime backend name (e.g. "nspawn", "docker", "podman")
 
+	// ResourceLimits are optional cgroup limits for the container.
+	ResourceLimits *config.ResourceLimits
+
 	// Contributions from the injection collector (required).
 	// Contains all mounts, packages, env vars, and tmpfiles rules.
 	Contributions *injection.Contributions
@@ -97,6 +100,11 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		GID:            cfg.GID,
 		SandboxName:    cfg.Name,
 		Runtime:        cfg.Runtime,
+	}
+
+	// Set resource limits if configured
+	if cfg.ResourceLimits != nil && !cfg.ResourceLimits.IsEmpty() {
+		data.ResourceLimits = cfg.ResourceLimits
 	}
 
 	// Use provided multiplexer

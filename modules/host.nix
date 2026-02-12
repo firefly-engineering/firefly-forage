@@ -167,6 +167,29 @@ let
         description = "Mount the workspace as read-only inside the sandbox (filesystem-level enforcement)";
       };
 
+      resourceLimits = {
+        cpuQuota = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "CPU quota for the container (e.g., '200%' for 2 cores)";
+          example = "200%";
+        };
+
+        memoryMax = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Memory limit for the container (e.g., '4G')";
+          example = "4G";
+        };
+
+        tasksMax = mkOption {
+          type = types.nullOr types.int;
+          default = null;
+          description = "Maximum number of tasks/processes in the container";
+          example = 512;
+        };
+      };
+
       agentIdentity = {
         gitUser = mkOption {
           type = types.nullOr types.str;
@@ -399,6 +422,20 @@ in
           ) template.agents;
           extraPackages = map (p: p.pname) template.extraPackages;
         }
+        //
+          lib.optionalAttrs
+            (
+              template.resourceLimits.cpuQuota != null
+              || template.resourceLimits.memoryMax != null
+              || template.resourceLimits.tasksMax != null
+            )
+            {
+              resourceLimits = lib.filterAttrs (_: v: v != null) {
+                cpuQuota = template.resourceLimits.cpuQuota;
+                memoryMax = template.resourceLimits.memoryMax;
+                tasksMax = template.resourceLimits.tasksMax;
+              };
+            }
         //
           lib.optionalAttrs
             (

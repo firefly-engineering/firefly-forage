@@ -243,7 +243,7 @@ func (p *Proxy) LoadAPIKeys() error {
 // loadIPMapping builds the IP-to-sandbox mapping from sandbox metadata.
 // Must be called with keysMu held.
 func (p *Proxy) loadIPMapping() {
-	metadatas, err := config.ListSandboxMetadata(p.config.SandboxesDir)
+	metadatas, err := config.ListSandboxes(p.config.SandboxesDir)
 	if err != nil {
 		p.config.Logger.Warn("failed to list sandbox metadata for IP mapping", "error", err)
 		return
