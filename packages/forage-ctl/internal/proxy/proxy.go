@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
 // Config holds proxy configuration
@@ -40,6 +42,10 @@ type Config struct {
 	// directory that contains the API key. Defaults to "anthropic-api-key".
 	APIKeyFilename string
 
+	// SandboxesDir is the directory containing sandbox metadata files.
+	// When set, enables IP-based sandbox identity verification.
+	SandboxesDir string
+
 	// Logger for proxy operations
 	Logger *slog.Logger
 
@@ -55,6 +61,7 @@ type Proxy struct {
 	rateLimiter  *rateLimiter
 	auditLog     *auditLogger
 	apiKeys      map[string]string // sandbox name -> API key
+	ipToSandbox  map[string]string // container IP -> sandbox name
 	keysMu       sync.RWMutex
 }
 
@@ -87,8 +94,9 @@ func New(cfg *Config) (*Proxy, error) {
 	}
 
 	p := &Proxy{
-		config:  cfg,
-		apiKeys: make(map[string]string),
+		config:      cfg,
+		apiKeys:     make(map[string]string),
+		ipToSandbox: make(map[string]string),
 	}
 
 	// Create reverse proxy
@@ -134,10 +142,12 @@ func New(cfg *Config) (*Proxy, error) {
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
-	// Extract sandbox identifier from request
-	// Sandboxes should send X-Forage-Sandbox header
+	// Extract and verify sandbox identity.
+	// Prefer X-Forage-Sandbox header but verify it matches source IP.
 	sandboxName := r.Header.Get("X-Forage-Sandbox")
-	if sandboxName == "" {
+	if sandboxName != "" {
+		sandboxName = p.verifySandboxIdentity(sandboxName, r.RemoteAddr)
+	} else {
 		// Fall back to checking source IP against known sandbox IPs
 		sandboxName = p.identifySandbox(r.RemoteAddr)
 	}
@@ -191,7 +201,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// LoadAPIKeys loads API keys from the secrets directory
+// LoadAPIKeys loads API keys from the secrets directory and builds the
+// IP-to-sandbox mapping from sandbox metadata (if SandboxesDir is configured).
 func (p *Proxy) LoadAPIKeys() error {
 	p.keysMu.Lock()
 	defer p.keysMu.Unlock()
@@ -221,7 +232,28 @@ func (p *Proxy) LoadAPIKeys() error {
 		}
 	}
 
+	// Build IP-to-sandbox mapping from metadata
+	if p.config.SandboxesDir != "" {
+		p.loadIPMapping()
+	}
+
 	return nil
+}
+
+// loadIPMapping builds the IP-to-sandbox mapping from sandbox metadata.
+// Must be called with keysMu held.
+func (p *Proxy) loadIPMapping() {
+	metadatas, err := config.ListSandboxMetadata(p.config.SandboxesDir)
+	if err != nil {
+		p.config.Logger.Warn("failed to list sandbox metadata for IP mapping", "error", err)
+		return
+	}
+	p.ipToSandbox = make(map[string]string, len(metadatas))
+	for _, meta := range metadatas {
+		ip := meta.ContainerIP()
+		p.ipToSandbox[ip] = meta.Name
+		p.config.Logger.Debug("mapped sandbox IP", "sandbox", meta.Name, "ip", ip)
+	}
 }
 
 // getAPIKey returns the API key for a sandbox
@@ -231,12 +263,42 @@ func (p *Proxy) getAPIKey(sandboxName string) string {
 	return p.apiKeys[sandboxName]
 }
 
-// identifySandbox attempts to identify the sandbox from the remote address
+// identifySandbox identifies the sandbox from the remote address using the
+// IP-to-sandbox mapping built from sandbox metadata.
 func (p *Proxy) identifySandbox(remoteAddr string) string {
-	// Container IPs are in 10.100.X.2 format where X is the network slot
-	// We'd need to maintain a mapping of slots to sandbox names
-	// For now, require explicit X-Forage-Sandbox header
-	return ""
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return ""
+	}
+	p.keysMu.RLock()
+	defer p.keysMu.RUnlock()
+	return p.ipToSandbox[host]
+}
+
+// verifySandboxIdentity checks that the X-Forage-Sandbox header matches
+// the source IP. Returns the verified sandbox name or empty string.
+func (p *Proxy) verifySandboxIdentity(headerName, remoteAddr string) string {
+	if headerName == "" {
+		return ""
+	}
+	// If we have IP mapping, verify the header matches the source
+	if len(p.ipToSandbox) > 0 {
+		host, _, err := net.SplitHostPort(remoteAddr)
+		if err != nil {
+			return headerName // can't verify, trust header
+		}
+		p.keysMu.RLock()
+		ipSandbox := p.ipToSandbox[host]
+		p.keysMu.RUnlock()
+		if ipSandbox != "" && ipSandbox != headerName {
+			p.config.Logger.Warn("sandbox identity mismatch",
+				"header", headerName,
+				"ip_sandbox", ipSandbox,
+				"remote", remoteAddr)
+			return "" // reject mismatched identity
+		}
+	}
+	return headerName
 }
 
 // isInternalHost returns true if the host resolves to a loopback, link-local,
