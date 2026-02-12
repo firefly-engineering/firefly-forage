@@ -86,6 +86,6 @@ func (n *NixReproducibility) ContributeMounts(ctx context.Context, req *injectio
 
 // Ensure NixReproducibility implements Reproducibility and MountContributor.
 var (
-	_ Reproducibility             = (*NixReproducibility)(nil)
+	_ Reproducibility            = (*NixReproducibility)(nil)
 	_ injection.MountContributor = (*NixReproducibility)(nil)
 )

@@ -98,14 +98,14 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 	logInfo("Creating sandbox %s...", opts.Name)
 
 	result, err := creator.Create(ctx, sandbox.CreateOptions{
-		Name:         opts.Name,
-		Template:     opts.Template,
-		RepoPath:     opts.RepoPath,
-		Direct:       opts.Direct,
+		Name:        opts.Name,
+		Template:    opts.Template,
+		RepoPath:    opts.RepoPath,
+		Direct:      opts.Direct,
 		NoMuxConfig: opts.NoMuxConfig,
-		GitUser:      opts.GitUser,
-		GitEmail:     opts.GitEmail,
-		SSHKeyPath:   opts.SSHKeyPath,
+		GitUser:     opts.GitUser,
+		GitEmail:    opts.GitEmail,
+		SSHKeyPath:  opts.SSHKeyPath,
 	})
 	if err != nil {
 		return fmt.Errorf("sandbox creation failed: %w", err)

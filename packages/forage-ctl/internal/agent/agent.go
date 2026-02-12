@@ -15,10 +15,10 @@ type Agent interface {
 	Name() string
 
 	// Implements contribution interfaces:
-	injection.MountContributor          // existing host files (.claude, .claude.json)
-	injection.PackageContributor        // agent package
-	injection.EnvVarContributor         // API keys
-	injection.GeneratedFileContributor  // permissions, skills, system prompt
+	injection.MountContributor         // existing host files (.claude, .claude.json)
+	injection.PackageContributor       // agent package
+	injection.EnvVarContributor        // API keys
+	injection.GeneratedFileContributor // permissions, skills, system prompt
 }
 
 // Config holds configuration for an agent from the template.
