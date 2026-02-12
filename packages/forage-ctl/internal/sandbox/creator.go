@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
@@ -53,6 +54,7 @@ func NewCreator() (*Creator, error) {
 }
 
 // Create creates a new sandbox with the given options.
+// File locking is used to prevent TOCTOU races during slot allocation.
 func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult, error) {
 	logging.Debug("starting sandbox creation", "name", opts.Name, "template", opts.Template)
 
@@ -60,6 +62,14 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	if err := c.validateInputs(opts); err != nil {
 		return nil, err
 	}
+
+	// Acquire an exclusive lock on the sandboxes directory to prevent
+	// concurrent slot allocation races (TOCTOU in AllocateSlot).
+	unlock, err := acquireSandboxLock(c.paths.SandboxesDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire sandbox lock: %w", err)
+	}
+	defer unlock()
 
 	// Phase 2: Load resources and allocate ports
 	resources, err := c.loadResources(opts)
@@ -545,6 +555,31 @@ func trimKey(key string) string {
 		key = key[1:]
 	}
 	return key
+}
+
+// acquireSandboxLock acquires an exclusive file lock on the sandboxes directory
+// to prevent concurrent operations from racing on slot allocation or metadata writes.
+// Returns an unlock function that must be called when the critical section is done.
+func acquireSandboxLock(sandboxesDir string) (func(), error) {
+	if err := os.MkdirAll(sandboxesDir, 0755); err != nil {
+		return nil, err
+	}
+
+	lockPath := filepath.Join(sandboxesDir, ".lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file: %w", err)
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+	}
+
+	return func() {
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
 }
 
 // isValidSSHKey checks if a string looks like a valid SSH public key
