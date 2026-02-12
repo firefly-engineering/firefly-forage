@@ -15,6 +15,9 @@ type Mount struct {
 }
 
 // EnvVar represents an environment variable to set in the container.
+// Value must be a complete Nix expression, typically a double-quoted string
+// (e.g., `"1"` or `"$(cat /run/secrets/foo ...)"`) because it is inserted
+// directly into the Nix template without additional escaping or quoting.
 type EnvVar struct {
 	Name  string
 	Value string
