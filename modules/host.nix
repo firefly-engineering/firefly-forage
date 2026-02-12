@@ -294,9 +294,9 @@ in
     # Ensure state directory exists
     # The configured user needs access to sandboxes and workspaces directories
     systemd.tmpfiles.rules = [
-      "d ${cfg.stateDir} 0755 ${cfg.user} root -"
-      "d ${cfg.stateDir}/sandboxes 0755 ${cfg.user} root -"
-      "d ${cfg.stateDir}/workspaces 0755 ${cfg.user} root -"
+      "d ${cfg.stateDir} 0750 ${cfg.user} root -"
+      "d ${cfg.stateDir}/sandboxes 0750 ${cfg.user} root -"
+      "d ${cfg.stateDir}/workspaces 0750 ${cfg.user} root -"
       "d /run/forage-secrets 0700 root root -"
     ];
 
