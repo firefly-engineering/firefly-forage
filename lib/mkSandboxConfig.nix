@@ -121,7 +121,6 @@ in
           home = "/home/agent";
           shell = pkgs.bash;
           openssh.authorizedKeys.keys = authorizedKeys;
-          extraGroups = [ "wheel" ];
         };
 
         users.groups.agent = {
@@ -171,11 +170,10 @@ in
           WORKSPACE = "/workspace";
         };
 
-        # Sudo without password for agent (needed for some operations)
-        security.sudo = {
-          enable = true;
-          wheelNeedsPassword = false;
-        };
+        # Sudo is disabled for the agent user by default.
+        # If specific privileged operations are needed, add fine-grained
+        # sudoers rules instead of blanket passwordless access.
+        security.sudo.enable = false;
       };
   };
 }

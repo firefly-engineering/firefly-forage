@@ -101,7 +101,7 @@ const containerTemplateText = `{ pkgs, ... }:
           shell = "${pkgs.bash}/bin/bash";
           uid = {{.UID}};
           group = "users";
-          extraGroups = [ "wheel" ];
+          extraGroups = [ ];
           openssh.authorizedKeys.keys = [
 {{- range .AuthorizedKeys}}
             {{. | printf "%q"}}
@@ -110,7 +110,7 @@ const containerTemplateText = `{ pkgs, ... }:
         };
         users.groups.users.gid = {{.GID}};
 
-        security.sudo.wheelNeedsPassword = false;
+        security.sudo.enable = false;
 
         services.openssh = {
           enable = true;

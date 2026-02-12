@@ -41,14 +41,14 @@
           shell = "${pkgs.bash}/bin/bash";
           uid = 1000;
           group = "users";
-          extraGroups = [ "wheel" ];
+          extraGroups = [ ];
           openssh.authorizedKeys.keys = [
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample user@host"
           ];
         };
         users.groups.users.gid = 100;
 
-        security.sudo.wheelNeedsPassword = false;
+        security.sudo.enable = false;
 
         services.openssh = {
           enable = true;
