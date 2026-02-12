@@ -31,6 +31,10 @@ type Config struct {
 	// ExtraContainerPath is the path to extra-container binary (nspawn only)
 	ExtraContainerPath string
 
+	// NixpkgsPath is the Nix store path to nixpkgs source (nspawn only)
+	// Passed as --nixpkgs-path to extra-container create
+	NixpkgsPath string
+
 	// SandboxesDir is the directory containing sandbox metadata files
 	// Used by nspawn runtime to look up SSH ports from persisted metadata
 	SandboxesDir string
@@ -163,7 +167,7 @@ func New(cfg *Config) (Runtime, error) {
 				path = "/run/current-system/sw/bin/extra-container"
 			}
 		}
-		return NewNspawnRuntime(path, cfg.ContainerPrefix, cfg.SandboxesDir), nil
+		return NewNspawnRuntime(path, cfg.ContainerPrefix, cfg.SandboxesDir, cfg.NixpkgsPath), nil
 
 	case RuntimeDocker, RuntimePodman:
 		return NewDockerRuntime(cfg.ContainerPrefix)

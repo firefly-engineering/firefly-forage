@@ -251,6 +251,7 @@ type HostConfig struct {
 	Secrets            map[string]string `json:"secrets"`
 	StateDir           string            `json:"stateDir"`
 	ExtraContainerPath string            `json:"extraContainerPath"`
+	NixpkgsPath        string            `json:"nixpkgsPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
 	ProxyURL           string            `json:"proxyUrl,omitempty"`       // URL of the forage-proxy server
 	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"` // Host-level default agent identity

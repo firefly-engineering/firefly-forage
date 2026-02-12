@@ -27,16 +27,22 @@ type NspawnRuntime struct {
 	// Used for looking up SSH ports from persisted metadata
 	SandboxesDir string
 
+	// NixpkgsPath is the Nix store path to nixpkgs source.
+	// Passed as --nixpkgs-path to extra-container create so the container
+	// uses the same nixpkgs as the NixOS module, not the host's NIX_PATH.
+	NixpkgsPath string
+
 	// GeneratedFileMounter handles staging of generated files
 	GeneratedFileMounter
 }
 
 // NewNspawnRuntime creates a new nspawn runtime with the given configuration
-func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir string) *NspawnRuntime {
+func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir, nixpkgsPath string) *NspawnRuntime {
 	return &NspawnRuntime{
 		ExtraContainerPath: extraContainerPath,
 		ContainerPrefix:    containerPrefix,
 		SandboxesDir:       sandboxesDir,
+		NixpkgsPath:        nixpkgsPath,
 		GeneratedFileMounter: GeneratedFileMounter{
 			StagingDir: sandboxesDir,
 		},
@@ -58,6 +64,9 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	logging.Debug("creating container", "name", opts.Name, "config", opts.ConfigPath)
 
 	args := []string{r.ExtraContainerPath, "create"}
+	if r.NixpkgsPath != "" {
+		args = append(args, "--nixpkgs-path", r.NixpkgsPath)
+	}
 	if opts.Start {
 		args = append(args, "--start")
 	}

@@ -9,5 +9,6 @@
   },
   "stateDir": "/var/lib/firefly-forage",
   "extraContainerPath": "/nix/store/abc123-extra-container/bin/extra-container",
+  "nixpkgsPath": "/nix/store/abc123-nixpkgs-src",
   "nixpkgsRev": "abc123def456"
 }

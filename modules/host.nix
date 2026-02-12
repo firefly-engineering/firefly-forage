@@ -303,6 +303,8 @@ in
             stateDir = cfg.stateDir;
             # Path to extra-container command
             extraContainerPath = "${extra-container.packages.${pkgs.system}.default}/bin/extra-container";
+            # Nixpkgs path for extra-container --nixpkgs-path
+            nixpkgsPath = "${pkgs.path}";
             # Nixpkgs revision for registry pinning
             nixpkgsRev = nixpkgs.rev or "unknown";
           } // lib.optionalAttrs (
