@@ -62,11 +62,14 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 
 	// Destroy container if requested and running
 	if opts.DestroyContainer && rt != nil {
-		running, _ := rt.IsRunning(context.Background(), name)
+		running, err := rt.IsRunning(context.Background(), name)
+		if err != nil {
+			logging.Warn("failed to check container status during cleanup", "name", name, "error", err)
+		}
 		if running {
 			logging.Debug("destroying container", "name", name)
 			if err := rt.Destroy(context.Background(), name); err != nil {
-				logging.Debug("container destroy during cleanup", "error", err)
+				logging.Warn("container destroy failed during cleanup", "name", name, "error", err)
 			}
 		}
 	}
