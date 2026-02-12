@@ -128,6 +128,14 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 		}
 	}
 
+	// Remove generated file staging directory
+	if opts.CleanupConfig {
+		generatedDir := filepath.Join(paths.SandboxesDir, name+".generated")
+		if err := os.RemoveAll(generatedDir); err != nil {
+			logging.Warn("failed to remove generated files directory", "path", generatedDir, "error", err)
+		}
+	}
+
 	// Remove metadata
 	if opts.CleanupMetadata {
 		logging.Debug("removing metadata", "name", name)
