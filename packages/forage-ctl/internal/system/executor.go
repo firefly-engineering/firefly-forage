@@ -8,6 +8,38 @@ import (
 	"syscall"
 )
 
+// safeEnvPrefixes lists environment variable prefixes that are safe to pass
+// through to child processes. All others are filtered out to prevent
+// accidental leakage of host secrets (API keys, cloud credentials, etc.).
+var safeEnvPrefixes = []string{
+	"PATH=", "HOME=", "USER=", "LOGNAME=", "SHELL=",
+	"TERM=", "LANG=", "LC_", "LANGUAGE=",
+	"XDG_", "DISPLAY=", "WAYLAND_DISPLAY=",
+	"SSH_AUTH_SOCK=", "DBUS_SESSION_BUS_ADDRESS=",
+	"TMPDIR=", "TMP=", "TEMP=",
+	"COLORTERM=", "COLORFGBG=",
+	"NO_COLOR=", "FORCE_COLOR=",
+	"EDITOR=", "VISUAL=", "PAGER=",
+	"HOSTNAME=", "HOSTTYPE=", "OSTYPE=",
+	"NIX_", "IN_NIX_SHELL=",
+}
+
+// SafeEnviron returns a filtered copy of os.Environ() containing only
+// safe environment variables. This prevents leaking host secrets like
+// ANTHROPIC_API_KEY, AWS_SECRET_ACCESS_KEY, etc. to child processes.
+func SafeEnviron() []string {
+	var filtered []string
+	for _, env := range os.Environ() {
+		for _, prefix := range safeEnvPrefixes {
+			if strings.HasPrefix(env, prefix) {
+				filtered = append(filtered, env)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
 // osExecutor implements CommandExecutor using real OS operations.
 type osExecutor struct{}
 
@@ -39,5 +71,5 @@ func (e *osExecutor) ReplaceProcess(name string, args ...string) error {
 	// Build argv with program name as first element
 	argv := append([]string{name}, args...)
 
-	return syscall.Exec(binary, argv, os.Environ())
+	return syscall.Exec(binary, argv, SafeEnviron())
 }

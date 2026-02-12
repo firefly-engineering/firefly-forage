@@ -35,6 +35,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 // AppleRuntime implements the Runtime interface using Apple Container.
@@ -310,7 +311,7 @@ func (r *AppleRuntime) ExecInteractive(ctx context.Context, name string, command
 	args = append(args, containerName)
 	args = append(args, command...)
 
-	return syscall.Exec(r.BinaryPath, args, os.Environ())
+	return syscall.Exec(r.BinaryPath, args, system.SafeEnviron())
 }
 
 // List returns all containers managed by this runtime

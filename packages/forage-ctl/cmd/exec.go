@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"os/exec"
 	"syscall"
 
@@ -9,6 +8,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 var execCmd = &cobra.Command{
@@ -61,7 +61,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	opts := ssh.DefaultOptions(metadata.ContainerIP())
 	sshArgs := opts.BuildArgsWithArgv(cmdStr)
 
-	return syscall.Exec(sshPath, sshArgs, os.Environ())
+	return syscall.Exec(sshPath, sshArgs, system.SafeEnviron())
 }
 
 func shellQuote(s string) string {

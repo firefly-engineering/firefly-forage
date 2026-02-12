@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 var logsCmd = &cobra.Command{
@@ -51,5 +51,5 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		journalArgs = append(journalArgs, "-f")
 	}
 
-	return syscall.Exec(journalctlPath, journalArgs, os.Environ())
+	return syscall.Exec(journalctlPath, journalArgs, system.SafeEnviron())
 }

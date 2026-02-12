@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 // Default SSH configuration values.
@@ -165,7 +167,7 @@ func ReplaceWithSession(host string, command string) error {
 	opts := DefaultOptions(host).WithTTY()
 	sshArgs := opts.BuildArgsWithArgv(command)
 
-	return syscall.Exec(sshPath, sshArgs, os.Environ())
+	return syscall.Exec(sshPath, sshArgs, system.SafeEnviron())
 }
 
 // CheckConnection checks if SSH is reachable.

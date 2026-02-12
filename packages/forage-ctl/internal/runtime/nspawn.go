@@ -13,6 +13,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 // NspawnRuntime implements the Runtime interface using systemd-nspawn
@@ -253,7 +254,7 @@ func (r *NspawnRuntime) ExecInteractive(ctx context.Context, name string, comman
 		args = append(args, command...)
 	}
 
-	return syscall.Exec(machinectlPath, args, os.Environ())
+	return syscall.Exec(machinectlPath, args, system.SafeEnviron())
 }
 
 // List returns all containers managed by this runtime

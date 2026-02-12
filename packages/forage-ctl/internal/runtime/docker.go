@@ -12,6 +12,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
 // DockerRuntime implements the Runtime interface using Docker or Podman.
@@ -314,7 +315,7 @@ func (r *DockerRuntime) ExecInteractive(ctx context.Context, name string, comman
 	args = append(args, containerName)
 	args = append(args, command...)
 
-	return syscall.Exec(cmdPath, args, os.Environ())
+	return syscall.Exec(cmdPath, args, system.SafeEnviron())
 }
 
 // List returns all containers managed by this runtime
