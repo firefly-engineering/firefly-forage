@@ -17,11 +17,38 @@ type SandboxContainerInfo struct {
 }
 
 // DefaultContainerInfo returns the default container info for forage sandboxes.
-func DefaultContainerInfo() SandboxContainerInfo {
-	return SandboxContainerInfo{
+// If username or workspaceDir are provided, they override the defaults.
+func DefaultContainerInfo(opts ...ContainerInfoOption) SandboxContainerInfo {
+	info := SandboxContainerInfo{
 		HomeDir:      "/home/agent",
 		WorkspaceDir: "/workspace",
 		Username:     "agent",
+	}
+	for _, opt := range opts {
+		opt(&info)
+	}
+	return info
+}
+
+// ContainerInfoOption configures a SandboxContainerInfo.
+type ContainerInfoOption func(*SandboxContainerInfo)
+
+// WithUsername sets the container username and derives the home directory.
+func WithUsername(username string) ContainerInfoOption {
+	return func(info *SandboxContainerInfo) {
+		if username != "" {
+			info.Username = username
+			info.HomeDir = "/home/" + username
+		}
+	}
+}
+
+// WithWorkspaceDir sets the container workspace directory.
+func WithWorkspaceDir(dir string) ContainerInfoOption {
+	return func(info *SandboxContainerInfo) {
+		if dir != "" {
+			info.WorkspaceDir = dir
+		}
 	}
 }
 

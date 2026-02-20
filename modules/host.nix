@@ -36,13 +36,13 @@ let
       path;
 
   # Derive container config dir from host path if not specified
-  # e.g., ~/.claude -> /home/agent/.claude
+  # e.g., ~/.claude -> /home/agent/.claude (using configured containerUsername)
   deriveContainerPath =
     hostPath:
     let
       baseName = baseNameOf hostPath;
     in
-    "/home/agent/${baseName}";
+    "/home/${cfg.containerUsername}/${baseName}";
 
   # Agent definition type
   agentType = types.submodule {
@@ -75,7 +75,7 @@ let
       containerConfigDir = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Override container mount point (default: /home/agent/.<dirname>)";
+        description = "Override container mount point (default: /home/<containerUsername>/.<dirname>)";
         example = "/home/agent/.claude";
       };
 
@@ -265,6 +265,18 @@ in
       example = "eth0";
     };
 
+    containerUsername = mkOption {
+      type = types.str;
+      default = "agent";
+      description = "Username for the agent user inside sandbox containers";
+    };
+
+    workspacePath = mkOption {
+      type = types.str;
+      default = "/workspace";
+      description = "Path to the workspace directory inside sandbox containers";
+    };
+
     agentIdentity = {
       gitUser = mkOption {
         type = types.nullOr types.str;
@@ -381,6 +393,12 @@ in
             nixpkgsPath = "${nixpkgs}";
             # Nixpkgs revision for registry pinning
             nixpkgsRev = nixpkgs.rev or "unknown";
+          }
+          // lib.optionalAttrs (cfg.containerUsername != "agent") {
+            containerUsername = cfg.containerUsername;
+          }
+          // lib.optionalAttrs (cfg.workspacePath != "/workspace") {
+            workspacePath = cfg.workspacePath;
           }
           //
             lib.optionalAttrs

@@ -15,6 +15,9 @@ type TemplateData struct {
 	Hostname           string // Hostname inside the container (the sandbox name)
 	NetworkSlot        int
 	StateVersion       string
+	Username           string // Container username (e.g. "agent")
+	HomeDir            string // Container home directory (e.g. "/home/agent")
+	WorkspaceDir       string // Container workspace path (e.g. "/workspace")
 	BindMounts         []BindMount
 	AuthorizedKeys     []string
 	NetworkConfig      string // Pre-rendered from network package
@@ -91,9 +94,9 @@ const containerTemplateText = `{ pkgs, ... }:
         nixpkgs.config.allowUnfree = true;
         networking.hostName = "{{.Hostname}}";
         {{.NetworkConfig}}
-        users.users.agent = {
+        users.users.{{.Username}} = {
           isNormalUser = true;
-          home = "/home/agent";
+          home = "{{.HomeDir}}";
           shell = "${pkgs.bash}/bin/bash";
           uid = {{.UID}};
           group = "users";
@@ -179,8 +182,8 @@ const containerTemplateText = `{ pkgs, ... }:
           after = [ "network.target" ];
           serviceConfig = {
             Type = "oneshot";
-            User = "agent";
-            WorkingDirectory = "/workspace";
+            User = "{{.Username}}";
+            WorkingDirectory = "{{.WorkspaceDir}}";
             ExecStart = "${pkgs.writeShellScript "forage-init" ''
 {{.MuxInitScript}}
             ''}";
@@ -213,8 +216,8 @@ const containerTemplateText = `{ pkgs, ... }:
           after = [ "network.target" ];
           serviceConfig = {
             Type = "oneshot";
-            User = "agent";
-            ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/agent/.ssh /home/agent/.config/jj && " +
+            User = "{{.Username}}";
+            ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p {{.HomeDir}}/.ssh {{.HomeDir}}/.config/jj && " +
 {{- if .GitUser}}
               "${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscape}} && " +
               "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscape}} && " +
@@ -224,7 +227,7 @@ const containerTemplateText = `{ pkgs, ... }:
               "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscape}} && " +
 {{- end}}
 {{- if .SSHKeyName}}
-              "${pkgs.coreutils}/bin/cat > /home/agent/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile /home/agent/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
+              "${pkgs.coreutils}/bin/cat > {{.HomeDir}}/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile {{.HomeDir}}/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
 {{- end}}
               "true'";
           };

@@ -122,12 +122,17 @@ func (t *Tmux) ContributeMounts(ctx context.Context, req *injection.MountRequest
 		return nil, nil
 	}
 
+	containerHome := req.ContainerHomeDir
+	if containerHome == "" {
+		containerHome = "/home/agent"
+	}
+
 	// Prefer ~/.config/tmux dir, fall back to ~/.tmux.conf
 	tmuxConfigDir := filepath.Join(req.HostHomeDir, ".config", "tmux")
 	if info, err := os.Stat(tmuxConfigDir); err == nil && info.IsDir() {
 		return []injection.Mount{{
 			HostPath:      tmuxConfigDir,
-			ContainerPath: "/home/agent/.config/tmux",
+			ContainerPath: filepath.Join(containerHome, ".config", "tmux"),
 			ReadOnly:      true,
 		}}, nil
 	}
@@ -136,7 +141,7 @@ func (t *Tmux) ContributeMounts(ctx context.Context, req *injection.MountRequest
 	if _, err := os.Stat(tmuxConfFile); err == nil {
 		return []injection.Mount{{
 			HostPath:      tmuxConfFile,
-			ContainerPath: "/home/agent/.tmux.conf",
+			ContainerPath: filepath.Join(containerHome, ".tmux.conf"),
 			ReadOnly:      true,
 		}}, nil
 	}

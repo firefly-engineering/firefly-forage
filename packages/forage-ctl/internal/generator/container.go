@@ -15,9 +15,6 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 )
 
-// NixOSStateVersion is the NixOS state version used in generated container configs.
-const NixOSStateVersion = "24.05"
-
 // ContainerConfig holds the configuration for generating a container.
 // All mounts, packages, env vars, and tmpfiles rules come from Contributions.
 type ContainerConfig struct {
@@ -30,6 +27,11 @@ type ContainerConfig struct {
 	Mux            multiplexer.Multiplexer // Multiplexer instance (created by caller)
 	AgentIdentity  *config.AgentIdentity   // Optional agent identity for git authorship (used for Nix template)
 	Runtime        string                  // Runtime backend name (e.g. "nspawn", "docker", "podman")
+
+	// Container user/path configuration (defaults applied if empty)
+	Username     string // Container username (default: "agent")
+	WorkspaceDir string // Container workspace path (default: "/workspace")
+	StateVersion string // NixOS state version (default: "24.11")
 
 	// ResourceLimits are optional cgroup limits for the container.
 	ResourceLimits *config.ResourceLimits
@@ -89,11 +91,27 @@ func GenerateNixConfig(cfg *ContainerConfig) (string, error) {
 // buildTemplateData constructs TemplateData from a ContainerConfig.
 // All mounts, packages, env vars, and tmpfiles rules come from Contributions.
 func buildTemplateData(cfg *ContainerConfig) *TemplateData {
+	username := cfg.Username
+	if username == "" {
+		username = "agent"
+	}
+	workspaceDir := cfg.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = "/workspace"
+	}
+	stateVersion := cfg.StateVersion
+	if stateVersion == "" {
+		stateVersion = "24.11"
+	}
+
 	data := &TemplateData{
 		ContainerName:  config.ContainerNameForSlot(cfg.NetworkSlot),
 		Hostname:       cfg.Name,
 		NetworkSlot:    cfg.NetworkSlot,
-		StateVersion:   NixOSStateVersion,
+		StateVersion:   stateVersion,
+		Username:       username,
+		HomeDir:        "/home/" + username,
+		WorkspaceDir:   workspaceDir,
 		AuthorizedKeys: cfg.AuthorizedKeys,
 		NetworkConfig:  buildNetworkConfig(cfg.Template.Network, cfg.Template.AllowedHosts, cfg.NetworkSlot),
 		UID:            cfg.UID,

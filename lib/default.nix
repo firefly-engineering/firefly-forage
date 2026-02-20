@@ -1,11 +1,5 @@
 { lib }:
-{
-  # Generate NixOS container configuration for a sandbox
-  mkSandboxConfig = import ./mkSandboxConfig.nix { inherit lib; };
-
-  # Generate skill injection content
-  mkSkillsContent = import ./skills.nix { inherit lib; };
-
+let
   # Generate an agent wrapper that injects auth from a secret file
   mkAgentWrapper =
     {
@@ -30,6 +24,15 @@
         exec ${lib.getExe package} "$@"
       '';
     };
+in
+{
+  # Generate NixOS container configuration for a sandbox
+  mkSandboxConfig = import ./mkSandboxConfig.nix { inherit lib mkAgentWrapper; };
+
+  # Generate skill injection content
+  mkSkillsContent = import ./skills.nix { inherit lib; };
+
+  inherit mkAgentWrapper;
 
   # Network mode type
   networkModes = [

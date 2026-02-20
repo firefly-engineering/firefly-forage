@@ -58,7 +58,14 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 	if gfr, ok := rt.(runtime.GeneratedFileRuntime); ok {
 		containerInfo = gfr.ContainerInfo()
 	} else {
-		containerInfo = runtime.DefaultContainerInfo()
+		var opts []runtime.ContainerInfoOption
+		if hostConfig != nil {
+			opts = append(opts,
+				runtime.WithUsername(hostConfig.ResolvedContainerUsername()),
+				runtime.WithWorkspaceDir(hostConfig.ResolvedWorkspacePath()),
+			)
+		}
+		containerInfo = runtime.DefaultContainerInfo(opts...)
 	}
 
 	// Get host home directory
@@ -158,6 +165,7 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 		WorkspacePath:     workspacePath,
 		SourceRepo:        sourceRepo,
 		HostHomeDir:       hostHomeDir,
+		ContainerHomeDir:  containerInfo.HomeDir,
 		ReadOnlyWorkspace: template.ReadOnlyWorkspace,
 	}
 
@@ -284,6 +292,9 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 		Mux:             mux,
 		AgentIdentity:   metadata.AgentIdentity,
 		Runtime:         metadata.Runtime,
+		Username:        hostConfig.ResolvedContainerUsername(),
+		WorkspaceDir:    hostConfig.ResolvedWorkspacePath(),
+		StateVersion:    hostConfig.ResolvedStateVersion(),
 		Contributions:   contributions,
 		Reproducibility: contribResult.Reproducibility,
 	}, nil

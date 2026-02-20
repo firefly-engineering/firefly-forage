@@ -61,7 +61,8 @@ type MountRequest struct {
 	WorkspacePath     string
 	SourceRepo        string // empty for direct mode
 	HostHomeDir       string
-	ReadOnlyWorkspace bool // when true, workspace and VCS mounts are read-only
+	ContainerHomeDir  string // container home directory (e.g., "/home/agent")
+	ReadOnlyWorkspace bool   // when true, workspace and VCS mounts are read-only
 }
 
 // EnvVarRequest provides context for env var contributions.

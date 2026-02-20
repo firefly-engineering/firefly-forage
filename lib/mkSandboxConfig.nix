@@ -1,5 +1,5 @@
 # Generate NixOS container configuration for a sandbox
-{ lib }:
+{ lib, mkAgentWrapper }:
 {
   pkgs,
   name,
@@ -11,29 +11,27 @@
   authorizedKeys,
   secretsPaths,
   networkSlot,
+  username ? "agent",
+  workspacePath ? "/workspace",
 }:
 let
   inherit (lib) mkForce optionalString;
+
+  homeDir = "/home/${username}";
 
   # Container IP based on network slot (192.168.100.x)
   containerIp = "192.168.100.${toString (networkSlot + 10)}";
   hostIp = "192.168.100.1";
 
-  # Build agent wrappers from template
+  # Build agent wrappers from template using shared mkAgentWrapper
   agentWrappers = lib.mapAttrsToList (
     agentName: agentConfig:
-    pkgs.writeShellApplication {
+    mkAgentWrapper {
+      inherit pkgs;
       name = agentName;
-      runtimeInputs = [ (builtins.storePath agentConfig.packagePath) ];
-      text = ''
-        # Load auth from secret file
-        if [ -f "/run/secrets/${agentConfig.secretName}" ]; then
-          export ${agentConfig.authEnvVar}="$(cat "/run/secrets/${agentConfig.secretName}")"
-        else
-          echo "Warning: Secret file not found: /run/secrets/${agentConfig.secretName}" >&2
-        fi
-        exec ${lib.getExe (builtins.storePath agentConfig.packagePath)} "$@"
-      '';
+      package = builtins.storePath agentConfig.packagePath;
+      authEnvVar = agentConfig.authEnvVar;
+      secretPath = "/run/secrets/${agentConfig.secretName}";
     }
   ) template.agents;
 
@@ -69,7 +67,7 @@ in
       };
 
       # Workspace directory (read-write)
-      "/workspace" = {
+      "${workspacePath}" = {
         hostPath = workspace;
         isReadOnly = false;
       };
@@ -114,16 +112,16 @@ in
         };
 
         # Create agent user with host UID/GID
-        users.users.agent = {
+        users.users.${username} = {
           isNormalUser = true;
           uid = hostUid;
-          group = "agent";
-          home = "/home/agent";
+          group = username;
+          home = homeDir;
           shell = pkgs.bash;
           openssh.authorizedKeys.keys = authorizedKeys;
         };
 
-        users.groups.agent = {
+        users.groups.${username} = {
           gid = hostGid;
         };
 
@@ -138,15 +136,15 @@ in
 
         # Tmux session service
         systemd.services.forage-tmux = {
-          description = "Forage tmux session for agent";
+          description = "Forage tmux session for ${username}";
           after = [ "multi-user.target" ];
           wantedBy = [ "multi-user.target" ];
           serviceConfig = {
             Type = "forking";
-            User = "agent";
-            Group = "agent";
-            WorkingDirectory = "/workspace";
-            ExecStart = "${pkgs.tmux}/bin/tmux new-session -d -s forage -c /workspace";
+            User = username;
+            Group = username;
+            WorkingDirectory = workspacePath;
+            ExecStart = "${pkgs.tmux}/bin/tmux new-session -d -s forage -c ${workspacePath}";
             ExecStop = "${pkgs.tmux}/bin/tmux kill-session -t forage";
             Restart = "on-failure";
             RestartSec = "5s";
@@ -167,7 +165,7 @@ in
 
         # Set PATH for agent
         environment.variables = {
-          WORKSPACE = "/workspace";
+          WORKSPACE = workspacePath;
         };
 
         # Sudo is disabled for the agent user by default.

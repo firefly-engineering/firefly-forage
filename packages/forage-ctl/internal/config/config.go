@@ -193,8 +193,35 @@ type HostConfig struct {
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsPath        string            `json:"nixpkgsPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
-	ProxyURL           string            `json:"proxyUrl,omitempty"`      // URL of the forage-proxy server
-	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"` // Host-level default agent identity
+	ProxyURL           string            `json:"proxyUrl,omitempty"`            // URL of the forage-proxy server
+	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"`       // Host-level default agent identity
+	ContainerUsername  string            `json:"containerUsername,omitempty"`    // Container username (default: "agent")
+	WorkspacePath      string            `json:"workspacePath,omitempty"`       // Container workspace path (default: "/workspace")
+	StateVersion       string            `json:"stateVersion,omitempty"`        // NixOS state version (default: "24.11")
+}
+
+// ResolvedContainerUsername returns the container username, defaulting to "agent".
+func (c *HostConfig) ResolvedContainerUsername() string {
+	if c.ContainerUsername != "" {
+		return c.ContainerUsername
+	}
+	return "agent"
+}
+
+// ResolvedWorkspacePath returns the container workspace path, defaulting to "/workspace".
+func (c *HostConfig) ResolvedWorkspacePath() string {
+	if c.WorkspacePath != "" {
+		return c.WorkspacePath
+	}
+	return "/workspace"
+}
+
+// ResolvedStateVersion returns the NixOS state version, defaulting to "24.11".
+func (c *HostConfig) ResolvedStateVersion() string {
+	if c.StateVersion != "" {
+		return c.StateVersion
+	}
+	return "24.11"
 }
 
 // resolveUID looks up the UID/GID from the OS for the configured user

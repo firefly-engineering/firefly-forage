@@ -33,7 +33,7 @@
     config =
       { pkgs, ... }:
       {
-        system.stateVersion = "24.05";
+        system.stateVersion = "24.11";
         nixpkgs.config.allowUnfree = true;
         networking.hostName = "test-sandbox";
         # Full network access
