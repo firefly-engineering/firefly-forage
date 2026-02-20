@@ -953,12 +953,16 @@ func TestReadJJIdentity(t *testing.T) {
 	}
 
 	t.Run("reads identity from jj repo", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		env := sandboxEnv(tmpDir)
+		homeDir := t.TempDir()
+		repoDir := t.TempDir()
+		env := sandboxEnv(homeDir)
+		// jj needs a writable HOME for its secure-config repo tracking,
+		// both during setup and when readJJIdentity calls jj config get.
+		t.Setenv("HOME", homeDir)
 
 		// Initialize a jj repo
 		cmd := exec.Command("jj", "git", "init")
-		cmd.Dir = tmpDir
+		cmd.Dir = repoDir
 		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("jj git init failed: %v\n%s", err, out)
@@ -970,14 +974,14 @@ func TestReadJJIdentity(t *testing.T) {
 			{"config", "set", "--repo", "user.email", "jj@example.com"},
 		} {
 			cmd := exec.Command("jj", args...)
-			cmd.Dir = tmpDir
+			cmd.Dir = repoDir
 			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
 			}
 		}
 
-		result := readJJIdentity(tmpDir)
+		result := readJJIdentity(repoDir)
 		if result == nil {
 			t.Fatal("expected non-nil identity")
 		}
@@ -990,10 +994,13 @@ func TestReadJJIdentity(t *testing.T) {
 	})
 
 	t.Run("name with spaces", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		env := sandboxEnv(tmpDir)
+		homeDir := t.TempDir()
+		repoDir := t.TempDir()
+		env := sandboxEnv(homeDir)
+		t.Setenv("HOME", homeDir)
+
 		cmd := exec.Command("jj", "git", "init")
-		cmd.Dir = tmpDir
+		cmd.Dir = repoDir
 		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("jj git init failed: %v\n%s", err, out)
@@ -1003,14 +1010,14 @@ func TestReadJJIdentity(t *testing.T) {
 			{"config", "set", "--repo", "user.email", "yann@firefly.engineering"},
 		} {
 			cmd := exec.Command("jj", args...)
-			cmd.Dir = tmpDir
+			cmd.Dir = repoDir
 			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
 			}
 		}
 
-		result := readJJIdentity(tmpDir)
+		result := readJJIdentity(repoDir)
 		if result == nil {
 			t.Fatal("expected non-nil identity")
 		}
