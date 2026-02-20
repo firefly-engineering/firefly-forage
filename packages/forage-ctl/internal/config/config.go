@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // IsSandboxMetadataFile returns true if the filename is a valid sandbox metadata file.
@@ -51,10 +50,18 @@ func ValidateSandboxName(name string) error {
 
 // safePath validates that a constructed path stays within the base directory.
 // This prevents path traversal attacks where names like "../../../etc/passwd"
-// could escape the intended directory. Uses filepath-securejoin (the library
-// used by Docker/runc) which resolves symlinks and evaluates ".." safely.
+// could escape the intended directory. The joined path is cleaned and checked
+// to ensure it remains under baseDir. Note: we intentionally avoid resolving
+// symlinks here because NixOS manages /etc via symlinks to /nix/store, and
+// following them would incorrectly reject all NixOS-managed paths.
 func safePath(baseDir, name, suffix string) (string, error) {
-	return securejoin.SecureJoin(baseDir, name+suffix)
+	joined := filepath.Join(baseDir, name+suffix)
+	// filepath.Join + Clean resolves ".." lexically
+	if !strings.HasPrefix(joined, filepath.Clean(baseDir)+string(filepath.Separator)) &&
+		joined != filepath.Clean(baseDir) {
+		return "", fmt.Errorf("path escapes base directory: %s", joined)
+	}
+	return joined, nil
 }
 
 const (

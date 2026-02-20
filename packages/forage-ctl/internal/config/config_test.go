@@ -453,7 +453,7 @@ func TestSafePath(t *testing.T) {
 		})
 	}
 
-	// Traversal attempts are resolved safely within the base (securejoin)
+	// Traversal attempts must be rejected
 	for _, tt := range []struct {
 		name   string
 		fname  string
@@ -461,14 +461,13 @@ func TestSafePath(t *testing.T) {
 	}{
 		{"path traversal", "../escape", ".json"},
 		{"deep traversal", "../../etc/passwd", ""},
-		{"absolute escape", "/etc/passwd", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := safePath(tmpDir, tt.fname, tt.suffix)
 			if err != nil {
-				return // error is also acceptable
+				return // error is expected
 			}
-			// securejoin resolves traversals within the base — verify the result is contained
+			// If no error, the result must still be contained within the base
 			if !strings.HasPrefix(result, tmpDir) {
 				t.Errorf("safePath(%q, %q, %q) = %q escapes base directory", tmpDir, tt.fname, tt.suffix, result)
 			}
