@@ -853,6 +853,20 @@ func TestHostConfig_AgentIdentity_RoundTrip(t *testing.T) {
 	}
 }
 
+// sandboxEnv returns environment variables suitable for running git/jj in a
+// hermetic temp directory. This is needed because the nix build sandbox sets
+// HOME=/homeless-shelter (non-writable), and jj's "secure config" feature
+// writes to ~/.config/jj/repos/.
+func sandboxEnv(homeDir string) []string {
+	return []string{
+		"HOME=" + homeDir,
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"JJ_CONFIG=" + filepath.Join(homeDir, ".config", "jj", "config.toml"),
+		"PATH=" + os.Getenv("PATH"),
+	}
+}
+
 func TestReadGitIdentity(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")
@@ -860,6 +874,7 @@ func TestReadGitIdentity(t *testing.T) {
 
 	t.Run("reads identity from git repo", func(t *testing.T) {
 		tmpDir := t.TempDir()
+		env := sandboxEnv(tmpDir)
 
 		// Initialize a git repo and set identity
 		for _, args := range [][]string{
@@ -869,6 +884,7 @@ func TestReadGitIdentity(t *testing.T) {
 		} {
 			cmd := exec.Command("git", args...)
 			cmd.Dir = tmpDir
+			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("git %v failed: %v\n%s", args, err, out)
 			}
@@ -891,6 +907,7 @@ func TestReadGitIdentity(t *testing.T) {
 
 	t.Run("name with spaces", func(t *testing.T) {
 		tmpDir := t.TempDir()
+		env := sandboxEnv(tmpDir)
 		for _, args := range [][]string{
 			{"init"},
 			{"config", "user.name", "Yann Hodique"},
@@ -898,6 +915,7 @@ func TestReadGitIdentity(t *testing.T) {
 		} {
 			cmd := exec.Command("git", args...)
 			cmd.Dir = tmpDir
+			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("git %v failed: %v\n%s", args, err, out)
 			}
@@ -914,14 +932,14 @@ func TestReadGitIdentity(t *testing.T) {
 
 	t.Run("no identity configured", func(t *testing.T) {
 		tmpDir := t.TempDir()
+		env := sandboxEnv(tmpDir)
 		cmd := exec.Command("git", "init")
 		cmd.Dir = tmpDir
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git init failed: %v\n%s", err, out)
 		}
 
-		// Run readGitIdentity with isolated env so it can't find global config
 		result := readGitIdentity(tmpDir)
 		// Result may or may not be nil depending on global git config;
 		// we just verify it doesn't crash
@@ -936,10 +954,12 @@ func TestReadJJIdentity(t *testing.T) {
 
 	t.Run("reads identity from jj repo", func(t *testing.T) {
 		tmpDir := t.TempDir()
+		env := sandboxEnv(tmpDir)
 
 		// Initialize a jj repo
 		cmd := exec.Command("jj", "git", "init")
 		cmd.Dir = tmpDir
+		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("jj git init failed: %v\n%s", err, out)
 		}
@@ -951,6 +971,7 @@ func TestReadJJIdentity(t *testing.T) {
 		} {
 			cmd := exec.Command("jj", args...)
 			cmd.Dir = tmpDir
+			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
 			}
@@ -970,8 +991,10 @@ func TestReadJJIdentity(t *testing.T) {
 
 	t.Run("name with spaces", func(t *testing.T) {
 		tmpDir := t.TempDir()
+		env := sandboxEnv(tmpDir)
 		cmd := exec.Command("jj", "git", "init")
 		cmd.Dir = tmpDir
+		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("jj git init failed: %v\n%s", err, out)
 		}
@@ -981,6 +1004,7 @@ func TestReadJJIdentity(t *testing.T) {
 		} {
 			cmd := exec.Command("jj", args...)
 			cmd.Dir = tmpDir
+			cmd.Env = env
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
 			}
