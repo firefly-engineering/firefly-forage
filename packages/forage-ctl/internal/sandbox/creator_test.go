@@ -455,6 +455,201 @@ func TestCreator_resolveIdentity(t *testing.T) {
 	}
 }
 
+func TestCreator_runInitCommands_NoCommands(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	metadata := &config.SandboxMetadata{
+		Name:          "test-init",
+		Template:      "test",
+		NetworkSlot:   1,
+		ContainerName: "f1",
+	}
+	template := &config.Template{
+		Name: "test",
+	}
+
+	// Add container so exec can find it
+	env.Runtime.AddContainer("f1", runtime.StatusRunning)
+
+	result := creator.runInitCommands(context.Background(), metadata, template)
+
+	if result.TemplateCommandsRun != 0 {
+		t.Errorf("TemplateCommandsRun = %d, want 0", result.TemplateCommandsRun)
+	}
+	if len(result.TemplateWarnings) != 0 {
+		t.Errorf("TemplateWarnings = %v, want empty", result.TemplateWarnings)
+	}
+
+	// Should have .forage/init check (test -f) + execution (sh) since mock returns success
+	execCalls := env.Runtime.GetCallsFor("Exec")
+	if len(execCalls) != 2 {
+		t.Errorf("Expected 2 Exec calls (forage/init check + run), got %d", len(execCalls))
+	}
+}
+
+func TestCreator_runInitCommands_TemplateCommands(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	metadata := &config.SandboxMetadata{
+		Name:          "test-init",
+		Template:      "test",
+		NetworkSlot:   1,
+		ContainerName: "f1",
+	}
+	template := &config.Template{
+		Name:         "test",
+		InitCommands: []string{"echo hello", "echo world"},
+	}
+
+	env.Runtime.AddContainer("f1", runtime.StatusRunning)
+
+	result := creator.runInitCommands(context.Background(), metadata, template)
+
+	if result.TemplateCommandsRun != 2 {
+		t.Errorf("TemplateCommandsRun = %d, want 2", result.TemplateCommandsRun)
+	}
+	if len(result.TemplateWarnings) != 0 {
+		t.Errorf("TemplateWarnings = %v, want empty", result.TemplateWarnings)
+	}
+
+	// Verify exec calls: 2 init commands + 1 .forage/init check + 1 .forage/init run (default returns 0)
+	execCalls := env.Runtime.GetCallsFor("Exec")
+	if len(execCalls) < 2 {
+		t.Fatalf("Expected at least 2 Exec calls, got %d", len(execCalls))
+	}
+
+	// Check first command args
+	cmd1 := execCalls[0].Args[1].([]string)
+	if len(cmd1) != 3 || cmd1[0] != "sh" || cmd1[1] != "-c" || cmd1[2] != "echo hello" {
+		t.Errorf("First command = %v, want [sh -c echo hello]", cmd1)
+	}
+
+	// Check second command args
+	cmd2 := execCalls[1].Args[1].([]string)
+	if len(cmd2) != 3 || cmd2[0] != "sh" || cmd2[1] != "-c" || cmd2[2] != "echo world" {
+		t.Errorf("Second command = %v, want [sh -c echo world]", cmd2)
+	}
+
+	// Verify exec options (user and workdir)
+	opts := execCalls[0].Args[2].(runtime.ExecOptions)
+	if opts.User != "agent" {
+		t.Errorf("Exec User = %q, want %q", opts.User, "agent")
+	}
+	if opts.WorkingDir != "/workspace" {
+		t.Errorf("Exec WorkingDir = %q, want %q", opts.WorkingDir, "/workspace")
+	}
+}
+
+func TestCreator_runInitCommands_FailedCommandContinues(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	metadata := &config.SandboxMetadata{
+		Name:          "test-init",
+		Template:      "test",
+		NetworkSlot:   1,
+		ContainerName: "f1",
+	}
+	template := &config.Template{
+		Name:         "test",
+		InitCommands: []string{"failing-cmd", "second-cmd"},
+	}
+
+	env.Runtime.AddContainer("f1", runtime.StatusRunning)
+	// Set exec result to non-zero exit code for this container
+	env.Runtime.SetExecResult("f1", &runtime.ExecResult{ExitCode: 1, Stderr: "command failed"})
+
+	result := creator.runInitCommands(context.Background(), metadata, template)
+
+	// Both commands should have been attempted
+	if result.TemplateCommandsRun != 2 {
+		t.Errorf("TemplateCommandsRun = %d, want 2", result.TemplateCommandsRun)
+	}
+
+	// Both should have warnings
+	if len(result.TemplateWarnings) != 2 {
+		t.Errorf("len(TemplateWarnings) = %d, want 2", len(result.TemplateWarnings))
+	}
+
+	// Verify all exec calls were made (2 commands + 1 .forage/init check; no init run since check fails)
+	execCalls := env.Runtime.GetCallsFor("Exec")
+	if len(execCalls) != 3 {
+		t.Errorf("Expected 3 Exec calls, got %d", len(execCalls))
+	}
+}
+
+func TestCreator_runInitCommands_ProjectInit(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	metadata := &config.SandboxMetadata{
+		Name:          "test-init",
+		Template:      "test",
+		NetworkSlot:   1,
+		ContainerName: "f1",
+	}
+	template := &config.Template{
+		Name: "test",
+	}
+
+	env.Runtime.AddContainer("f1", runtime.StatusRunning)
+	// Default mock returns ExitCode 0, so test -f will "find" the file
+	// and then sh will "run" it
+
+	result := creator.runInitCommands(context.Background(), metadata, template)
+
+	if !result.ProjectInitRun {
+		t.Error("ProjectInitRun should be true when .forage/init check succeeds")
+	}
+	if result.ProjectInitWarning != "" {
+		t.Errorf("ProjectInitWarning = %q, want empty", result.ProjectInitWarning)
+	}
+
+	// Verify exec calls: 1 test -f check + 1 sh run
+	execCalls := env.Runtime.GetCallsFor("Exec")
+	if len(execCalls) != 2 {
+		t.Fatalf("Expected 2 Exec calls, got %d", len(execCalls))
+	}
+
+	// Check the test -f call
+	testCmd := execCalls[0].Args[1].([]string)
+	if testCmd[0] != "test" || testCmd[1] != "-f" {
+		t.Errorf("First command = %v, want [test -f ...]", testCmd)
+	}
+
+	// Check the sh call
+	shCmd := execCalls[1].Args[1].([]string)
+	if shCmd[0] != "sh" {
+		t.Errorf("Second command = %v, want [sh ...]", shCmd)
+	}
+}
+
 func TestWorkspaceBackendFor(t *testing.T) {
 	tests := []struct {
 		mode     WorkspaceMode

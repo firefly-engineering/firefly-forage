@@ -1176,6 +1176,91 @@ func TestTemplate_Multiplexer_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestTemplate_InitCommands_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tmpl := Template{
+		Name:    "init-template",
+		Network: "full",
+		Agents: map[string]AgentConfig{
+			"claude": {
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+		},
+		InitCommands: []string{"npm install", "pip install pytest"},
+	}
+
+	data, err := json.MarshalIndent(tmpl, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	templatePath := filepath.Join(tmpDir, "init-template.json")
+	if err = os.WriteFile(templatePath, data, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	loaded, err := LoadTemplate(tmpDir, "init-template")
+	if err != nil {
+		t.Fatalf("LoadTemplate failed: %v", err)
+	}
+
+	if len(loaded.InitCommands) != 2 {
+		t.Fatalf("len(InitCommands) = %d, want 2", len(loaded.InitCommands))
+	}
+	if loaded.InitCommands[0] != "npm install" {
+		t.Errorf("InitCommands[0] = %q, want %q", loaded.InitCommands[0], "npm install")
+	}
+	if loaded.InitCommands[1] != "pip install pytest" {
+		t.Errorf("InitCommands[1] = %q, want %q", loaded.InitCommands[1], "pip install pytest")
+	}
+}
+
+func TestTemplate_InitCommands_BackwardCompat(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Template JSON without initCommands (old format)
+	data := `{"name": "old-template", "network": "full", "agents": {"claude": {"packagePath": "/nix/store/abc", "secretName": "anthropic", "authEnvVar": "ANTHROPIC_API_KEY"}}}`
+	templatePath := filepath.Join(tmpDir, "old-template.json")
+	if err := os.WriteFile(templatePath, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadTemplate(tmpDir, "old-template")
+	if err != nil {
+		t.Fatalf("LoadTemplate failed: %v", err)
+	}
+
+	if len(loaded.InitCommands) != 0 {
+		t.Errorf("InitCommands should be empty for old format, got %v", loaded.InitCommands)
+	}
+}
+
+func TestTemplate_InitCommands_OmittedWhenEmpty(t *testing.T) {
+	tmpl := Template{
+		Name:    "no-init",
+		Network: "full",
+		Agents: map[string]AgentConfig{
+			"claude": {
+				PackagePath: "/nix/store/abc-claude",
+				SecretName:  "anthropic",
+				AuthEnvVar:  "ANTHROPIC_API_KEY",
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(tmpl, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(data), "initCommands") {
+		t.Error("empty InitCommands should be omitted from JSON")
+	}
+}
+
 func TestValidateSandboxName(t *testing.T) {
 	tests := []struct {
 		name    string
