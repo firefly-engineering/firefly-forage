@@ -133,6 +133,9 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	// Phase 9: Post-creation setup (wait for SSH)
 	c.postCreationSetup(metadata)
 
+	// Phase 10: Run init commands
+	initResult := c.runInitCommands(ctx, metadata, resources.template)
+
 	// Log creation event
 	auditLogger := audit.NewLogger(c.paths.StateDir)
 	_ = auditLogger.LogEvent(audit.EventCreate, opts.Name, "template="+opts.Template)
@@ -143,6 +146,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		Workspace:          ws.effectivePath,
 		Metadata:           metadata,
 		CapabilityWarnings: warnings,
+		InitResult:         initResult,
 	}, nil
 }
 
@@ -298,6 +302,67 @@ func (c *Creator) startContainer(name, configPath string) error {
 		return fmt.Errorf("container creation failed: %w", err)
 	}
 	return nil
+}
+
+// runInitCommands executes template-level init commands and per-project .forage/init
+// inside the container. Failures are logged as warnings and do not block creation.
+func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxMetadata, template *config.Template) *InitCommandResult {
+	containerName := metadata.ResolvedContainerName()
+	username := c.hostConfig.ResolvedContainerUsername()
+	workspacePath := c.hostConfig.ResolvedWorkspacePath()
+	execOpts := runtime.ExecOptions{
+		User:       username,
+		WorkingDir: workspacePath,
+	}
+
+	result := &InitCommandResult{}
+
+	// Run template init commands
+	for _, cmd := range template.InitCommands {
+		result.TemplateCommandsRun++
+		logging.Debug("running init command", "command", cmd, "container", containerName)
+
+		execResult, err := c.rt.Exec(ctx, containerName, []string{"sh", "-c", cmd}, execOpts)
+		if err != nil {
+			warning := fmt.Sprintf("init command %q: %v", cmd, err)
+			logging.Warn(warning)
+			result.TemplateWarnings = append(result.TemplateWarnings, warning)
+			continue
+		}
+		if execResult.ExitCode != 0 {
+			warning := fmt.Sprintf("init command %q exited with code %d", cmd, execResult.ExitCode)
+			if execResult.Stderr != "" {
+				warning += ": " + execResult.Stderr
+			}
+			logging.Warn(warning)
+			result.TemplateWarnings = append(result.TemplateWarnings, warning)
+		}
+	}
+
+	// Check for per-project .forage/init script
+	initScriptPath := filepath.Join(workspacePath, ".forage", "init")
+	checkResult, err := c.rt.Exec(ctx, containerName, []string{"test", "-f", initScriptPath}, execOpts)
+	if err != nil || checkResult.ExitCode != 0 {
+		// No .forage/init script found, that's fine
+		return result
+	}
+
+	// Run the per-project init script
+	logging.Debug("running .forage/init script", "container", containerName)
+	result.ProjectInitRun = true
+	execResult, err := c.rt.Exec(ctx, containerName, []string{"sh", initScriptPath}, execOpts)
+	if err != nil {
+		result.ProjectInitWarning = fmt.Sprintf(".forage/init: %v", err)
+		logging.Warn(result.ProjectInitWarning)
+	} else if execResult.ExitCode != 0 {
+		result.ProjectInitWarning = fmt.Sprintf(".forage/init exited with code %d", execResult.ExitCode)
+		if execResult.Stderr != "" {
+			result.ProjectInitWarning += ": " + execResult.Stderr
+		}
+		logging.Warn(result.ProjectInitWarning)
+	}
+
+	return result
 }
 
 // postCreationSetup performs post-creation setup (SSH wait).
