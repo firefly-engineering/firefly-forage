@@ -1040,6 +1040,27 @@ func TestGenerateNixConfig_NoIdentity(t *testing.T) {
 	}
 }
 
+func TestNixEscapeIndented(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"plain", "hello", "hello"},
+		{"nix interpolation", "x${y}z", "x''${y}z"},
+		{"no double quote escape needed", `say "hi"`, `say "hi"`},
+		{"multiple interpolations", "${a}${b}", "''${a}''${b}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := nixEscapeIndented(tt.input)
+			if got != tt.expected {
+				t.Errorf("nixEscapeIndented(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNixEscape(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1074,13 +1095,69 @@ func TestGenerateNixConfig_IdentityEscaping(t *testing.T) {
 		t.Fatalf("GenerateNixConfig failed: %v", err)
 	}
 
-	// The identity values should be properly escaped for Nix:
-	// shellQuote (via go-shellquote) single-quotes, nixEscape is a no-op for single-quoted strings
+	// Identity service now uses writeShellScript with nixEscapeIndented
+	if !strings.Contains(result, "writeShellScript \"forage-agent-identity\"") {
+		t.Errorf("Config should use writeShellScript for identity service, got:\n%s", result)
+	}
+	// shellQuote wraps names with spaces in single quotes; nixEscapeIndented is a no-op for those
 	if !strings.Contains(result, `user.name 'Jane Doe'`) {
 		t.Errorf("Config should contain properly escaped user.name, got:\n%s", result)
 	}
 	if !strings.Contains(result, `user.email jane.doe@example.com`) {
 		t.Errorf("Config should contain properly escaped user.email, got:\n%s", result)
+	}
+	// Should NOT use bash -c for identity (old quoting bug)
+	if strings.Contains(result, `bash -c '`) {
+		t.Error("Identity service should NOT use bash -c (old quoting bug)")
+	}
+}
+
+func TestGenerateNixConfig_IdentityWriteShellScript(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.AgentIdentity = &config.AgentIdentity{
+		GitUser:  "Agent Bot",
+		GitEmail: "agent@example.com",
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// Should use writeShellScript, not bash -c
+	if !strings.Contains(result, "writeShellScript \"forage-agent-identity\"") {
+		t.Error("forage-agent-identity should use writeShellScript")
+	}
+	if !strings.Contains(result, "set -euo pipefail") {
+		t.Error("forage-agent-identity script should use set -euo pipefail")
+	}
+}
+
+func TestGenerateNixConfig_IdentityNameWithSpaces(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.AgentIdentity = &config.AgentIdentity{
+		GitUser:  "Yann Hodique",
+		GitEmail: "yann@firefly.engineering",
+	}
+
+	result, err := GenerateNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateNixConfig failed: %v", err)
+	}
+
+	// The full name must survive quoting — this was the original bug
+	if !strings.Contains(result, `user.name 'Yann Hodique'`) {
+		t.Errorf("Config should contain full name with spaces, got:\n%s", result)
+	}
+	if !strings.Contains(result, `user.email yann@firefly.engineering`) {
+		t.Errorf("Config should contain email, got:\n%s", result)
+	}
+	// Both git and jj config commands should be present
+	if !strings.Contains(result, "git config --global user.name") {
+		t.Error("Config should set git user.name")
+	}
+	if !strings.Contains(result, "jj config set --user user.name") {
+		t.Error("Config should set jj user.name")
 	}
 }
 

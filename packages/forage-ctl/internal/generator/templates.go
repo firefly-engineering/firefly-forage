@@ -68,6 +68,13 @@ func nixEscape(s string) string {
 	return s
 }
 
+// nixEscapeIndented escapes a string for safe inclusion inside a Nix indented
+// string literal (”...”). The only interpolation sequence in indented strings
+// is ${...}, which is escaped as ”${...}.
+func nixEscapeIndented(s string) string {
+	return strings.ReplaceAll(s, "${", "''${")
+}
+
 // containerTemplate is the main Go template for generating NixOS container configurations.
 const containerTemplateText = `{ pkgs, ... }:
 {
@@ -217,19 +224,25 @@ const containerTemplateText = `{ pkgs, ... }:
           serviceConfig = {
             Type = "oneshot";
             User = "{{.Username}}";
-            ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p {{.HomeDir}}/.ssh {{.HomeDir}}/.config/jj && " +
+            ExecStart = "${pkgs.writeShellScript "forage-agent-identity" ''
+              set -euo pipefail
+              ''${pkgs.coreutils}/bin/mkdir -p {{.HomeDir}}/.ssh {{.HomeDir}}/.config/jj
 {{- if .GitUser}}
-              "${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscape}} && " +
-              "${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscape}} && " +
+              ''${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscapeIndented}}
+              ''${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscapeIndented}}
 {{- end}}
 {{- if .GitEmail}}
-              "${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscape}} && " +
-              "${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscape}} && " +
+              ''${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscapeIndented}}
+              ''${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscapeIndented}}
 {{- end}}
 {{- if .SSHKeyName}}
-              "${pkgs.coreutils}/bin/cat > {{.HomeDir}}/.ssh/config <<SSH_EOF\nHost *\n  IdentityFile {{.HomeDir}}/.ssh/{{.SSHKeyName}}\n  StrictHostKeyChecking accept-new\nSSH_EOF\n && " +
+              ''${pkgs.coreutils}/bin/cat > {{.HomeDir}}/.ssh/config <<SSH_EOF
+              Host *
+                IdentityFile {{.HomeDir}}/.ssh/{{.SSHKeyName}}
+                StrictHostKeyChecking accept-new
+              SSH_EOF
 {{- end}}
-              "true'";
+            ''}";
           };
         };
 {{- end}}
@@ -243,8 +256,9 @@ var containerTemplate *template.Template
 
 func init() {
 	funcs := template.FuncMap{
-		"nixBool":   nixBool,
-		"nixEscape": nixEscape,
+		"nixBool":           nixBool,
+		"nixEscape":         nixEscape,
+		"nixEscapeIndented": nixEscapeIndented,
 		"shellQuote": func(s string) string {
 			return shellquote.Join(s)
 		},
