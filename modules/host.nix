@@ -44,6 +44,25 @@ let
     in
     "/home/${cfg.containerUsername}/${baseName}";
 
+  # Workaround: extra-container's eval-config.nix uses a minimal module set
+  # that doesn't include nixos-init.nix, but the latest nixpkgs-unstable's
+  # systemd.nix now references config.system.nixos-init.package.
+  # Patch the extra-container package to add a dummy option for it.
+  # https://github.com/erikarvstedt/extra-container/issues/XX
+  patchedExtraContainer =
+    extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
+      (old: {
+        buildCommand =
+          old.buildCommand
+          + ''
+            substituteInPlace $out/share/extra-container/eval-config.nix \
+              --replace-warn \
+                'system.requiredKernelConfig = dummy;' \
+                'system.nixos-init.package = optionValue pkgs.hello;
+                  system.requiredKernelConfig = dummy;'
+          '';
+      });
+
   # Agent definition type
   agentType = types.submodule {
     options = {
@@ -385,10 +404,8 @@ in
             authorizedKeys = cfg.authorizedKeys;
             secrets = cfg.secrets;
             stateDir = cfg.stateDir;
-            # Path to extra-container command
-            extraContainerPath = "${
-              extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default
-            }/bin/extra-container";
+            # Path to extra-container command (patched for nixos-init compat)
+            extraContainerPath = "${patchedExtraContainer}/bin/extra-container";
             # Nixpkgs path for extra-container --nixpkgs-path
             nixpkgsPath = "${nixpkgs}";
             # Nixpkgs revision for registry pinning
