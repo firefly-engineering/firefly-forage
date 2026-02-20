@@ -113,6 +113,7 @@
             WorkingDirectory = "/workspace";
             ExecStart = "${pkgs.writeShellScript "forage-init" ''
               tmux new-session -d -s forage -c /workspace -n claude
+              tmux set-option -w -t forage:claude automatic-rename off
               tmux send-keys -t forage:claude 'claude' Enter
               true
             ''}";

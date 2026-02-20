@@ -60,8 +60,14 @@ func TestTmuxInitScript(t *testing.T) {
 	if !strings.Contains(script, "tmux send-keys -t forage:claude 'claude' Enter") {
 		t.Error("InitScript should send-keys for first window command")
 	}
+	if !strings.Contains(script, "tmux set-option -w -t forage:claude automatic-rename off") {
+		t.Error("InitScript should disable automatic-rename for first window")
+	}
 	if !strings.Contains(script, "tmux new-window -t forage -n shell") {
 		t.Error("InitScript should create second window")
+	}
+	if !strings.Contains(script, "tmux set-option -w -t forage:shell automatic-rename off") {
+		t.Error("InitScript should disable automatic-rename for second window")
 	}
 	if strings.Contains(script, "send-keys -t forage:shell") {
 		t.Error("InitScript should not send-keys for empty command")

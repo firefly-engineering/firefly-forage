@@ -39,6 +39,9 @@ func (t *Tmux) InitScript(windows []Window) string {
 		} else {
 			fmt.Fprintf(&sb, "              tmux new-window -t %s -n %s -c /workspace\n", SessionName, w.Name)
 		}
+		// Prevent tmux from renaming windows based on the foreground process.
+		// Without this, tmux -CC control mode causes wezterm tab title flicker.
+		fmt.Fprintf(&sb, "              tmux set-option -w -t %s:%s automatic-rename off\n", SessionName, w.Name)
 		if w.Command != "" {
 			fmt.Fprintf(&sb, "              tmux send-keys -t %s:%s %s Enter\n", SessionName, w.Name, shellQuote(w.Command))
 		}
