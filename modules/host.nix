@@ -211,7 +211,10 @@ let
         type = types.listOf types.str;
         default = [ ];
         description = "Shell commands to run inside the container after creation. Failures warn but do not block creation.";
-        example = [ "npm install" "pip install pytest" ];
+        example = [
+          "npm install"
+          "pip install pytest"
+        ];
       };
 
       agentIdentity = {
@@ -496,7 +499,7 @@ in
                 tasksMax = template.resourceLimits.tasksMax;
               };
             }
-        // lib.optionalAttrs (template.initCommands != []) {
+        // lib.optionalAttrs (template.initCommands != [ ]) {
           inherit (template) initCommands;
         }
         //
