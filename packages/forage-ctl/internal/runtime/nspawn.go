@@ -461,8 +461,26 @@ func (r *NspawnRuntime) Capabilities() Capabilities {
 	}
 }
 
-// Ensure NspawnRuntime implements Runtime, GeneratedFileRuntime, CapableRuntime, and GracefulStopper
+// ViewLogs replaces the current process with journalctl -M to view container logs.
+func (r *NspawnRuntime) ViewLogs(ctx context.Context, name string, follow bool, lines int) error {
+	containerName := r.containerName(name)
+
+	journalctlPath, err := exec.LookPath("journalctl")
+	if err != nil {
+		return fmt.Errorf("journalctl not found: %w", err)
+	}
+
+	argv := []string{"journalctl", "-M", containerName, "-n", fmt.Sprintf("%d", lines)}
+	if follow {
+		argv = append(argv, "-f")
+	}
+
+	return syscall.Exec(journalctlPath, argv, system.SafeEnviron())
+}
+
+// Ensure NspawnRuntime implements Runtime, GeneratedFileRuntime, CapableRuntime, GracefulStopper, and LogViewer
 var _ Runtime = (*NspawnRuntime)(nil)
 var _ GeneratedFileRuntime = (*NspawnRuntime)(nil)
 var _ CapableRuntime = (*NspawnRuntime)(nil)
 var _ GracefulStopper = (*NspawnRuntime)(nil)
+var _ LogViewer = (*NspawnRuntime)(nil)

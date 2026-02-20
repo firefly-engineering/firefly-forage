@@ -127,6 +127,13 @@ func GetCapabilities(rt Runtime) Capabilities {
 	}
 }
 
+// LogViewer is an optional interface for runtimes that support viewing
+// container logs. If not implemented, callers should display an error
+// indicating that log viewing is not supported by the current runtime.
+type LogViewer interface {
+	ViewLogs(ctx context.Context, name string, follow bool, lines int) error
+}
+
 // GracefulStopper is an optional interface for runtimes that support
 // graceful shutdown with a configurable timeout. If not implemented,
 // callers should fall back to Stop() for immediate termination.

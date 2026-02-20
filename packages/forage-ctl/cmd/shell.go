@@ -11,7 +11,7 @@ import (
 
 var shellCmd = &cobra.Command{
 	Use:   "shell <name>",
-	Short: "Open root shell in container via machinectl",
+	Short: "Open root shell in container",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runShell,
 }

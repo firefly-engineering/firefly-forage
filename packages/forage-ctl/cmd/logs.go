@@ -1,13 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 var logsCmd = &cobra.Command{
@@ -28,26 +27,15 @@ func init() {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	metadata, err := loadSandbox(name)
-	if err != nil {
+	if _, err := loadSandbox(name); err != nil {
 		return err
 	}
-	containerName := metadata.ResolvedContainerName()
 
-	journalctlPath, err := exec.LookPath("journalctl")
-	if err != nil {
-		return fmt.Errorf("journalctl not found: %w", err)
+	rt := getRuntime()
+	lv, ok := rt.(runtime.LogViewer)
+	if !ok {
+		return fmt.Errorf("log viewing is not supported by the %s runtime", rt.Name())
 	}
 
-	journalArgs := []string{
-		"journalctl",
-		"-M", containerName,
-		"-n", fmt.Sprintf("%d", logsLines),
-	}
-
-	if logsFollow {
-		journalArgs = append(journalArgs, "-f")
-	}
-
-	return syscall.Exec(journalctlPath, journalArgs, system.SafeEnviron())
+	return lv.ViewLogs(context.Background(), name, logsFollow, logsLines)
 }
