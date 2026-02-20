@@ -6,6 +6,9 @@
 }:
 let
   agentNames = lib.attrNames template.agents;
+  # The agent list tells the AI which tools are available in this sandbox.
+  # Each agent entry maps to a configured AI coding agent (e.g., claude, aider)
+  # that has been provisioned with credentials and is ready to use.
   agentList =
     if agentNames == [ ] then
       "No agents configured"

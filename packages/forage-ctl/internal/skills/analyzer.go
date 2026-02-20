@@ -1,4 +1,8 @@
-// Package skills provides advanced skill injection based on project analysis
+// Package skills provides advanced skill injection based on project analysis.
+//
+// TODO: Prefer AGENTS.md over heuristic project type detection. If an AGENTS.md
+// file exists in the workspace root, it should be used as the primary source of
+// project instructions rather than the heuristic-based analyzer below.
 package skills
 
 import (
@@ -49,7 +53,8 @@ func NewAnalyzer(workspacePath string) *Analyzer {
 	return &Analyzer{workspacePath: workspacePath}
 }
 
-// Analyze analyzes the project and returns project info
+// Analyze analyzes the project and returns project info.
+// TODO: Check for AGENTS.md first and use it as primary project instructions.
 func (a *Analyzer) Analyze() *ProjectInfo {
 	info := &ProjectInfo{
 		Type: ProjectTypeUnknown,
