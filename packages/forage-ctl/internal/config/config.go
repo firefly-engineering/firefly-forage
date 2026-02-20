@@ -309,6 +309,7 @@ type Template struct {
 	Multiplexer       string                 `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
 	ReadOnlyWorkspace bool                   `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
 	ResourceLimits    *ResourceLimits        `json:"resourceLimits,omitempty"`    // Container resource limits
+	InitCommands      []string               `json:"initCommands,omitempty"`      // Commands to run after container creation
 }
 
 // AgentPermissions controls agent permission settings.
