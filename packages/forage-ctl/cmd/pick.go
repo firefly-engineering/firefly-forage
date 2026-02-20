@@ -10,6 +10,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
+
 )
 
 var pickCmd = &cobra.Command{
@@ -120,13 +121,5 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 }
 
 func attachToSandbox(metadata *config.SandboxMetadata, paths *config.Paths) error {
-	if !isRunning(metadata.Name) {
-		return fmt.Errorf("sandbox %s is not running. Start it with: forage-ctl start %s",
-			metadata.Name, metadata.Name)
-	}
-
-	logging.Debug("attaching to sandbox", "name", metadata.Name, "ip", metadata.ContainerIP())
-
-	// Use the ssh command logic
 	return connectToSandbox(metadata.Name, paths)
 }

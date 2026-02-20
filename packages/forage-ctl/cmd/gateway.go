@@ -6,9 +6,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/gateway"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 )
 
@@ -62,6 +61,7 @@ func runGateway(cmd *cobra.Command, args []string) error {
 		}
 
 	case tui.ActionNew:
+		// TODO: implement creation wizard for gateway mode
 		fmt.Println("\nTo create a new sandbox, run:")
 		fmt.Println("  forage-ctl up <name> -t <template> -w <workspace>")
 		fmt.Println("\nAvailable templates:")
@@ -71,6 +71,7 @@ func runGateway(cmd *cobra.Command, args []string) error {
 		}
 
 	case tui.ActionDown:
+		// TODO: implement sandbox teardown in gateway mode
 		if result.Sandbox != nil {
 			fmt.Printf("\nTo remove sandbox '%s', run:\n", result.Sandbox.Name)
 			fmt.Printf("  forage-ctl down %s\n", result.Sandbox.Name)
@@ -84,22 +85,5 @@ func runGateway(cmd *cobra.Command, args []string) error {
 }
 
 func connectToSandbox(name string, paths *config.Paths) error {
-	metadata, err := config.LoadSandboxMetadata(paths.SandboxesDir, name)
-	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
-	}
-
-	if !isRunning(name) {
-		return fmt.Errorf("sandbox %s is not running", name)
-	}
-
-	containerIP := metadata.ContainerIP()
-	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP)
-
-	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
-	if attachCmd := mux.AttachCommand(); attachCmd != "" {
-		return ssh.ReplaceWithSession(containerIP, attachCmd)
-	}
-	// For wezterm: gateway is SSH-based, fall back to interactive shell
-	return ssh.ReplaceWithSession(containerIP, "")
+	return gateway.Connect(name, paths.SandboxesDir, getRuntime())
 }

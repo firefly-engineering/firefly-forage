@@ -2,16 +2,13 @@
 package gateway
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
 )
 
@@ -114,29 +111,7 @@ func (s *Server) ConnectToSandbox(name string) error {
 		return fmt.Errorf("invalid sandbox name: %w", err)
 	}
 
-	metadata, err := config.LoadSandboxMetadata(s.Paths.SandboxesDir, name)
-	if err != nil {
-		return fmt.Errorf("sandbox not found: %s", name)
-	}
-
-	if s.Runtime != nil {
-		running, _ := s.Runtime.IsRunning(context.Background(), name)
-		if !running {
-			return fmt.Errorf("sandbox %s is not running", name)
-		}
-	}
-
-	containerIP := metadata.ContainerIP()
-	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP)
-
-	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
-
-	// Use SSH to connect to sandbox with the appropriate multiplexer command
-	if attachCmd := mux.AttachCommand(); attachCmd != "" {
-		return ssh.ReplaceWithSession(containerIP, attachCmd)
-	}
-	// For wezterm: gateway is SSH-based, fall back to interactive shell
-	return ssh.ReplaceWithSession(containerIP, "")
+	return Connect(name, s.Paths.SandboxesDir, s.Runtime)
 }
 
 // ListSandboxes returns a formatted list of sandboxes
