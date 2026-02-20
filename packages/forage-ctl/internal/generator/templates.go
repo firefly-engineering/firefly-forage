@@ -226,17 +226,17 @@ const containerTemplateText = `{ pkgs, ... }:
             User = "{{.Username}}";
             ExecStart = "${pkgs.writeShellScript "forage-agent-identity" ''
               set -euo pipefail
-              ''${pkgs.coreutils}/bin/mkdir -p {{.HomeDir}}/.ssh {{.HomeDir}}/.config/jj
+              ${pkgs.coreutils}/bin/mkdir -p {{.HomeDir}}/.ssh {{.HomeDir}}/.config/jj
 {{- if .GitUser}}
-              ''${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscapeIndented}}
-              ''${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscapeIndented}}
+              ${pkgs.git}/bin/git config --global user.name {{.GitUser | shellQuote | nixEscapeIndented}}
+              ${pkgs.jujutsu}/bin/jj config set --user user.name {{.GitUser | shellQuote | nixEscapeIndented}} || true
 {{- end}}
 {{- if .GitEmail}}
-              ''${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscapeIndented}}
-              ''${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscapeIndented}}
+              ${pkgs.git}/bin/git config --global user.email {{.GitEmail | shellQuote | nixEscapeIndented}}
+              ${pkgs.jujutsu}/bin/jj config set --user user.email {{.GitEmail | shellQuote | nixEscapeIndented}} || true
 {{- end}}
 {{- if .SSHKeyName}}
-              ''${pkgs.coreutils}/bin/cat > {{.HomeDir}}/.ssh/config <<SSH_EOF
+              ${pkgs.coreutils}/bin/cat > {{.HomeDir}}/.ssh/config <<SSH_EOF
               Host *
                 IdentityFile {{.HomeDir}}/.ssh/{{.SSHKeyName}}
                 StrictHostKeyChecking accept-new
