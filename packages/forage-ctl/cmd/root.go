@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 )
 
 var (
@@ -45,3 +47,29 @@ var (
 	logWarning = logging.UserWarning
 	_          = logging.UserError // reserved for future use
 )
+
+// displayInitResult shows init command results to the user.
+func displayInitResult(r *sandbox.InitCommandResult) {
+	if r == nil {
+		return
+	}
+
+	if r.TemplateCommandsRun > 0 {
+		if len(r.TemplateWarnings) > 0 {
+			logWarning("  %d of %d init commands had warnings", len(r.TemplateWarnings), r.TemplateCommandsRun)
+			for _, w := range r.TemplateWarnings {
+				logWarning("    %s", w)
+			}
+		} else {
+			fmt.Printf("  Init commands: %d completed\n", r.TemplateCommandsRun)
+		}
+	}
+
+	if r.ProjectInitRun {
+		if r.ProjectInitWarning != "" {
+			logWarning("  %s", r.ProjectInitWarning)
+		} else {
+			fmt.Printf("  Project init: completed\n")
+		}
+	}
+}

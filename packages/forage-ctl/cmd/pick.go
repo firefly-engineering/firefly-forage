@@ -111,6 +111,8 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 		return fmt.Errorf("sandbox creation failed: %w", err)
 	}
 
+	displayInitResult(result.InitResult)
+
 	logSuccess("Sandbox %s created", opts.Name)
 	fmt.Printf("  IP: %s\n", result.ContainerIP)
 	fmt.Printf("  Workspace: %s\n", result.Workspace)
