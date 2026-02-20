@@ -20,6 +20,8 @@ services.firefly-forage.templates.<name> = {
 
   network = "full" | "restricted" | "none";
   allowedHosts = [ ... ];  # for restricted mode
+
+  initCommands = [ ... ];  # commands to run after creation
 };
 ```
 
@@ -116,6 +118,62 @@ extraPackages = with pkgs; [
 ```
 
 These are added to `environment.systemPackages` in the container.
+
+### Init Commands
+
+Shell commands to run inside the container after creation. These execute after SSH is ready, as the container user in the workspace directory. Failures are logged as warnings but do not block sandbox creation.
+
+```nix
+initCommands = [
+  "npm install"
+  "pip install pytest"
+];
+```
+
+Commands execute in order via `sh -c`. Each command runs independently — a failing command does not prevent subsequent commands from running.
+
+#### Per-Project Init Script
+
+In addition to template-level `initCommands`, you can place a `.forage/init` script in your repository. If present, it runs automatically after template init commands complete.
+
+```bash
+# .forage/init — runs inside the container after creation
+#!/bin/sh
+jj git fetch
+jj new main
+```
+
+**Execution order:**
+1. Template `initCommands` (in declaration order)
+2. `.forage/init` script (if present in workspace)
+
+#### Example: Beads Setup
+
+```nix
+templates.beads = {
+  description = "Beads development sandbox";
+
+  agents.claude = {
+    package = pkgs.claude-code;
+    hostConfigDir = "~/.claude";
+    permissions.skipAll = true;
+  };
+
+  extraPackages = with pkgs; [ git nodejs ];
+
+  initCommands = [
+    "npm install -g beads"
+  ];
+};
+```
+
+Combined with a `.forage/init` in the repo:
+
+```bash
+#!/bin/sh
+git fetch origin beads-sync
+git checkout -b beads-sync origin/beads-sync 2>/dev/null || true
+```
 
 ### Network Mode
 
