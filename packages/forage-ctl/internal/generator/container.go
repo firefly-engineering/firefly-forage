@@ -146,33 +146,7 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		}
 	}
 
-	// Check for system prompt file in mounts (for Claude wrapper)
-	for _, m := range data.BindMounts {
-		if strings.HasSuffix(m.Path, "system-prompt.md") {
-			data.SystemPromptFile = m.Path
-			// Find Claude package for wrapper
-			for name, agent := range cfg.Template.Agents {
-				if name == "claude" && agent.PackagePath != "" {
-					data.ClaudePackagePath = agent.PackagePath
-					break
-				}
-			}
-			break
-		}
-	}
-
-	// When wrapping Claude, remove the raw package from AgentPackages
-	// to avoid buildEnv collision (both provide /bin/claude)
-	if data.ClaudePackagePath != "" {
-		resolved := "pkgs." + data.ClaudePackagePath
-		filtered := data.AgentPackages[:0]
-		for _, pkg := range data.AgentPackages {
-			if pkg != resolved {
-				filtered = append(filtered, pkg)
-			}
-		}
-		data.AgentPackages = filtered
-	}
+	resolveClaudeWrapper(data, cfg)
 
 	return data
 }
@@ -190,6 +164,38 @@ func buildNetworkConfig(networkMode string, allowedHosts []string, slot int) str
 	}
 
 	return network.GenerateNixNetworkConfig(cfg)
+}
+
+// resolveClaudeWrapper detects whether a system-prompt.md mount exists and, if
+// the template includes a "claude" agent, configures a shell-script wrapper
+// that passes --append-system-prompt. The raw Claude package is removed from
+// AgentPackages to avoid a buildEnv collision (both provide /bin/claude).
+func resolveClaudeWrapper(data *TemplateData, cfg *ContainerConfig) {
+	for _, m := range data.BindMounts {
+		if strings.HasSuffix(m.Path, "system-prompt.md") {
+			data.SystemPromptFile = m.Path
+			for name, agent := range cfg.Template.Agents {
+				if name == "claude" && agent.PackagePath != "" {
+					data.ClaudePackagePath = agent.PackagePath
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if data.ClaudePackagePath == "" {
+		return
+	}
+
+	resolved := "pkgs." + data.ClaudePackagePath
+	filtered := data.AgentPackages[:0]
+	for _, pkg := range data.AgentPackages {
+		if pkg != resolved {
+			filtered = append(filtered, pkg)
+		}
+	}
+	data.AgentPackages = filtered
 }
 
 // applyContributions populates template data from the injection contributions.

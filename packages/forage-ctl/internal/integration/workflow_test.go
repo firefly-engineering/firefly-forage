@@ -21,6 +21,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/skills"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
@@ -437,16 +438,16 @@ func TestWorkflow_SkillsGeneration(t *testing.T) {
 		},
 	}
 
-	skills := generator.GenerateSkills(metadata, template)
+	prompt := skills.GenerateSystemPrompt(metadata, template)
 
 	// Verify skills content
-	if !strings.Contains(skills, "test-sandbox") {
+	if !strings.Contains(prompt, "test-sandbox") {
 		t.Error("skills should contain sandbox name")
 	}
-	if !strings.Contains(skills, "claude") {
+	if !strings.Contains(prompt, "claude") {
 		t.Error("skills should contain agent name")
 	}
-	if !strings.Contains(skills, "/workspace") {
+	if !strings.Contains(prompt, "/workspace") {
 		t.Error("skills should mention workspace")
 	}
 }

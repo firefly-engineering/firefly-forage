@@ -461,7 +461,7 @@ func TestGenerateSystemPrompt(t *testing.T) {
 		},
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "test-sandbox") {
 		t.Error("System prompt should contain sandbox name")
@@ -490,7 +490,7 @@ func TestGenerateSystemPrompt_JJMode(t *testing.T) {
 		Network: "full",
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "jj workspace") {
 		t.Error("System prompt should mention jj workspace mode")
@@ -520,7 +520,7 @@ func TestGenerateSystemPrompt_NetworkModes(t *testing.T) {
 				Network: tt.network,
 			}
 
-			result := GenerateSystemPrompt(metadata, tmpl)
+			result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 			if !strings.Contains(result, tt.shouldHave) {
 				t.Errorf("System prompt for network %q should contain %q\nGot:\n%s", tt.network, tt.shouldHave, result)
@@ -539,7 +539,7 @@ func TestGenerateSystemPrompt_RestrictedHosts(t *testing.T) {
 		AllowedHosts: []string{"api.anthropic.com", "github.com"},
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "api.anthropic.com") {
 		t.Error("System prompt should list allowed hosts")
@@ -563,7 +563,7 @@ func TestGenerateSystemPrompt_Identity(t *testing.T) {
 		Network: "full",
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "Identity") {
 		t.Error("System prompt should have identity info")
@@ -591,7 +591,7 @@ func TestGenerateSystemPrompt_IdentityGitOnly(t *testing.T) {
 		Network: "full",
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "Identity") {
 		t.Error("System prompt should have identity info")
@@ -610,7 +610,7 @@ func TestGenerateSystemPrompt_NoIdentity(t *testing.T) {
 		Network: "full",
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if strings.Contains(result, "Identity") {
 		t.Error("System prompt should not have identity info when none configured")
@@ -634,7 +634,7 @@ func TestGenerateSystemPrompt_WithAgents(t *testing.T) {
 		},
 	}
 
-	result := GenerateSystemPrompt(metadata, tmpl)
+	result := skills.GenerateSystemPrompt(metadata, tmpl)
 
 	if !strings.Contains(result, "Agents") {
 		t.Error("System prompt should have agents info")
@@ -699,7 +699,7 @@ func TestGenerateSkillFiles_VCS(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpl := &config.Template{Network: "full"}
-			result := GenerateSkillFiles(tt.metadata, tmpl, tt.info)
+			result := skills.GenerateSkillFiles(tt.metadata, tmpl, tt.info)
 			vcs, ok := result["forage-vcs"]
 			if tt.wantSkill && !ok {
 				t.Fatal("expected forage-vcs skill file")
@@ -721,7 +721,7 @@ func TestGenerateSkillFiles_Nix(t *testing.T) {
 	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
 
 	info := &skills.ProjectInfo{HasNixFlake: true}
-	result := GenerateSkillFiles(metadata, tmpl, info)
+	result := skills.GenerateSkillFiles(metadata, tmpl, info)
 	nix, ok := result["forage-nix"]
 	if !ok {
 		t.Fatal("expected forage-nix skill file")
@@ -738,7 +738,7 @@ func TestGenerateSkillFiles_Empty(t *testing.T) {
 	tmpl := &config.Template{Network: "full"}
 	metadata := &config.SandboxMetadata{Name: "test", Template: "test"}
 
-	result := GenerateSkillFiles(metadata, tmpl, nil)
+	result := skills.GenerateSkillFiles(metadata, tmpl, nil)
 	if len(result) != 0 {
 		t.Errorf("expected empty skill files map, got %d entries", len(result))
 	}

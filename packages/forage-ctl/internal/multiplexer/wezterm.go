@@ -3,7 +3,10 @@ package multiplexer
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	shellquote "github.com/kballard/go-shellquote"
 
@@ -87,9 +90,27 @@ func (w *Wezterm) ContributePromptFragments(ctx context.Context) ([]injection.Pr
 	}}, nil
 }
 
+// NativeConnect execs `wezterm connect` for the named container.
+// This replaces the current process.
+func (w *Wezterm) NativeConnect(containerName string) error {
+	binary, err := exec.LookPath("wezterm")
+	if err != nil {
+		return fmt.Errorf("wezterm not found in PATH: %w", err)
+	}
+	argv := []string{"wezterm", "connect", containerName}
+	return syscall.Exec(binary, argv, os.Environ())
+}
+
+// NativeConnector is an optional interface for multiplexers that support
+// connecting via a native client rather than SSH.
+type NativeConnector interface {
+	NativeConnect(containerName string) error
+}
+
 // Ensure Wezterm implements contribution interfaces
 var (
 	_ injection.MountContributor   = (*Wezterm)(nil)
 	_ injection.PackageContributor = (*Wezterm)(nil)
 	_ injection.PromptContributor  = (*Wezterm)(nil)
+	_ NativeConnector              = (*Wezterm)(nil)
 )

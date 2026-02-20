@@ -3,8 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -39,23 +37,16 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return ssh.ReplaceWithSession(metadata.ContainerIP(), attachCmd)
 	}
 
-	// wezterm path: detect terminal, use native connect or error
+	// Check if multiplexer supports native connect (e.g., wezterm)
 	containerName := metadata.ResolvedContainerName()
-	if os.Getenv("TERM_PROGRAM") == "WezTerm" {
-		return weztermConnect(containerName)
+	if nc, ok := mux.(multiplexer.NativeConnector); ok {
+		if os.Getenv("TERM_PROGRAM") == "WezTerm" {
+			return nc.NativeConnect(containerName)
+		}
+		return fmt.Errorf("sandbox %q uses wezterm multiplexing\n"+
+			"  Connect with: wezterm connect %s\n"+
+			"  Or configure an SSH domain in ~/.wezterm.lua", name, containerName)
 	}
 
-	return fmt.Errorf("sandbox %q uses wezterm multiplexing\n"+
-		"  Connect with: wezterm connect %s\n"+
-		"  Or configure an SSH domain in ~/.wezterm.lua", name, containerName)
-}
-
-// weztermConnect execs wezterm connect for the named container.
-func weztermConnect(containerName string) error {
-	binary, err := exec.LookPath("wezterm")
-	if err != nil {
-		return fmt.Errorf("wezterm not found in PATH: %w", err)
-	}
-	argv := []string{"wezterm", "connect", containerName}
-	return syscall.Exec(binary, argv, os.Environ())
+	return fmt.Errorf("multiplexer %q has no attach command and no native connect", mux.Type())
 }
