@@ -444,7 +444,7 @@ func (c *Creator) resolveIdentity(opts CreateOptions, template *config.Template)
 	var gitUser, gitEmail, sshKeyPath string
 
 	// 1. Host user gitconfig (lowest priority fallback, name/email only)
-	if hostGit := config.ReadHostUserGitIdentity(c.hostConfig.User); hostGit != nil {
+	if hostGit := config.ReadHostUserGitIdentity(c.hostConfig.User, opts.RepoPath); hostGit != nil {
 		gitUser = hostGit.GitUser
 		gitEmail = hostGit.GitEmail
 	}

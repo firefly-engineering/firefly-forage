@@ -10,8 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/BurntSushi/toml"
 )
 
 // IsSandboxMetadataFile returns true if the filename is a valid sandbox metadata file.
@@ -107,55 +105,49 @@ func ValidateAgentIdentity(id *AgentIdentity) error {
 	return nil
 }
 
-// ReadHostUserGitIdentity reads the git/jj user.name and user.email from the
-// given user's config files as a fallback identity. Checks jj config first
-// (since that's what forage workspaces typically use), then falls back to git config.
-// Returns nil if no config is found or no user section exists.
-func ReadHostUserGitIdentity(username string) *AgentIdentity {
+// ReadHostUserGitIdentity reads the git/jj user.name and user.email using CLI
+// tools that respect the full config resolution (includeIf, conf.d overlays, etc.).
+// When repoDir is non-empty, commands run in that directory so repo-context
+// conditional config is applied. Checks jj first (preferred for forage
+// workspaces), then falls back to git. Returns nil if no identity is found.
+func ReadHostUserGitIdentity(username string, repoDir string) *AgentIdentity {
 	u, err := user.Lookup(username)
 	if err != nil {
 		return nil
 	}
 
-	// Try jj config first (preferred for forage workspaces)
-	jjPaths := []string{
-		filepath.Join(u.HomeDir, ".config", "jj", "config.toml"),
-		filepath.Join(u.HomeDir, ".jjconfig.toml"),
+	// Try CLI-based resolution first (respects conf.d, includeIf, etc.)
+	dir := repoDir
+	if dir == "" {
+		dir = u.HomeDir
 	}
-	for _, p := range jjPaths {
-		if id := parseJJConfigIdentity(p); id != nil {
-			return id
-		}
+
+	// Try jj config first (preferred for forage workspaces)
+	if id := readJJIdentity(dir); id != nil {
+		return id
 	}
 
 	// Fall back to git config
-	gitPaths := []string{
-		filepath.Join(u.HomeDir, ".gitconfig"),
-		filepath.Join(u.HomeDir, ".config", "git", "config"),
+	if id := readGitIdentity(dir); id != nil {
+		return id
 	}
-	for _, p := range gitPaths {
-		if id := parseGitConfigIdentity(p); id != nil {
-			return id
-		}
-	}
+
 	return nil
 }
 
-// parseGitConfigIdentity extracts user.name and user.email from a git config file.
-// Shells out to `git config --file` which handles includes, conditionals, and all
-// edge cases correctly. Returns nil if git is not in PATH or the file has no user section.
-func parseGitConfigIdentity(path string) *AgentIdentity {
-	if _, err := os.Stat(path); err != nil {
-		return nil
-	}
-
-	gitBin, err := exec.LookPath("git")
+// readJJIdentity reads user.name and user.email via `jj config get` in the
+// given directory. This respects conf.d overlays, conditional includes, env
+// vars, and repo-level config — unlike direct TOML parsing.
+func readJJIdentity(repoDir string) *AgentIdentity {
+	jjBin, err := exec.LookPath("jj")
 	if err != nil {
 		return nil
 	}
 
-	getName := exec.Command(gitBin, "config", "--file", path, "--get", "user.name")
-	getEmail := exec.Command(gitBin, "config", "--file", path, "--get", "user.email")
+	getName := exec.Command(jjBin, "config", "get", "user.name")
+	getName.Dir = repoDir
+	getEmail := exec.Command(jjBin, "config", "get", "user.email")
+	getEmail.Dir = repoDir
 
 	var gitUser, gitEmail string
 	if out, err := getName.Output(); err == nil {
@@ -171,22 +163,32 @@ func parseGitConfigIdentity(path string) *AgentIdentity {
 	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
 }
 
-// parseJJConfigIdentity extracts user.name and user.email from a jj config file (TOML format).
-func parseJJConfigIdentity(path string) *AgentIdentity {
-	var cfg struct {
-		User struct {
-			Name  string `toml:"name"`
-			Email string `toml:"email"`
-		} `toml:"user"`
-	}
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+// readGitIdentity reads user.name and user.email via `git config` in the
+// given directory. This respects includeIf directives that depend on repo
+// context — unlike `git config --file` which only reads a single file.
+func readGitIdentity(repoDir string) *AgentIdentity {
+	gitBin, err := exec.LookPath("git")
+	if err != nil {
 		return nil
 	}
 
-	if cfg.User.Name == "" && cfg.User.Email == "" {
+	getName := exec.Command(gitBin, "config", "user.name")
+	getName.Dir = repoDir
+	getEmail := exec.Command(gitBin, "config", "user.email")
+	getEmail.Dir = repoDir
+
+	var gitUser, gitEmail string
+	if out, err := getName.Output(); err == nil {
+		gitUser = strings.TrimSpace(string(out))
+	}
+	if out, err := getEmail.Output(); err == nil {
+		gitEmail = strings.TrimSpace(string(out))
+	}
+
+	if gitUser == "" && gitEmail == "" {
 		return nil
 	}
-	return &AgentIdentity{GitUser: cfg.User.Name, GitEmail: cfg.User.Email}
+	return &AgentIdentity{GitUser: gitUser, GitEmail: gitEmail}
 }
 
 // HostConfig represents the host configuration from config.json

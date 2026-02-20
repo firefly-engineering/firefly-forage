@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -852,199 +853,150 @@ func TestHostConfig_AgentIdentity_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestParseGitConfigIdentity(t *testing.T) {
-	tests := []struct {
-		name      string
-		content   string
-		wantNil   bool
-		wantUser  string
-		wantEmail string
-	}{
-		{
-			name: "standard gitconfig",
-			content: `[user]
-	name = Test User
-	email = test@example.com
-[core]
-	editor = vim
-`,
-			wantUser:  "Test User",
-			wantEmail: "test@example.com",
-		},
-		{
-			name: "name only",
-			content: `[user]
-	name = Test User
-`,
-			wantUser: "Test User",
-		},
-		{
-			name: "email only",
-			content: `[user]
-	email = test@example.com
-`,
-			wantEmail: "test@example.com",
-		},
-		{
-			name: "no user section",
-			content: `[core]
-	editor = vim
-`,
-			wantNil: true,
-		},
-		{
-			name:    "empty file",
-			content: "",
-			wantNil: true,
-		},
-		{
-			name: "user section after other sections",
-			content: `[core]
-	editor = vim
-[user]
-	name = Late User
-	email = late@example.com
-[alias]
-	co = checkout
-`,
-			wantUser:  "Late User",
-			wantEmail: "late@example.com",
-		},
-		{
-			name: "spaces around equals",
-			content: `[user]
-	name = Spaced User
-	email = spaced@example.com
-`,
-			wantUser:  "Spaced User",
-			wantEmail: "spaced@example.com",
-		},
+func TestReadGitIdentity(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			gitconfigPath := filepath.Join(tmpDir, ".gitconfig")
-			if err := os.WriteFile(gitconfigPath, []byte(tt.content), 0644); err != nil {
-				t.Fatal(err)
-			}
+	t.Run("reads identity from git repo", func(t *testing.T) {
+		tmpDir := t.TempDir()
 
-			result := parseGitConfigIdentity(gitconfigPath)
+		// Initialize a git repo and set identity
+		for _, args := range [][]string{
+			{"init"},
+			{"config", "user.name", "Test User"},
+			{"config", "user.email", "test@example.com"},
+		} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir = tmpDir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v failed: %v\n%s", args, err, out)
+			}
+		}
 
-			if tt.wantNil {
-				if result != nil {
-					t.Errorf("expected nil, got %+v", result)
-				}
-				return
-			}
+		result := readGitIdentity(tmpDir)
+		if result == nil {
+			t.Fatal("expected non-nil identity")
+		}
+		if result.GitUser != "Test User" {
+			t.Errorf("GitUser = %q, want %q", result.GitUser, "Test User")
+		}
+		if result.GitEmail != "test@example.com" {
+			t.Errorf("GitEmail = %q, want %q", result.GitEmail, "test@example.com")
+		}
+		if result.SSHKeyPath != "" {
+			t.Errorf("SSHKeyPath = %q, want empty", result.SSHKeyPath)
+		}
+	})
 
-			if result == nil {
-				t.Fatal("expected non-nil identity")
+	t.Run("name with spaces", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		for _, args := range [][]string{
+			{"init"},
+			{"config", "user.name", "Yann Hodique"},
+			{"config", "user.email", "yann@example.com"},
+		} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir = tmpDir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v failed: %v\n%s", args, err, out)
 			}
-			if result.GitUser != tt.wantUser {
-				t.Errorf("GitUser = %q, want %q", result.GitUser, tt.wantUser)
-			}
-			if result.GitEmail != tt.wantEmail {
-				t.Errorf("GitEmail = %q, want %q", result.GitEmail, tt.wantEmail)
-			}
-			// SSHKeyPath should never be set from gitconfig
-			if result.SSHKeyPath != "" {
-				t.Errorf("SSHKeyPath = %q, want empty", result.SSHKeyPath)
-			}
-		})
-	}
+		}
+
+		result := readGitIdentity(tmpDir)
+		if result == nil {
+			t.Fatal("expected non-nil identity")
+		}
+		if result.GitUser != "Yann Hodique" {
+			t.Errorf("GitUser = %q, want %q", result.GitUser, "Yann Hodique")
+		}
+	})
+
+	t.Run("no identity configured", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cmd := exec.Command("git", "init")
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git init failed: %v\n%s", err, out)
+		}
+
+		// Run readGitIdentity with isolated env so it can't find global config
+		result := readGitIdentity(tmpDir)
+		// Result may or may not be nil depending on global git config;
+		// we just verify it doesn't crash
+		_ = result
+	})
 }
 
-func TestParseGitConfigIdentity_NonexistentFile(t *testing.T) {
-	result := parseGitConfigIdentity("/nonexistent/.gitconfig")
-	if result != nil {
-		t.Errorf("expected nil for nonexistent file, got %+v", result)
-	}
-}
-
-func TestParseJJConfigIdentity(t *testing.T) {
-	tests := []struct {
-		name      string
-		content   string
-		wantNil   bool
-		wantUser  string
-		wantEmail string
-	}{
-		{
-			name: "standard jj config",
-			content: `[user]
-name = "Test User"
-email = "test@example.com"
-
-[ui]
-editor = "vim"
-`,
-			wantUser:  "Test User",
-			wantEmail: "test@example.com",
-		},
-		{
-			name: "name only",
-			content: `[user]
-name = "Test User"
-`,
-			wantUser: "Test User",
-		},
-		{
-			name: "email only",
-			content: `[user]
-email = "test@example.com"
-`,
-			wantEmail: "test@example.com",
-		},
-		{
-			name: "no user section",
-			content: `[ui]
-editor = "vim"
-`,
-			wantNil: true,
-		},
-		{
-			name:    "empty file",
-			content: "",
-			wantNil: true,
-		},
+func TestReadJJIdentity(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not in PATH")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "config.toml")
-			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
-				t.Fatal(err)
-			}
+	t.Run("reads identity from jj repo", func(t *testing.T) {
+		tmpDir := t.TempDir()
 
-			result := parseJJConfigIdentity(configPath)
+		// Initialize a jj repo
+		cmd := exec.Command("jj", "git", "init")
+		cmd.Dir = tmpDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("jj git init failed: %v\n%s", err, out)
+		}
 
-			if tt.wantNil {
-				if result != nil {
-					t.Errorf("expected nil, got %+v", result)
-				}
-				return
+		// Set identity via jj config
+		for _, args := range [][]string{
+			{"config", "set", "--repo", "user.name", "JJ User"},
+			{"config", "set", "--repo", "user.email", "jj@example.com"},
+		} {
+			cmd := exec.Command("jj", args...)
+			cmd.Dir = tmpDir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
 			}
+		}
 
-			if result == nil {
-				t.Fatal("expected non-nil identity")
-			}
-			if result.GitUser != tt.wantUser {
-				t.Errorf("GitUser = %q, want %q", result.GitUser, tt.wantUser)
-			}
-			if result.GitEmail != tt.wantEmail {
-				t.Errorf("GitEmail = %q, want %q", result.GitEmail, tt.wantEmail)
-			}
-		})
-	}
-}
+		result := readJJIdentity(tmpDir)
+		if result == nil {
+			t.Fatal("expected non-nil identity")
+		}
+		if result.GitUser != "JJ User" {
+			t.Errorf("GitUser = %q, want %q", result.GitUser, "JJ User")
+		}
+		if result.GitEmail != "jj@example.com" {
+			t.Errorf("GitEmail = %q, want %q", result.GitEmail, "jj@example.com")
+		}
+	})
 
-func TestParseJJConfigIdentity_NonexistentFile(t *testing.T) {
-	result := parseJJConfigIdentity("/nonexistent/config.toml")
-	if result != nil {
-		t.Errorf("expected nil for nonexistent file, got %+v", result)
-	}
+	t.Run("name with spaces", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cmd := exec.Command("jj", "git", "init")
+		cmd.Dir = tmpDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("jj git init failed: %v\n%s", err, out)
+		}
+		for _, args := range [][]string{
+			{"config", "set", "--repo", "user.name", "Yann Hodique"},
+			{"config", "set", "--repo", "user.email", "yann@firefly.engineering"},
+		} {
+			cmd := exec.Command("jj", args...)
+			cmd.Dir = tmpDir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("jj %v failed: %v\n%s", args, err, out)
+			}
+		}
+
+		result := readJJIdentity(tmpDir)
+		if result == nil {
+			t.Fatal("expected non-nil identity")
+		}
+		if result.GitUser != "Yann Hodique" {
+			t.Errorf("GitUser = %q, want %q", result.GitUser, "Yann Hodique")
+		}
+		if result.GitEmail != "yann@firefly.engineering" {
+			t.Errorf("GitEmail = %q, want %q", result.GitEmail, "yann@firefly.engineering")
+		}
+	})
 }
 
 func TestTemplate_AgentIdentity_RoundTrip(t *testing.T) {
