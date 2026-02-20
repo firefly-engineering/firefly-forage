@@ -130,9 +130,8 @@ func (r *NspawnRuntime) Destroy(ctx context.Context, name string) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		// Ignore errors if container doesn't exist
-		logging.Debug("destroy returned error (may be expected)", "error", err, "stderr", stderr.String())
-		return nil
+		return fmt.Errorf("extra-container destroy %s: %w (stderr: %s)",
+			containerName, err, strings.TrimSpace(stderr.String()))
 	}
 
 	return nil

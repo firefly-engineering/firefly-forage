@@ -64,17 +64,12 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 	name := metadata.Name
 	logging.Debug("cleaning up sandbox", "name", name)
 
-	// Destroy container if requested and running
+	// Destroy container if requested (always attempt — unit file cleanup
+	// must happen even after the container has already been stopped).
 	if opts.DestroyContainer && rt != nil {
-		running, err := rt.IsRunning(context.Background(), name)
-		if err != nil {
-			logging.Warn("failed to check container status during cleanup", "name", name, "error", err)
-		}
-		if running {
-			logging.Debug("destroying container", "name", name)
-			if err := rt.Destroy(context.Background(), name); err != nil {
-				logging.Warn("container destroy failed during cleanup", "name", name, "error", err)
-			}
+		logging.Debug("destroying container", "name", name)
+		if err := rt.Destroy(context.Background(), name); err != nil {
+			logging.Warn("container destroy failed during cleanup", "name", name, "error", err)
 		}
 	}
 
