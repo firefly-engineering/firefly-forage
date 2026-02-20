@@ -257,4 +257,3 @@ func TestWeztermPromptInstructions(t *testing.T) {
 		t.Errorf("PromptInstructions() = %q, should mention wezterm", instructions)
 	}
 }
-

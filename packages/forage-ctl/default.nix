@@ -1,6 +1,8 @@
 {
   lib,
   buildGoModule,
+  git,
+  jujutsu,
 }:
 
 buildGoModule {
@@ -9,10 +11,16 @@ buildGoModule {
 
   src = ./.;
 
-  vendorHash = "sha256-ojEUcSqsn23kdyuGG1ApnM7n+V3hLRvjwjb3CKWFjok=";
+  vendorHash = "sha256-hYiqXFi52Z165W+L9KEPkiQB/ddhZBM7cxIGURGYuVE=";
 
   # Disable CGO for static build
   env.CGO_ENABLED = "0";
+
+  # Tests shell out to git and jj for config parsing and workspace operations
+  nativeCheckInputs = [
+    git
+    jujutsu
+  ];
 
   meta = with lib; {
     description = "Firefly Forage sandbox management CLI";

@@ -65,8 +65,8 @@ const (
 	// New sandboxes use ContainerNameForSlot() for short names ("f<slot>").
 	// Kept for backward compatibility with existing sandboxes via ResolvedContainerName().
 	ContainerPrefix = "forage-"
-	TmuxSessionName   = "forage"
-	MuxSessionName    = TmuxSessionName // alias for new code
+	TmuxSessionName = "forage"
+	MuxSessionName  = TmuxSessionName // alias for new code
 )
 
 // AgentIdentity holds optional git authorship and SSH key configuration
@@ -193,11 +193,11 @@ type HostConfig struct {
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsPath        string            `json:"nixpkgsPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
-	ProxyURL           string            `json:"proxyUrl,omitempty"`            // URL of the forage-proxy server
-	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"`       // Host-level default agent identity
-	ContainerUsername  string            `json:"containerUsername,omitempty"`    // Container username (default: "agent")
-	WorkspacePath      string            `json:"workspacePath,omitempty"`       // Container workspace path (default: "/workspace")
-	StateVersion       string            `json:"stateVersion,omitempty"`        // NixOS state version (default: "24.11")
+	ProxyURL           string            `json:"proxyUrl,omitempty"`          // URL of the forage-proxy server
+	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"`     // Host-level default agent identity
+	ContainerUsername  string            `json:"containerUsername,omitempty"` // Container username (default: "agent")
+	WorkspacePath      string            `json:"workspacePath,omitempty"`     // Container workspace path (default: "/workspace")
+	StateVersion       string            `json:"stateVersion,omitempty"`      // NixOS state version (default: "24.11")
 }
 
 // ResolvedContainerUsername returns the container username, defaulting to "agent".

@@ -61,4 +61,3 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	return syscall.Exec(sshPath, sshArgs, system.SafeEnviron())
 }
-

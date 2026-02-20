@@ -10,7 +10,6 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/tui"
-
 )
 
 var pickCmd = &cobra.Command{

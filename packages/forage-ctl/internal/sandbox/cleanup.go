@@ -156,4 +156,3 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 		}
 	}
 }
-
