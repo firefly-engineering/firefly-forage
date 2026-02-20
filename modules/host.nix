@@ -52,15 +52,13 @@ let
   patchedExtraContainer =
     extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
       (old: {
-        buildCommand =
-          old.buildCommand
-          + ''
-            substituteInPlace $out/share/extra-container/eval-config.nix \
-              --replace-warn \
-                'system.requiredKernelConfig = dummy;' \
-                'system.nixos-init.package = optionValue pkgs.hello;
-                  system.requiredKernelConfig = dummy;'
-          '';
+        buildCommand = old.buildCommand + ''
+          substituteInPlace $out/share/extra-container/eval-config.nix \
+            --replace-warn \
+              'system.requiredKernelConfig = dummy;' \
+              'system.nixos-init.package = optionValue pkgs.hello;
+                system.requiredKernelConfig = dummy;'
+        '';
       });
 
   # Agent definition type
