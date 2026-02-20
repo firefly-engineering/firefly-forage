@@ -433,26 +433,44 @@ func TestListSandboxes_NonexistentDir(t *testing.T) {
 func TestSafePath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	tests := []struct {
-		name    string
-		base    string
-		fname   string
-		suffix  string
-		wantErr bool
+	// Valid names should resolve within the base directory
+	for _, tt := range []struct {
+		name   string
+		fname  string
+		suffix string
 	}{
-		{"valid name", tmpDir, "sandbox1", ".json", false},
-		{"valid with dash", tmpDir, "my-sandbox", ".json", false},
-		{"path traversal", tmpDir, "../escape", ".json", true},
-		{"deep traversal", tmpDir, "../../etc/passwd", "", true},
-		{"absolute escape", tmpDir, "/etc/passwd", "", true},
+		{"valid name", "sandbox1", ".json"},
+		{"valid with dash", "my-sandbox", ".json"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := safePath(tmpDir, tt.fname, tt.suffix)
+			if err != nil {
+				t.Errorf("safePath(%q, %q, %q) unexpected error: %v", tmpDir, tt.fname, tt.suffix, err)
+			}
+			if !strings.HasPrefix(result, tmpDir) {
+				t.Errorf("safePath result %q escapes base %q", result, tmpDir)
+			}
+		})
 	}
 
-	for _, tt := range tests {
+	// Traversal attempts are resolved safely within the base (securejoin)
+	for _, tt := range []struct {
+		name   string
+		fname  string
+		suffix string
+	}{
+		{"path traversal", "../escape", ".json"},
+		{"deep traversal", "../../etc/passwd", ""},
+		{"absolute escape", "/etc/passwd", ""},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := safePath(tt.base, tt.fname, tt.suffix)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("safePath(%q, %q, %q) error = %v, wantErr %v",
-					tt.base, tt.fname, tt.suffix, err, tt.wantErr)
+			result, err := safePath(tmpDir, tt.fname, tt.suffix)
+			if err != nil {
+				return // error is also acceptable
+			}
+			// securejoin resolves traversals within the base — verify the result is contained
+			if !strings.HasPrefix(result, tmpDir) {
+				t.Errorf("safePath(%q, %q, %q) = %q escapes base directory", tmpDir, tt.fname, tt.suffix, result)
 			}
 		})
 	}

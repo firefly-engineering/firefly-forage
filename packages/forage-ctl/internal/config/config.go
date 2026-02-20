@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // IsSandboxMetadataFile returns true if the filename is a valid sandbox metadata file.
@@ -47,46 +49,20 @@ func ValidateSandboxName(name string) error {
 
 // safePath validates that a constructed path stays within the base directory.
 // This prevents path traversal attacks where names like "../../../etc/passwd"
-// could escape the intended directory.
+// could escape the intended directory. Uses filepath-securejoin (the library
+// used by Docker/runc) which resolves symlinks and evaluates ".." safely.
 func safePath(baseDir, name, suffix string) (string, error) {
-	// Reject absolute paths in name
-	if filepath.IsAbs(name) {
-		return "", fmt.Errorf("name cannot be an absolute path")
-	}
-
-	// Reject names containing path separators
-	if filepath.Dir(name) != "." {
-		return "", fmt.Errorf("name cannot contain path separators")
-	}
-
-	// Construct the path
-	path := filepath.Join(baseDir, name+suffix)
-
-	// Get absolute paths for comparison
-	absBase, err := filepath.Abs(baseDir)
-	if err != nil {
-		return "", fmt.Errorf("invalid base directory: %w", err)
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-
-	// Ensure the resolved path is within the base directory
-	// Add separator to prevent prefix matching (e.g., /var/lib/forage vs /var/lib/forage-evil)
-	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
-		return "", fmt.Errorf("path escapes base directory")
-	}
-
-	return path, nil
+	return securejoin.SecureJoin(baseDir, name+suffix)
 }
 
 const (
 	DefaultConfigDir  = "/etc/firefly-forage"
 	DefaultStateDir   = "/var/lib/firefly-forage"
 	DefaultSecretsDir = "/run/forage-secrets"
-	ContainerPrefix   = "forage-"
+	// ContainerPrefix is used for legacy sandbox container names ("forage-<name>").
+	// New sandboxes use ContainerNameForSlot() for short names ("f<slot>").
+	// Kept for backward compatibility with existing sandboxes via ResolvedContainerName().
+	ContainerPrefix = "forage-"
 	TmuxSessionName   = "forage"
 	MuxSessionName    = TmuxSessionName // alias for new code
 )

@@ -43,8 +43,7 @@ func (n *NixReproducibility) BasePackages() []injection.Package {
 // If Version is empty, returns "pkgs.{Name}".
 // If Version is set, attempts to resolve to a versioned package.
 func (n *NixReproducibility) ResolvePackage(pkg injection.Package) (string, error) {
-	// Normalize package name for Nix (replace hyphens with underscores in some cases)
-	nixName := normalizeNixPackageName(pkg.Name)
+	nixName := pkg.Name
 
 	if pkg.Version == "" {
 		return "pkgs." + nixName, nil
@@ -55,22 +54,6 @@ func (n *NixReproducibility) ResolvePackage(pkg injection.Package) (string, erro
 	// is more complex and may require different strategies per package.
 	versionedName := fmt.Sprintf("%s_%s", nixName, normalizeVersion(pkg.Version))
 	return "pkgs." + versionedName, nil
-}
-
-// normalizeNixPackageName normalizes a package name for Nix.
-// Most packages use their canonical names, but some need adjustment.
-func normalizeNixPackageName(name string) string {
-	// Special cases for packages with different Nix names
-	switch name {
-	case "jujutsu":
-		return "jujutsu"
-	case "ripgrep":
-		return "ripgrep"
-	case "fd":
-		return "fd"
-	default:
-		return name
-	}
 }
 
 // normalizeVersion normalizes a version string for use in Nix package names.
