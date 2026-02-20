@@ -80,7 +80,7 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 
 	// Clean up workspace if using a VCS backend
 	if opts.CleanupWorkspace && metadata.SourceRepo != "" {
-		backend := workspaceBackendForMode(metadata.WorkspaceMode)
+		backend := workspace.BackendForMode(metadata.WorkspaceMode)
 		if backend != nil {
 			logging.Debug("cleaning up workspace",
 				"backend", backend.Name(),
@@ -157,14 +157,3 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 	}
 }
 
-// workspaceBackendForMode returns the workspace backend for a given mode string.
-func workspaceBackendForMode(mode string) workspace.Backend {
-	switch mode {
-	case "jj":
-		return workspace.JJ()
-	case "git-worktree":
-		return workspace.Git()
-	default:
-		return nil
-	}
-}

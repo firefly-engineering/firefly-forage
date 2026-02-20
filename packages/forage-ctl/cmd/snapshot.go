@@ -49,13 +49,8 @@ func getSnapshotterForSandbox(metadata *config.SandboxMetadata) (workspace.Snaps
 		return nil, fmt.Errorf("snapshots are not available in direct workspace mode (no VCS backend)")
 	}
 
-	var backend workspace.Backend
-	switch metadata.WorkspaceMode {
-	case "jj":
-		backend = workspace.JJ()
-	case "git-worktree":
-		backend = workspace.Git()
-	default:
+	backend := workspace.BackendForMode(metadata.WorkspaceMode)
+	if backend == nil {
 		return nil, fmt.Errorf("unknown workspace mode: %s", metadata.WorkspaceMode)
 	}
 

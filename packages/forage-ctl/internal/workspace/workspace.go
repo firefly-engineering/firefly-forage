@@ -84,6 +84,19 @@ type SnapshotInfo struct {
 // snapshotPrefix is the naming prefix for snapshot bookmarks/tags.
 const snapshotPrefix = "forage-snap-"
 
+// BackendForMode returns the workspace backend for a given mode string.
+// Returns nil for "direct" or unrecognized modes.
+func BackendForMode(mode string) Backend {
+	switch mode {
+	case "jj":
+		return JJ()
+	case "git-worktree":
+		return Git()
+	default:
+		return nil
+	}
+}
+
 // WorkspaceInfo contains information about a created workspace
 type WorkspaceInfo struct {
 	// Path is the filesystem path to the workspace

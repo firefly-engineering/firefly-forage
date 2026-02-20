@@ -71,12 +71,5 @@ type CreateResult struct {
 
 // workspaceBackendFor returns the appropriate workspace backend for a mode.
 func workspaceBackendFor(mode WorkspaceMode) workspace.Backend {
-	switch mode {
-	case WorkspaceModeJJ:
-		return workspace.JJ()
-	case WorkspaceModeGitWorktree:
-		return workspace.Git()
-	default:
-		return nil
-	}
+	return workspace.BackendForMode(string(mode))
 }
