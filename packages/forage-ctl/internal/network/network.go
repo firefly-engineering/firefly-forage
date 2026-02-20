@@ -93,144 +93,40 @@ func GenerateNftablesRules(cfg *Config) string {
 		}
 	}
 
-	// Gateway IP for the container
 	gatewayIP := fmt.Sprintf("10.100.%d.1", cfg.NetworkSlot)
-
-	// Build nftables ruleset
-	var rules strings.Builder
-
-	rules.WriteString(`#!/usr/sbin/nft -f
-
-# Flush existing rules
-flush ruleset
-
-table inet filter {
-  # Set of allowed IPv4 addresses
-  set allowed_ipv4 {
-    type ipv4_addr
-    flags interval
-    elements = { `)
-
-	// Add gateway and resolved IPs
-	ipv4Set := []string{gatewayIP}
-	ipv4Set = append(ipv4Set, ipv4Addrs...)
-	// Add common infrastructure IPs (DNS, etc.)
+	ipv4Set := append([]string{gatewayIP}, ipv4Addrs...)
 	ipv4Set = append(ipv4Set, "127.0.0.1")
 
-	rules.WriteString(strings.Join(ipv4Set, ", "))
-	rules.WriteString(` }
-  }
+	ipv6Set := []string{"::1"}
+	ipv6Set = append(ipv6Set, ipv6Addrs...)
 
-  # Set of allowed IPv6 addresses
-  set allowed_ipv6 {
-    type ipv6_addr
-    flags interval
-    elements = { ::1`)
-
-	if len(ipv6Addrs) > 0 {
-		rules.WriteString(", ")
-		rules.WriteString(strings.Join(ipv6Addrs, ", "))
-	}
-
-	rules.WriteString(` }
-  }
-
-  chain input {
-    type filter hook input priority 0; policy accept;
-  }
-
-  chain forward {
-    type filter hook forward priority 0; policy accept;
-  }
-
-  chain output {
-    type filter hook output priority 0; policy drop;
-
-    # Allow loopback
-    oif "lo" accept
-
-    # Allow established/related connections
-    ct state established,related accept
-
-    # Allow ICMP for diagnostics
-    ip protocol icmp accept
-    ip6 nexthdr icmpv6 accept
-
-    # Allow DNS to local resolver only (localhost)
-    tcp dport 53 ip daddr 127.0.0.1 accept
-    udp dport 53 ip daddr 127.0.0.1 accept
-
-    # Allow connections to allowed IPv4 addresses
-    ip daddr @allowed_ipv4 accept
-
-    # Allow connections to allowed IPv6 addresses
-    ip6 daddr @allowed_ipv6 accept
-
-    # Log and reject everything else
-    log prefix "forage-blocked: " level info
-    reject with icmp type admin-prohibited
-  }
-}
-`)
-
-	return rules.String()
+	var buf strings.Builder
+	_ = nftablesTmpl.Execute(&buf, nftablesData{
+		IPv4Addrs: strings.Join(ipv4Set, ", "),
+		IPv6Addrs: strings.Join(ipv6Set, ", "),
+	})
+	return buf.String()
 }
 
 // GenerateDnsmasqConfig generates dnsmasq configuration for DNS filtering
 func GenerateDnsmasqConfig(allowedHosts []string) string {
-	var config strings.Builder
-
-	config.WriteString(`# Forage DNS filtering configuration
-# Only resolve allowed hosts, block everything else
-
-# Don't read /etc/resolv.conf
-no-resolv
-
-# Don't read /etc/hosts
-no-hosts
-
-# Listen only on localhost
-listen-address=127.0.0.1
-bind-interfaces
-
-# Port
-port=53
-
-# Upstream DNS servers for allowed domains
-`)
-
-	// For each allowed host, forward to public DNS
+	var serverLines strings.Builder
 	for _, host := range allowedHosts {
-		// Handle wildcards (e.g., *.anthropic.com)
 		if strings.HasPrefix(host, "*.") {
 			domain := strings.TrimPrefix(host, "*.")
-			config.WriteString(fmt.Sprintf("server=/%s/1.1.1.1\n", domain))
-			config.WriteString(fmt.Sprintf("server=/%s/8.8.8.8\n", domain))
+			fmt.Fprintf(&serverLines, "server=/%s/1.1.1.1\n", domain)
+			fmt.Fprintf(&serverLines, "server=/%s/8.8.8.8\n", domain)
 		} else {
-			// For specific hosts, we need to extract the domain
-			config.WriteString(fmt.Sprintf("server=/%s/1.1.1.1\n", host))
-			config.WriteString(fmt.Sprintf("server=/%s/8.8.8.8\n", host))
+			fmt.Fprintf(&serverLines, "server=/%s/1.1.1.1\n", host)
+			fmt.Fprintf(&serverLines, "server=/%s/8.8.8.8\n", host)
 		}
 	}
 
-	config.WriteString(`
-# Block all other DNS queries by returning NXDOMAIN
-address=/#/
-
-# Cache settings
-cache-size=1000
-
-# Log queries (optional, useful for debugging)
-# log-queries
-
-# Don't forward plain names (without dots)
-domain-needed
-
-# Never forward addresses in non-routed address spaces
-bogus-priv
-`)
-
-	return config.String()
+	var buf strings.Builder
+	_ = dnsmasqTmpl.Execute(&buf, dnsmasqData{
+		ServerLines: serverLines.String(),
+	})
+	return buf.String()
 }
 
 // GenerateNixNetworkConfig generates NixOS configuration for network isolation
