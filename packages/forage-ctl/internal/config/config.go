@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
@@ -133,42 +135,27 @@ func ReadHostUserGitIdentity(username string) *AgentIdentity {
 }
 
 // parseGitConfigIdentity extracts user.name and user.email from a git config file.
-// Uses a simple INI parser to avoid requiring git at runtime.
+// Shells out to `git config --file` which handles includes, conditionals, and all
+// edge cases correctly. Returns nil if git is not in PATH or the file has no user section.
 func parseGitConfigIdentity(path string) *AgentIdentity {
-	data, err := os.ReadFile(path)
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+
+	gitBin, err := exec.LookPath("git")
 	if err != nil {
 		return nil
 	}
 
+	getName := exec.Command(gitBin, "config", "--file", path, "--get", "user.name")
+	getEmail := exec.Command(gitBin, "config", "--file", path, "--get", "user.email")
+
 	var gitUser, gitEmail string
-	inUserSection := false
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			// Normalize section header: [user] or [USER] etc.
-			inUserSection = strings.EqualFold(strings.TrimRight(strings.TrimLeft(line, "["), "]"), "user")
-			continue
-		}
-		if !inUserSection {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		// Git config values may be quoted
-		val = strings.Trim(val, `"`)
-		switch strings.ToLower(key) {
-		case "name":
-			gitUser = val
-		case "email":
-			gitEmail = val
-		}
+	if out, err := getName.Output(); err == nil {
+		gitUser = strings.TrimSpace(string(out))
+	}
+	if out, err := getEmail.Output(); err == nil {
+		gitEmail = strings.TrimSpace(string(out))
 	}
 
 	if gitUser == "" && gitEmail == "" {
@@ -179,46 +166,20 @@ func parseGitConfigIdentity(path string) *AgentIdentity {
 
 // parseJJConfigIdentity extracts user.name and user.email from a jj config file (TOML format).
 func parseJJConfigIdentity(path string) *AgentIdentity {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	var cfg struct {
+		User struct {
+			Name  string `toml:"name"`
+			Email string `toml:"email"`
+		} `toml:"user"`
+	}
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil
 	}
 
-	var jjUser, jjEmail string
-	inUserSection := false
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "[user]" {
-			inUserSection = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			inUserSection = false
-			continue
-		}
-		if !inUserSection {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		// TOML strings are quoted
-		val = strings.Trim(val, `"'`)
-		switch key {
-		case "name":
-			jjUser = val
-		case "email":
-			jjEmail = val
-		}
-	}
-
-	if jjUser == "" && jjEmail == "" {
+	if cfg.User.Name == "" && cfg.User.Email == "" {
 		return nil
 	}
-	return &AgentIdentity{GitUser: jjUser, GitEmail: jjEmail}
+	return &AgentIdentity{GitUser: cfg.User.Name, GitEmail: cfg.User.Email}
 }
 
 // HostConfig represents the host configuration from config.json

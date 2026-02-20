@@ -963,6 +963,91 @@ func TestParseGitConfigIdentity_NonexistentFile(t *testing.T) {
 	}
 }
 
+func TestParseJJConfigIdentity(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantNil   bool
+		wantUser  string
+		wantEmail string
+	}{
+		{
+			name: "standard jj config",
+			content: `[user]
+name = "Test User"
+email = "test@example.com"
+
+[ui]
+editor = "vim"
+`,
+			wantUser:  "Test User",
+			wantEmail: "test@example.com",
+		},
+		{
+			name: "name only",
+			content: `[user]
+name = "Test User"
+`,
+			wantUser: "Test User",
+		},
+		{
+			name: "email only",
+			content: `[user]
+email = "test@example.com"
+`,
+			wantEmail: "test@example.com",
+		},
+		{
+			name: "no user section",
+			content: `[ui]
+editor = "vim"
+`,
+			wantNil: true,
+		},
+		{
+			name:    "empty file",
+			content: "",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.toml")
+			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			result := parseJJConfigIdentity(configPath)
+
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("expected nil, got %+v", result)
+				}
+				return
+			}
+
+			if result == nil {
+				t.Fatal("expected non-nil identity")
+			}
+			if result.GitUser != tt.wantUser {
+				t.Errorf("GitUser = %q, want %q", result.GitUser, tt.wantUser)
+			}
+			if result.GitEmail != tt.wantEmail {
+				t.Errorf("GitEmail = %q, want %q", result.GitEmail, tt.wantEmail)
+			}
+		})
+	}
+}
+
+func TestParseJJConfigIdentity_NonexistentFile(t *testing.T) {
+	result := parseJJConfigIdentity("/nonexistent/config.toml")
+	if result != nil {
+		t.Errorf("expected nil for nonexistent file, got %+v", result)
+	}
+}
+
 func TestTemplate_AgentIdentity_RoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
