@@ -194,13 +194,13 @@ func TestHostConfig_Secrets(t *testing.T) {
 		t.Fatalf("Failed to load host config: %v", err)
 	}
 
-	secret, ok := cfg.Secrets["anthropic"]
+	secretPath, ok := cfg.Secrets["anthropic"]
 	if !ok {
 		t.Error("Secret 'anthropic' should exist")
 	}
 
-	if secret != "sk-test" {
-		t.Errorf("Secret = %q, want %q", secret, "sk-test")
+	if !filepath.IsAbs(secretPath) {
+		t.Errorf("Secret path should be absolute, got %q", secretPath)
 	}
 }
 

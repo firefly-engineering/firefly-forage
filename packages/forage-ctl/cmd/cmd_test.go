@@ -47,13 +47,19 @@ func setupTestEnv(t *testing.T) *testEnv {
 		}
 	}
 
+	// Create a secret file for testing
+	secretFile := filepath.Join(tmpDir, "secret-anthropic")
+	if err := os.WriteFile(secretFile, []byte("sk-test"), 0600); err != nil {
+		t.Fatalf("Failed to write test secret file: %v", err)
+	}
+
 	// Create host config
 	hostConfig := &config.HostConfig{
 		User:               "testuser",
 		UID:                1000,
 		GID:                100,
 		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
-		Secrets:            map[string]string{"anthropic": "sk-test"},
+		Secrets:            map[string]string{"anthropic": secretFile},
 		StateDir:           env.stateDir,
 		ExtraContainerPath: "/fake/extra-container",
 		NixpkgsRev:         "test123",

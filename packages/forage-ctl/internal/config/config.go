@@ -251,7 +251,7 @@ type HostConfig struct {
 	UID                int               `json:"uid"` // Host user's UID
 	GID                int               `json:"gid"` // Host user's GID
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
-	Secrets            map[string]string `json:"secrets"`
+	Secrets            map[string]string `json:"secrets"` // Secret name -> file path containing the secret
 	StateDir           string            `json:"stateDir"`
 	ExtraContainerPath string            `json:"extraContainerPath"`
 	NixpkgsPath        string            `json:"nixpkgsPath"`

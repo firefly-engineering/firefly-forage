@@ -4,8 +4,8 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample test@example.com"
   ],
   "secrets": {
-    "anthropic-api-key": "sk-ant-test-key-12345",
-    "openai-api-key": "sk-test-openai-key"
+    "anthropic-api-key": "/run/secrets/anthropic-api-key",
+    "openai-api-key": "/run/secrets/openai-api-key"
   },
   "stateDir": "/var/lib/firefly-forage",
   "extraContainerPath": "/nix/store/abc123-extra-container/bin/extra-container",

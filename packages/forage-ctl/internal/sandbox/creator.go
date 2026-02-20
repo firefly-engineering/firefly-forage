@@ -377,7 +377,7 @@ func (c *Creator) templateHasSecrets(template *config.Template) bool {
 	return false
 }
 
-// setupSecrets copies secrets to the sandbox secrets directory.
+// setupSecrets reads secrets from host file paths and writes them to the sandbox secrets directory.
 func (c *Creator) setupSecrets(secretsPath string, template *config.Template) error {
 	if err := os.MkdirAll(secretsPath, 0700); err != nil {
 		return err
@@ -388,14 +388,19 @@ func (c *Creator) setupSecrets(secretsPath string, template *config.Template) er
 			continue
 		}
 
-		secretValue, ok := c.hostConfig.Secrets[agent.SecretName]
+		secretSourcePath, ok := c.hostConfig.Secrets[agent.SecretName]
 		if !ok {
 			logging.Debug("secret not found in host config", "secret", agent.SecretName)
 			continue
 		}
 
+		secretData, err := os.ReadFile(secretSourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read secret %s from %s: %w", agent.SecretName, secretSourcePath, err)
+		}
+
 		secretFile := filepath.Join(secretsPath, agent.SecretName)
-		if err := os.WriteFile(secretFile, []byte(secretValue), 0600); err != nil {
+		if err := os.WriteFile(secretFile, secretData, 0600); err != nil {
 			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
 		}
 		logging.Debug("secret written", "secret", agent.SecretName)
