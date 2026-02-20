@@ -51,6 +51,14 @@ const (
 	WorkspaceModeGitWorktree WorkspaceMode = "git-worktree"
 )
 
+// InitCommandResult holds the results of running init commands.
+type InitCommandResult struct {
+	TemplateCommandsRun int
+	TemplateWarnings    []string
+	ProjectInitRun      bool
+	ProjectInitWarning  string
+}
+
 // CreateResult holds the result of a successful sandbox creation.
 type CreateResult struct {
 	// Name is the sandbox name
@@ -67,6 +75,9 @@ type CreateResult struct {
 
 	// CapabilityWarnings lists features the runtime doesn't support
 	CapabilityWarnings []string
+
+	// InitResult holds the results of running init commands
+	InitResult *InitCommandResult
 }
 
 // workspaceBackendFor returns the appropriate workspace backend for a mode.
