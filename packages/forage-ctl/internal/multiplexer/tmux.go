@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	shellquote "github.com/kballard/go-shellquote"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/terminal"
 )
@@ -25,12 +27,6 @@ func (t *Tmux) Type() Type { return TypeTmux }
 
 func (t *Tmux) NixPackages() []string { return []string{"tmux"} }
 
-// shellQuote returns a single-quoted shell string, escaping any embedded
-// single quotes using the '\” idiom.
-func shellQuote(s string) string {
-	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
-}
-
 func (t *Tmux) InitScript(windows []Window) string {
 	var sb strings.Builder
 	for i, w := range windows {
@@ -43,7 +39,7 @@ func (t *Tmux) InitScript(windows []Window) string {
 		// Without this, tmux -CC control mode causes wezterm tab title flicker.
 		fmt.Fprintf(&sb, "              tmux set-option -w -t %s:%s automatic-rename off\n", SessionName, w.Name)
 		if w.Command != "" {
-			fmt.Fprintf(&sb, "              tmux send-keys -t %s:%s %s Enter\n", SessionName, w.Name, shellQuote(w.Command))
+			fmt.Fprintf(&sb, "              tmux send-keys -t %s:%s %s Enter\n", SessionName, w.Name, shellquote.Join(w.Command))
 		}
 	}
 	sb.WriteString("              true")

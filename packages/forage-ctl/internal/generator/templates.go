@@ -4,6 +4,8 @@ import (
 	"strings"
 	"text/template"
 
+	shellquote "github.com/kballard/go-shellquote"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 )
 
@@ -61,15 +63,6 @@ func nixEscape(s string) string {
 	s = strings.ReplaceAll(s, `"`, `\"`)
 	s = strings.ReplaceAll(s, "${", "\\${")
 	return s
-}
-
-// shellQuote wraps a string in double quotes with proper escaping for bash.
-func shellQuote(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "`", "\\`")
-	s = strings.ReplaceAll(s, "$", `\$`)
-	return `"` + s + `"`
 }
 
 // containerTemplate is the main Go template for generating NixOS container configurations.
@@ -247,9 +240,11 @@ var containerTemplate *template.Template
 
 func init() {
 	funcs := template.FuncMap{
-		"nixBool":    nixBool,
-		"nixEscape":  nixEscape,
-		"shellQuote": shellQuote,
+		"nixBool":   nixBool,
+		"nixEscape": nixEscape,
+		"shellQuote": func(s string) string {
+			return shellquote.Join(s)
+		},
 	}
 	containerTemplate = template.Must(template.New("container").Funcs(funcs).Parse(containerTemplateText))
 }

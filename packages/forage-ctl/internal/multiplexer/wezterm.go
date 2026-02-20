@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	shellquote "github.com/kballard/go-shellquote"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 )
 
@@ -21,13 +23,13 @@ func (w *Wezterm) InitScript(windows []Window) string {
 	for i, win := range windows {
 		if i == 0 {
 			// The mux server creates a default tab; set its title.
-			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellQuote(win.Name))
+			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellquote.Join(win.Name))
 		} else {
 			fmt.Fprintf(&sb, "              wezterm cli spawn --cwd /workspace\n")
-			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellQuote(win.Name))
+			fmt.Fprintf(&sb, "              wezterm cli set-tab-title %s\n", shellquote.Join(win.Name))
 		}
 		if win.Command != "" {
-			fmt.Fprintf(&sb, "              wezterm cli send-text --no-paste %s\n", shellQuote(win.Command+"\n"))
+			fmt.Fprintf(&sb, "              wezterm cli send-text --no-paste %s\n", shellquote.Join(win.Command+"\n"))
 		}
 	}
 	sb.WriteString("              true")

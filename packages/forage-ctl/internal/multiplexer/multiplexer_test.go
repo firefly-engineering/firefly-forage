@@ -57,7 +57,7 @@ func TestTmuxInitScript(t *testing.T) {
 	if !strings.Contains(script, "tmux new-session -d -s forage -c /workspace -n claude") {
 		t.Error("InitScript should create session with first window")
 	}
-	if !strings.Contains(script, "tmux send-keys -t forage:claude 'claude' Enter") {
+	if !strings.Contains(script, "tmux send-keys -t forage:claude claude Enter") {
 		t.Error("InitScript should send-keys for first window command")
 	}
 	if !strings.Contains(script, "tmux set-option -w -t forage:claude automatic-rename off") {
@@ -258,19 +258,3 @@ func TestWeztermPromptInstructions(t *testing.T) {
 	}
 }
 
-func TestShellQuote(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"hello", "'hello'"},
-		{"it's", `'it'\''s'`},
-		{"", "''"},
-	}
-	for _, tt := range tests {
-		got := shellQuote(tt.input)
-		if got != tt.want {
-			t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}

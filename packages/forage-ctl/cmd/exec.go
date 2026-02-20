@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"syscall"
 
+	shellquote "github.com/kballard/go-shellquote"
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
@@ -52,10 +53,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	// Construct the command string with all arguments quoted
-	cmdStr := shellQuote(execArgs[0])
-	for _, arg := range execArgs[1:] {
-		cmdStr += " " + shellQuote(arg)
-	}
+	cmdStr := shellquote.Join(execArgs...)
 
 	// Use SSH options builder
 	opts := ssh.DefaultOptions(metadata.ContainerIP())
@@ -64,16 +62,3 @@ func runExec(cmd *cobra.Command, args []string) error {
 	return syscall.Exec(sshPath, sshArgs, system.SafeEnviron())
 }
 
-func shellQuote(s string) string {
-	// Simple shell quoting - wrap in single quotes, escape existing single quotes
-	result := "'"
-	for _, c := range s {
-		if c == '\'' {
-			result += "'\\''"
-		} else {
-			result += string(c)
-		}
-	}
-	result += "'"
-	return result
-}

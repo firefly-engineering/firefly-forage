@@ -1062,29 +1062,6 @@ func TestNixEscape(t *testing.T) {
 	}
 }
 
-func TestShellQuote(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"plain", "hello", `"hello"`},
-		{"spaces", "Yann Hodique", `"Yann Hodique"`},
-		{"double quote", `O"Brien`, `"O\"Brien"`},
-		{"dollar sign", "$HOME", `"\$HOME"`},
-		{"backslash", `a\b`, `"a\\b"`},
-		{"backtick", "a`b", "\"a\\`b\""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := shellQuote(tt.input)
-			if got != tt.expected {
-				t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestGenerateNixConfig_IdentityEscaping(t *testing.T) {
 	cfg := validTestConfig()
 	cfg.AgentIdentity = &config.AgentIdentity{
@@ -1098,11 +1075,11 @@ func TestGenerateNixConfig_IdentityEscaping(t *testing.T) {
 	}
 
 	// The identity values should be properly escaped for Nix:
-	// shellQuote wraps in "...", nixEscape escapes the quotes for Nix context
-	if !strings.Contains(result, `user.name \"Jane Doe\"`) {
+	// shellQuote (via go-shellquote) single-quotes, nixEscape is a no-op for single-quoted strings
+	if !strings.Contains(result, `user.name 'Jane Doe'`) {
 		t.Errorf("Config should contain properly escaped user.name, got:\n%s", result)
 	}
-	if !strings.Contains(result, `user.email \"jane.doe@example.com\"`) {
+	if !strings.Contains(result, `user.email jane.doe@example.com`) {
 		t.Errorf("Config should contain properly escaped user.email, got:\n%s", result)
 	}
 }
@@ -1277,10 +1254,10 @@ func TestGenerateNixConfig_DefaultTmuxWindows(t *testing.T) {
 	if !strings.Contains(result, "new-window -t forage -n claude") {
 		t.Error("Second tmux window should be 'claude' (sorted)")
 	}
-	if !strings.Contains(result, "send-keys -t forage:aider 'aider' Enter") {
+	if !strings.Contains(result, "send-keys -t forage:aider aider Enter") {
 		t.Error("Should send-keys for aider window")
 	}
-	if !strings.Contains(result, "send-keys -t forage:claude 'claude' Enter") {
+	if !strings.Contains(result, "send-keys -t forage:claude claude Enter") {
 		t.Error("Should send-keys for claude window")
 	}
 }
@@ -1301,7 +1278,7 @@ func TestGenerateNixConfig_ExplicitTmuxWindows(t *testing.T) {
 	if !strings.Contains(result, "new-session -d -s forage -c /workspace -n claude") {
 		t.Error("First tmux window should be 'claude'")
 	}
-	if !strings.Contains(result, "send-keys -t forage:claude 'claude' Enter") {
+	if !strings.Contains(result, "send-keys -t forage:claude claude Enter") {
 		t.Error("Should send-keys for claude window")
 	}
 	// Second window: shell with no command
