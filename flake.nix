@@ -5,6 +5,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     extra-container.url = "github:erikarvstedt/extra-container";
     extra-container.inputs.nixpkgs.follows = "nixpkgs";
+    toolbox.url = "github:firefly-engineering/toolbox";
+    toolbox.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -12,6 +14,7 @@
       self,
       nixpkgs,
       extra-container,
+      toolbox,
     }:
     let
       supportedSystems = [
@@ -82,7 +85,11 @@
 
               # Task runner
               just
-            ];
+            ]
+            ++ (with toolbox.packages.${system}; [
+              beads-rust-default
+              beads-viewer-default
+            ]);
           };
         }
       );

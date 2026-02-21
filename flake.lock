@@ -58,7 +58,8 @@
     "root": {
       "inputs": {
         "extra-container": "extra-container",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "toolbox": "toolbox"
       }
     },
     "systems": {
@@ -73,6 +74,26 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "toolbox": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1771692865,
+        "narHash": "sha256-68f7tGXih2WZd5k2qxDfVGVgezEgvjKi8X6b909zQ80=",
+        "owner": "firefly-engineering",
+        "repo": "toolbox",
+        "rev": "1385986ab9025d1ebbcc27c04be40e0b21dfc9f6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "firefly-engineering",
+        "repo": "toolbox",
         "type": "github"
       }
     }
