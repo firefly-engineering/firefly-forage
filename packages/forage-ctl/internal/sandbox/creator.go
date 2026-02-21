@@ -88,7 +88,12 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Phase 3: Set up workspace
-	ws, err := c.setupWorkspace(opts)
+	var ws *workspaceSetup
+	if len(resources.template.WorkspaceMounts) > 0 {
+		ws, err = c.setupWorkspaceMounts(opts, resources.template)
+	} else {
+		ws, err = c.setupWorkspace(opts)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -196,21 +201,38 @@ func (c *Creator) loadResources(opts CreateOptions) (*resourceAllocation, error)
 
 // createMetadata creates the sandbox metadata struct.
 func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, identity *config.AgentIdentity) *config.SandboxMetadata {
-	return &config.SandboxMetadata{
-		Name:            opts.Name,
-		Template:        opts.Template,
-		Workspace:       ws.effectivePath,
-		NetworkSlot:     resources.networkSlot,
-		CreatedAt:       time.Now().Format(time.RFC3339),
-		WorkspaceMode:   string(ws.mode),
-		SourceRepo:      ws.sourceRepo,
-		JJWorkspaceName: opts.Name,
-		GitBranch:       ws.gitBranch,
-		AgentIdentity:   identity,
-		Multiplexer:     resources.template.Multiplexer,
-		ContainerName:   config.ContainerNameForSlot(resources.networkSlot),
-		Runtime:         c.rt.Name(),
+	meta := &config.SandboxMetadata{
+		Name:          opts.Name,
+		Template:      opts.Template,
+		NetworkSlot:   resources.networkSlot,
+		CreatedAt:     time.Now().Format(time.RFC3339),
+		AgentIdentity: identity,
+		Multiplexer:   resources.template.Multiplexer,
+		ContainerName: config.ContainerNameForSlot(resources.networkSlot),
+		Runtime:       c.rt.Name(),
 	}
+
+	if len(ws.mounts) > 0 {
+		// Multi-mount path
+		meta.WorkspaceMounts = ws.mounts
+		// Set legacy fields from first mount for backward compat
+		if len(ws.mounts) > 0 {
+			first := ws.mounts[0]
+			meta.Workspace = first.HostPath
+			meta.WorkspaceMode = first.Mode
+			meta.SourceRepo = first.SourceRepo
+			meta.GitBranch = first.GitBranch
+		}
+	} else {
+		// Legacy single-mount path
+		meta.Workspace = ws.effectivePath
+		meta.WorkspaceMode = string(ws.mode)
+		meta.SourceRepo = ws.sourceRepo
+		meta.JJWorkspaceName = opts.Name
+		meta.GitBranch = ws.gitBranch
+	}
+
+	return meta
 }
 
 // writeContainerConfig generates and writes the Nix container configuration using the contribution system.
@@ -379,9 +401,13 @@ type workspaceSetup struct {
 	gitBranch     string
 	backend       workspace.Backend
 	mode          WorkspaceMode
+
+	// Multi-mount results (when template has WorkspaceMounts)
+	mounts   []config.WorkspaceMountMeta
+	backends map[string]workspace.Backend // mount name -> backend
 }
 
-// setupWorkspace sets up the workspace based on the options.
+// setupWorkspace sets up the workspace based on the options (legacy single-mount path).
 func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
 	ws := &workspaceSetup{}
 
@@ -430,6 +456,175 @@ func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
 	logging.Debug("creating workspace", "backend", ws.backend.Name(), "repo", absPath, "name", opts.Name)
 	if err := ws.backend.Create(absPath, opts.Name, ws.effectivePath); err != nil {
 		return nil, fmt.Errorf("failed to create %s workspace: %w", ws.backend.Name(), err)
+	}
+
+	return ws, nil
+}
+
+// resolveRepoPath resolves a mount's repo reference to an absolute path.
+// Empty/null repo uses the default --repo, a name looks up in named repos,
+// an absolute path is used as-is.
+func resolveRepoPath(repoRef string, opts CreateOptions) (string, error) {
+	if repoRef == "" {
+		// Uses default --repo
+		if opts.RepoPath == "" {
+			return "", fmt.Errorf("mount requires --repo but none provided")
+		}
+		return filepath.Abs(opts.RepoPath)
+	}
+	if filepath.IsAbs(repoRef) {
+		return repoRef, nil
+	}
+	// Named repo lookup
+	if path, ok := opts.Repos[repoRef]; ok {
+		return filepath.Abs(path)
+	}
+	return "", fmt.Errorf("named repo %q not provided via --repo", repoRef)
+}
+
+// validateMountSpecs checks mount specs for conflicts before creation.
+func validateMountSpecs(mounts map[string]*config.WorkspaceMount) error {
+	seen := make(map[string]string) // containerPath -> mount name
+	for name, m := range mounts {
+		if m.ContainerPath == "" {
+			return fmt.Errorf("mount %q: containerPath is required", name)
+		}
+		if prev, ok := seen[m.ContainerPath]; ok {
+			return fmt.Errorf("mounts %q and %q both claim container path %s", prev, name, m.ContainerPath)
+		}
+		seen[m.ContainerPath] = name
+		if m.HostPath == "" && m.Repo == "" {
+			// Repo-backed mount using default --repo (valid if --repo is provided)
+		}
+		if m.HostPath != "" && m.Repo != "" {
+			return fmt.Errorf("mount %q: cannot set both hostPath and repo", name)
+		}
+	}
+	return nil
+}
+
+// setupWorkspaceMounts sets up multiple workspace mounts from template specs.
+func (c *Creator) setupWorkspaceMounts(opts CreateOptions, template *config.Template) (*workspaceSetup, error) {
+	ws := &workspaceSetup{
+		backends: make(map[string]workspace.Backend),
+	}
+
+	if err := validateMountSpecs(template.WorkspaceMounts); err != nil {
+		return nil, fmt.Errorf("invalid mount configuration: %w", err)
+	}
+
+	// Managed workspace base dir for this sandbox: workspaces/<sandbox>/<mount-name>/
+	sandboxWsDir := filepath.Join(c.paths.WorkspacesDir, opts.Name)
+
+	// Track created workspaces for rollback on failure
+	var created []config.WorkspaceMountMeta
+
+	rollback := func() {
+		for _, m := range created {
+			if m.SourceRepo != "" {
+				if backend := workspace.BackendForMode(m.Mode); backend != nil {
+					_ = backend.Remove(m.SourceRepo, m.Name, m.HostPath)
+				}
+			}
+		}
+		_ = os.RemoveAll(sandboxWsDir)
+	}
+
+	for name, spec := range template.WorkspaceMounts {
+		meta := config.WorkspaceMountMeta{
+			Name:          name,
+			ContainerPath: spec.ContainerPath,
+			ReadOnly:      spec.ReadOnly,
+		}
+
+		if spec.HostPath != "" {
+			// Literal bind mount — validate host path exists
+			absPath, err := filepath.Abs(spec.HostPath)
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("mount %q: invalid hostPath: %w", name, err)
+			}
+			if _, err := os.Stat(absPath); os.IsNotExist(err) {
+				rollback()
+				return nil, fmt.Errorf("mount %q: hostPath does not exist: %s", name, absPath)
+			}
+			meta.HostPath = absPath
+			meta.Mode = "direct"
+		} else {
+			// Repo-backed mount
+			repoPath, err := resolveRepoPath(spec.Repo, opts)
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("mount %q: %w", name, err)
+			}
+
+			if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+				rollback()
+				return nil, fmt.Errorf("mount %q: repo path does not exist: %s", name, repoPath)
+			}
+
+			meta.SourceRepo = repoPath
+
+			// Determine mode (auto-detect or explicit)
+			var backend workspace.Backend
+			if spec.Mode != "" && spec.Mode != "direct" {
+				backend = workspace.BackendForMode(spec.Mode)
+				if backend == nil {
+					rollback()
+					return nil, fmt.Errorf("mount %q: unsupported mode %q", name, spec.Mode)
+				}
+			} else if spec.Mode != "direct" {
+				backend = workspace.DetectBackend(repoPath)
+			}
+
+			if backend == nil || spec.Mode == "direct" {
+				// Direct mount — use repo path directly
+				meta.HostPath = repoPath
+				meta.Mode = "direct"
+			} else {
+				// VCS workspace — create isolated workspace
+				meta.Mode = backend.Name()
+
+				// Use a unique workspace name combining sandbox name and mount name
+				wsName := opts.Name + "-" + name
+
+				if backend.Exists(repoPath, wsName) {
+					rollback()
+					return nil, fmt.Errorf("mount %q: %s workspace %s already exists in repo", name, backend.Name(), wsName)
+				}
+
+				wsPath := filepath.Join(sandboxWsDir, name)
+				if err := os.MkdirAll(sandboxWsDir, 0755); err != nil {
+					rollback()
+					return nil, fmt.Errorf("mount %q: failed to create workspace directory: %w", name, err)
+				}
+
+				logging.Debug("creating workspace mount", "name", name, "backend", backend.Name(), "repo", repoPath, "wsName", wsName)
+				if err := backend.Create(repoPath, wsName, wsPath); err != nil {
+					rollback()
+					return nil, fmt.Errorf("mount %q: failed to create %s workspace: %w", name, backend.Name(), err)
+				}
+
+				meta.HostPath = wsPath
+
+				if gitBackend, ok := backend.(*workspace.GitBackend); ok {
+					meta.GitBranch = gitBackend.BranchName(wsName)
+				}
+
+				ws.backends[name] = backend
+			}
+
+			meta.Branch = spec.Branch
+		}
+
+		created = append(created, meta)
+	}
+
+	ws.mounts = created
+
+	// Set effectivePath to the first mount's container path for backward compat in the result
+	if len(created) > 0 {
+		ws.effectivePath = created[0].HostPath
 	}
 
 	return ws, nil
