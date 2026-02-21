@@ -32,7 +32,7 @@ multi           claude,aider        full       Multi-agent sandbox
 Create and start a sandbox.
 
 ```bash
-forage-ctl up <name> --template <template> --repo <path> [options]
+forage-ctl up <name> --template <template> [--repo <path>] [options]
 ```
 
 **Arguments:**
@@ -46,13 +46,24 @@ forage-ctl up <name> --template <template> --repo <path> [options]
 | Option | Description |
 |--------|-------------|
 | `--template, -t <name>` | Template to use (required) |
-| `--repo, -r <path>` | Repository or directory path (required) |
+| `--repo, -r <path>` | Repository or directory path (repeatable, see below) |
 | `--direct` | Mount directory directly, skipping VCS isolation |
 | `--ssh-key <key>` | SSH public key for sandbox access (can be repeated) |
 | `--ssh-key-path <path>` | Path to SSH private key for agent push access |
 | `--git-user <name>` | Git user.name for agent commits |
 | `--git-email <email>` | Git user.email for agent commits |
 | `--no-mux-config` | Don't mount host multiplexer config into sandbox |
+
+**`--repo` Flag:**
+
+The `--repo` flag is repeatable and supports named parameters:
+
+```bash
+--repo <path>              # default (unnamed) repo
+--repo <name>=<path>       # named repo
+```
+
+When the template defines `workspace.mounts`, mounts reference repos by name. `--repo` is not required if every mount specifies `hostPath` or an absolute `repo` path. See [Workspace Mounts](./workspace-mounts.md) for details.
 
 **Workspace Modes:**
 
@@ -81,6 +92,12 @@ forage-ctl up myproject -t claude --repo ~/projects/myrepo --ssh-key-path ~/.ssh
 
 # With git identity for commits
 forage-ctl up myproject -t claude --repo ~/projects/myrepo --git-user "Agent" --git-email "agent@example.com"
+
+# Named repos for multi-mount templates
+forage-ctl up dev -t monorepo --repo ~/main-project --repo data=~/datasets
+
+# No --repo when template specifies all paths
+forage-ctl up dev -t self-contained
 ```
 
 ---
@@ -108,8 +125,9 @@ forage-ctl down myproject
 **Cleanup performed:**
 - Stops and destroys the container
 - Removes secrets from `/var/lib/forage/secrets/<name>/`
-- For JJ mode: runs `jj workspace forget` and removes workspace directory
-- For git-worktree mode: removes the worktree
+- For each VCS-backed mount: removes the workspace/worktree via the appropriate VCS command
+- For literal bind mounts (`hostPath`): no cleanup (host directory untouched)
+- Removes managed workspace subdirectories
 - Removes skills file and container configuration
 - Deletes sandbox metadata
 

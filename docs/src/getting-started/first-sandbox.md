@@ -125,6 +125,7 @@ This:
 
 ## Next Steps
 
+- Learn about [workspace mounts](../usage/workspace-mounts.md) for composable multi-mount sandboxes
 - Learn about [JJ workspaces](../usage/jj-workspaces.md) for parallel agent work
 - See the full [CLI reference](../usage/cli-reference.md)
 - Understand [skill injection](../usage/skill-injection.md)

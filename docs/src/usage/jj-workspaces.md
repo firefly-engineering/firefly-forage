@@ -183,6 +183,46 @@ Forage automatically detects the workspace mode based on the repository type:
 - Multiple agents on same git repository
 - Each agent works on a separate branch (auto-created as `forage-<name>`)
 
+## Composable JJ Mounts
+
+With [workspace mounts](./workspace-mounts.md), you can create multiple JJ workspaces within a single sandbox. A common pattern is overlaying a beads branch alongside the main workspace:
+
+```nix
+templates.claude-beads = {
+  agents.claude = { ... };
+
+  workspace.mounts.main = {
+    containerPath = "/workspace";
+    mode = "jj";
+  };
+
+  workspace.useBeads = {
+    enable = true;
+    package = pkgs.beads;
+  };
+};
+```
+
+```bash
+forage-ctl up agent-a -t claude-beads --repo ~/projects/myrepo
+```
+
+This creates two JJ workspaces from the same repository:
+- `/workspace` — the main working copy
+- `/workspace/.beads` — checking out the `beads-sync` branch
+
+Each mount gets its own managed workspace directory under `/var/lib/firefly-forage/workspaces/<sandbox>/<mount-name>/`.
+
+You can also mount JJ workspaces from different repositories using named repos:
+
+```bash
+forage-ctl up dev -t multi-repo \
+  --repo ~/projects/frontend \
+  --repo backend=~/projects/backend
+```
+
+See [Workspace Mounts](./workspace-mounts.md) for the full guide.
+
 ## Troubleshooting
 
 ### "Not a jj repository"

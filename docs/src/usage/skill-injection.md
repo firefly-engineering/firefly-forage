@@ -122,6 +122,21 @@ When a sandbox is removed with `forage-ctl down`:
 - **JJ mode (`--repo`)**: The entire workspace directory is removed, including skills
 - **Git worktree mode (`--git-worktree`)**: The worktree is removed, including skills
 
+## Composite Workspace Layout
+
+For sandboxes with [composable workspace mounts](./workspace-mounts.md), the skill file includes a description of the full mount layout:
+
+```markdown
+## Workspace Layout
+
+Your workspace contains multiple mount sources:
+- /workspace: jj workspace from ~/projects/myrepo
+- /workspace/.beads: jj workspace (branch beads-sync) from ~/projects/myrepo
+- /workspace/data: direct mount from ~/datasets (read-only)
+```
+
+This gives the agent context about what's mounted where and how each path is managed.
+
 ## Dynamic Skill Generation
 
 Skills are dynamically generated based on project analysis. The skills analyzer (`internal/skills/analyzer.go`) detects:

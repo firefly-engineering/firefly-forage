@@ -171,6 +171,30 @@ For JJ workspaces, additional fields:
 }
 ```
 
+For sandboxes with [composable workspace mounts](../usage/workspace-mounts.md), the `workspaceMounts` field replaces the single-workspace fields:
+
+```json
+{
+  "workspaceMounts": [
+    {
+      "name": "main",
+      "containerPath": "/workspace",
+      "hostPath": "/var/lib/firefly-forage/workspaces/myproject/main",
+      "sourceRepo": "/home/user/repos/myrepo",
+      "mode": "jj"
+    },
+    {
+      "name": "beads",
+      "containerPath": "/workspace/.beads",
+      "hostPath": "/var/lib/firefly-forage/workspaces/myproject/beads",
+      "sourceRepo": "/home/user/repos/myrepo",
+      "mode": "jj",
+      "branch": "beads-sync"
+    }
+  ]
+}
+```
+
 ### Directories
 
 | Path | Purpose |

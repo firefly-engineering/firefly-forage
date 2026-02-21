@@ -22,6 +22,9 @@ services.firefly-forage.templates.<name> = {
   allowedHosts = [ ... ];  # for restricted mode
 
   initCommands = [ ... ];  # commands to run after creation
+
+  workspace.mounts = { ... };   # composable workspace mounts (optional)
+  workspace.useBeads = { ... }; # beads overlay shorthand (optional)
 };
 ```
 
@@ -201,6 +204,42 @@ allowedHosts = [
 
 You can also change network modes at runtime using `forage-ctl network`.
 
+### Workspace Mounts
+
+Templates can declare composable workspace mounts — multiple mount points assembled from different sources:
+
+```nix
+workspace.mounts = {
+  main = {
+    containerPath = "/workspace";
+    mode = "jj";
+    # repo = null → uses default --repo
+  };
+  data = {
+    containerPath = "/workspace/data";
+    repo = "data";  # references --repo data=<path>
+    readOnly = true;
+  };
+};
+```
+
+When `workspace.mounts` is set, the `--repo` flag becomes optional (if all mounts specify their sources). See the [Workspace Mounts](../usage/workspace-mounts.md) usage guide for full details.
+
+### Beads Overlay (`useBeads`)
+
+A convenience option for overlaying a beads workspace:
+
+```nix
+workspace.useBeads = {
+  enable = true;
+  branch = "beads-sync";              # default
+  containerPath = "/workspace/.beads"; # default
+  package = pkgs.beads;               # added to extraPackages
+};
+```
+
+This automatically injects a jj mount and the beads package. See [Workspace Mounts: useBeads](../usage/workspace-mounts.md#usebeads-convenience-option).
+
 ## Example Templates
 
 ### Minimal Claude Template
@@ -296,6 +335,32 @@ templates.claude-auto = {
 };
 ```
 
+### Multi-Mount Template with Beads
+
+```nix
+templates.claude-beads = {
+  description = "Claude with beads overlay";
+
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+  };
+
+  workspace.mounts.main = {
+    containerPath = "/workspace";
+    mode = "jj";
+  };
+
+  workspace.useBeads = {
+    enable = true;
+    package = pkgs.beads;
+  };
+
+  extraPackages = with pkgs; [ ripgrep fd jq ];
+};
+```
+
 ### Air-Gapped Template
 
 ```nix
@@ -363,6 +428,24 @@ The template JSON format:
     "/nix/store/...-ripgrep",
     "/nix/store/...-fd"
   ]
+}
+```
+
+When `workspace.mounts` is configured, the JSON includes a `workspaceMounts` field:
+
+```json
+{
+  "workspaceMounts": {
+    "main": {
+      "containerPath": "/workspace",
+      "mode": "jj"
+    },
+    "beads": {
+      "containerPath": "/workspace/.beads",
+      "mode": "jj",
+      "branch": "beads-sync"
+    }
+  }
 }
 ```
 

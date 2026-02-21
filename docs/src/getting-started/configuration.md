@@ -238,6 +238,47 @@ Options:
 
 For Claude, this generates `/etc/claude-code/managed-settings.json` in the container (managed scope — highest precedence). Permissions and `hostConfigDir` can coexist — they target different paths.
 
+#### Workspace Mounts
+
+Templates can define composable workspace mounts — multiple mount points from different sources:
+
+```nix
+services.firefly-forage.templates.multi-mount = {
+  description = "Multi-mount workspace";
+
+  agents.claude = {
+    package = pkgs.claude-code;
+    secretName = "anthropic";
+    authEnvVar = "ANTHROPIC_API_KEY";
+  };
+
+  workspace.mounts = {
+    main = {
+      containerPath = "/workspace";
+      mode = "jj";
+    };
+    docs = {
+      containerPath = "/workspace/docs";
+      hostPath = "~/shared-docs";
+      readOnly = true;
+    };
+  };
+};
+```
+
+When `workspace.mounts` is set, the `--repo` flag becomes optional. See [Workspace Mounts](../usage/workspace-mounts.md) for the full guide.
+
+The `workspace.useBeads` shorthand overlays a beads workspace:
+
+```nix
+workspace.useBeads = {
+  enable = true;
+  package = pkgs.beads;
+  # branch = "beads-sync";         # default
+  # containerPath = "/workspace/.beads";  # default
+};
+```
+
 #### Network Modes
 
 Control network access for sandboxes:

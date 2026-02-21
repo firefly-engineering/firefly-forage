@@ -39,6 +39,15 @@ forage-ctl up agent-a --template claude --repo ~/projects/myrepo
 forage-ctl up agent-b --template claude --repo ~/projects/myrepo
 ```
 
+### Composable Workspace Mounts
+
+Assemble a sandbox's filesystem from multiple sources — mount multiple repos, overlay branches, and mix VCS-backed and literal bind mounts:
+
+```bash
+# Template mounts: main workspace + beads overlay + named data repo
+forage-ctl up dev -t claude-beads --repo ~/projects/myrepo --repo data=~/datasets
+```
+
 ### Nix Store Efficiency
 
 Sandboxes share the host's `/nix/store` read-only. When an agent runs `nix shell nixpkgs#ripgrep`, the build happens on the host via the nix daemon socket—no duplication, instant availability.
