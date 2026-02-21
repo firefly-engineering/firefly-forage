@@ -295,21 +295,39 @@ func (r *ResourceLimits) IsEmpty() bool {
 	return r.CPUQuota == "" && r.MemoryMax == "" && r.TasksMax == 0
 }
 
+// WorkspaceMount defines a single mount source within the sandbox.
+// Each mount declares what to put where inside the container.
+type WorkspaceMount struct {
+	Name          string `json:"name"`                    // identifier (from template key or generated)
+	ContainerPath string `json:"containerPath"`           // e.g. "/workspace/.beads"
+
+	// Source — exactly one of HostPath or Repo must be set
+	HostPath string `json:"hostPath,omitempty"` // literal bind mount from host
+	Repo     string `json:"repo,omitempty"`     // repo reference (named repo, absolute path, or empty for default --repo)
+
+	// VCS options (only for repo-backed mounts)
+	Mode   string `json:"mode,omitempty"`   // "jj", "git-worktree", "direct" (default: auto-detect)
+	Branch string `json:"branch,omitempty"` // branch/ref to check out
+
+	ReadOnly bool `json:"readOnly,omitempty"`
+}
+
 // Template represents a sandbox template configuration
 type Template struct {
-	Name              string                 `json:"name"`
-	Description       string                 `json:"description"`
-	Network           string                 `json:"network"`
-	AllowedHosts      []string               `json:"allowedHosts"`
-	Agents            map[string]AgentConfig `json:"agents"`
-	ExtraPackages     []string               `json:"extraPackages"`
-	UseProxy          bool                   `json:"useProxy,omitempty"`          // Use forage-proxy for API calls
-	AgentIdentity     *AgentIdentity         `json:"agentIdentity,omitempty"`     // Template-level default agent identity
-	TmuxWindows       []TmuxWindow           `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
-	Multiplexer       string                 `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
-	ReadOnlyWorkspace bool                   `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
-	ResourceLimits    *ResourceLimits        `json:"resourceLimits,omitempty"`    // Container resource limits
-	InitCommands      []string               `json:"initCommands,omitempty"`      // Commands to run after container creation
+	Name              string                      `json:"name"`
+	Description       string                      `json:"description"`
+	Network           string                      `json:"network"`
+	AllowedHosts      []string                    `json:"allowedHosts"`
+	Agents            map[string]AgentConfig      `json:"agents"`
+	ExtraPackages     []string                    `json:"extraPackages"`
+	UseProxy          bool                        `json:"useProxy,omitempty"`          // Use forage-proxy for API calls
+	AgentIdentity     *AgentIdentity              `json:"agentIdentity,omitempty"`     // Template-level default agent identity
+	TmuxWindows       []TmuxWindow                `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
+	Multiplexer       string                      `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
+	ReadOnlyWorkspace bool                        `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
+	ResourceLimits    *ResourceLimits             `json:"resourceLimits,omitempty"`    // Container resource limits
+	InitCommands      []string                    `json:"initCommands,omitempty"`      // Commands to run after container creation
+	WorkspaceMounts   map[string]*WorkspaceMount  `json:"workspaceMounts,omitempty"`   // Composable workspace mounts (keyed by name)
 }
 
 // AgentPermissions controls agent permission settings.
@@ -409,6 +427,20 @@ func (a *AgentConfig) Validate() error {
 	return nil
 }
 
+// WorkspaceMountMeta records a resolved workspace mount in sandbox metadata.
+// Unlike WorkspaceMount (template spec), this holds the effective host path
+// after repo resolution and VCS workspace creation.
+type WorkspaceMountMeta struct {
+	Name          string `json:"name"`
+	ContainerPath string `json:"containerPath"`
+	HostPath      string `json:"hostPath"`                // effective host path (managed dir or literal)
+	SourceRepo    string `json:"sourceRepo,omitempty"`    // source repo path (for VCS-backed mounts)
+	Mode          string `json:"mode"`                    // "direct", "jj", "git-worktree"
+	Branch        string `json:"branch,omitempty"`        // branch/ref checked out
+	GitBranch     string `json:"gitBranch,omitempty"`     // git branch name (for git-worktree mode)
+	ReadOnly      bool   `json:"readOnly,omitempty"`
+}
+
 // SandboxMetadata represents the metadata for a running sandbox
 type SandboxMetadata struct {
 	Name            string         `json:"name"`
@@ -424,6 +456,9 @@ type SandboxMetadata struct {
 	Multiplexer     string         `json:"multiplexer,omitempty"`     // "tmux" (default) or "wezterm"
 	ContainerName   string         `json:"containerName,omitempty"`   // Short container name (e.g. "f42"); empty for legacy sandboxes
 	Runtime         string         `json:"runtime,omitempty"`         // Runtime backend used (e.g. "nspawn", "docker", "podman")
+
+	// Composable workspace mounts — supersedes Workspace/WorkspaceMode/SourceRepo when present.
+	WorkspaceMounts []WorkspaceMountMeta `json:"workspaceMounts,omitempty"`
 }
 
 // ContainerIP returns the container's IP address based on its network slot.
@@ -444,13 +479,21 @@ func (m *SandboxMetadata) Validate() error {
 	if m.NetworkSlot < 1 || m.NetworkSlot > 254 {
 		return fmt.Errorf("networkSlot must be between 1 and 254 (got %d)", m.NetworkSlot)
 	}
-	if m.Workspace == "" {
-		return fmt.Errorf("workspace is required")
+
+	// Allow either legacy Workspace field or new WorkspaceMounts
+	if m.Workspace == "" && len(m.WorkspaceMounts) == 0 {
+		return fmt.Errorf("workspace or workspaceMounts is required")
 	}
 
 	validModes := map[string]bool{"direct": true, "jj": true, "git-worktree": true, "": true}
 	if !validModes[m.WorkspaceMode] {
 		return fmt.Errorf("invalid workspaceMode: %s", m.WorkspaceMode)
+	}
+
+	for _, mount := range m.WorkspaceMounts {
+		if !validModes[mount.Mode] {
+			return fmt.Errorf("invalid mode %q for mount %s", mount.Mode, mount.Name)
+		}
 	}
 
 	return nil
