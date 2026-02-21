@@ -239,6 +239,82 @@ let
           example = "/run/secrets/template-agent-ssh-key";
         };
       };
+
+      workspace = {
+        mounts = mkOption {
+          type = types.attrsOf (
+            types.submodule {
+              options = {
+                containerPath = mkOption {
+                  type = types.str;
+                  description = "Mount point inside the container (e.g., '/workspace/.beads')";
+                };
+                hostPath = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Literal bind mount from host. Mutually exclusive with repo.";
+                };
+                repo = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Repo reference: null/empty for default --repo, a name for named --repo, or an absolute path";
+                };
+                mode = mkOption {
+                  type = types.nullOr (
+                    types.enum [
+                      "jj"
+                      "git-worktree"
+                      "direct"
+                    ]
+                  );
+                  default = null;
+                  description = "VCS mode (null = auto-detect)";
+                };
+                branch = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Branch/ref to check out (VCS mounts only)";
+                };
+                readOnly = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Mount as read-only";
+                };
+              };
+            }
+          );
+          default = { };
+          description = "Composable workspace mounts (keyed by name). When set, --repo becomes optional.";
+        };
+
+        useBeads = {
+          enable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Enable beads workspace overlay";
+          };
+          branch = mkOption {
+            type = types.str;
+            default = "beads-sync";
+            description = "Branch to use for the beads workspace";
+          };
+          package = mkOption {
+            type = types.nullOr types.package;
+            default = null;
+            description = "Beads package to install";
+          };
+          containerPath = mkOption {
+            type = types.str;
+            default = "/workspace/.beads";
+            description = "Mount point for the beads workspace inside the container";
+          };
+          repo = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Repo reference for beads (null = inherit default --repo)";
+          };
+        };
+      };
     };
   };
 
@@ -446,82 +522,123 @@ in
         );
       };
     }
-    // mapAttrs (name: template: {
-      target = "firefly-forage/templates/${name}.json";
-      text = builtins.toJSON (
-        {
-          inherit name;
-          inherit (template)
-            description
-            network
-            allowedHosts
-            readOnlyWorkspace
-            ;
-          agents = mapAttrs (
-            agentName: agent:
-            let
-              resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
-              resolvedContainerConfigDir =
-                if agent.containerConfigDir != null then
-                  agent.containerConfigDir
-                else if resolvedHostConfigDir != null then
-                  deriveContainerPath resolvedHostConfigDir
-                else
-                  null;
-            in
+    // mapAttrs (
+      name: template:
+      let
+        # Merge explicit workspace.mounts with useBeads-injected mount
+        beadsMount =
+          if template.workspace.useBeads.enable then
             {
-              inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
-              packagePath = agent.package.pname;
-              hostConfigDir = resolvedHostConfigDir;
-              containerConfigDir = resolvedContainerConfigDir;
-              permissions =
-                if agent.permissions != null then
-                  {
-                    inherit (agent.permissions) skipAll allow deny;
-                  }
-                else
-                  null;
-            }
-          ) template.agents;
-          extraPackages = map (p: p.pname) template.extraPackages;
-        }
-        //
-          lib.optionalAttrs
-            (
-              template.resourceLimits.cpuQuota != null
-              || template.resourceLimits.memoryMax != null
-              || template.resourceLimits.tasksMax != null
-            )
-            {
-              resourceLimits = lib.filterAttrs (_: v: v != null) {
-                cpuQuota = template.resourceLimits.cpuQuota;
-                memoryMax = template.resourceLimits.memoryMax;
-                tasksMax = template.resourceLimits.tasksMax;
+              beads = {
+                containerPath = template.workspace.useBeads.containerPath;
+                repo = template.workspace.useBeads.repo;
+                mode = "jj";
+                branch = template.workspace.useBeads.branch;
+                readOnly = false;
+                hostPath = null;
               };
             }
-        // lib.optionalAttrs (template.initCommands != [ ]) {
-          inherit (template) initCommands;
-        }
-        //
-          lib.optionalAttrs
-            (
-              template.agentIdentity.gitUser != null
-              || template.agentIdentity.gitEmail != null
-              || template.agentIdentity.sshKeyPath != null
-            )
-            {
-              agentIdentity = lib.filterAttrs (_: v: v != null) {
-                gitUser = template.agentIdentity.gitUser;
-                gitEmail = template.agentIdentity.gitEmail;
-                sshKeyPath =
-                  if template.agentIdentity.sshKeyPath != null then
-                    resolveTilde (toString template.agentIdentity.sshKeyPath)
+          else
+            { };
+        allMounts = template.workspace.mounts // beadsMount;
+
+        # Merge useBeads package into extraPackages
+        beadsPackages =
+          if template.workspace.useBeads.enable && template.workspace.useBeads.package != null then
+            [ template.workspace.useBeads.package ]
+          else
+            [ ];
+        allExtraPackages = template.extraPackages ++ beadsPackages;
+      in
+      {
+        target = "firefly-forage/templates/${name}.json";
+        text = builtins.toJSON (
+          {
+            inherit name;
+            inherit (template)
+              description
+              network
+              allowedHosts
+              readOnlyWorkspace
+              ;
+            agents = mapAttrs (
+              agentName: agent:
+              let
+                resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
+                resolvedContainerConfigDir =
+                  if agent.containerConfigDir != null then
+                    agent.containerConfigDir
+                  else if resolvedHostConfigDir != null then
+                    deriveContainerPath resolvedHostConfigDir
                   else
                     null;
-              };
-            }
-      );
-    }) cfg.templates;
+              in
+              {
+                inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
+                packagePath = agent.package.pname;
+                hostConfigDir = resolvedHostConfigDir;
+                containerConfigDir = resolvedContainerConfigDir;
+                permissions =
+                  if agent.permissions != null then
+                    {
+                      inherit (agent.permissions) skipAll allow deny;
+                    }
+                  else
+                    null;
+              }
+            ) template.agents;
+            extraPackages = map (p: p.pname) allExtraPackages;
+          }
+          // lib.optionalAttrs (allMounts != { }) {
+            workspaceMounts = mapAttrs (
+              mountName: mount:
+              lib.filterAttrs (_: v: v != null) {
+                inherit (mount) containerPath readOnly;
+                hostPath = if mount.hostPath != null then resolveTilde mount.hostPath else null;
+                repo = mount.repo;
+                mode = mount.mode;
+                branch = mount.branch;
+              }
+            ) allMounts;
+          }
+          //
+            lib.optionalAttrs
+              (
+                template.resourceLimits.cpuQuota != null
+                || template.resourceLimits.memoryMax != null
+                || template.resourceLimits.tasksMax != null
+              )
+              {
+                resourceLimits = lib.filterAttrs (_: v: v != null) {
+                  cpuQuota = template.resourceLimits.cpuQuota;
+                  memoryMax = template.resourceLimits.memoryMax;
+                  tasksMax = template.resourceLimits.tasksMax;
+                };
+              }
+          // lib.optionalAttrs (template.initCommands != [ ]) {
+            inherit (template) initCommands;
+          }
+          //
+            lib.optionalAttrs
+              (
+                template.agentIdentity.gitUser != null
+                || template.agentIdentity.gitEmail != null
+                || template.agentIdentity.sshKeyPath != null
+              )
+              {
+                agentIdentity = lib.filterAttrs (_: v: v != null) {
+                  gitUser = template.agentIdentity.gitUser;
+                  gitEmail = template.agentIdentity.gitEmail;
+                  sshKeyPath =
+                    if template.agentIdentity.sshKeyPath != null then
+                      resolveTilde (toString template.agentIdentity.sshKeyPath)
+                    else
+                      null;
+                };
+              }
+        );
+      }
+    ) cfg.templates;
 
     # Health monitor systemd service
     systemd.services.forage-monitor = mkIf cfg.monitor.enable {
