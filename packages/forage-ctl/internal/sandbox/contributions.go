@@ -21,7 +21,7 @@ type ContributionSourcesParams struct {
 	Runtime       runtime.Runtime
 	Template      *config.Template
 	Metadata      *config.SandboxMetadata // Needed for skills generation
-	WsBackend     workspace.Backend
+	WsBackend     workspace.Backend       // Legacy single-workspace backend
 	Mux           multiplexer.Multiplexer
 	Identity      *config.AgentIdentity
 	WorkspacePath string
@@ -30,6 +30,10 @@ type ContributionSourcesParams struct {
 	ProxyURL      string
 	SandboxName   string
 	HostConfig    *config.HostConfig
+
+	// Multi-mount fields (when set, override single-workspace fields)
+	WorkspaceMounts []config.WorkspaceMountMeta
+	MountBackends   map[string]workspace.Backend // mount name -> backend
 }
 
 // ContributionSourcesResult holds the result of building contribution sources.
@@ -83,9 +87,24 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 	repro := reproducibility.NewNixReproducibility()
 	contributors = append(contributors, repro)
 
-	// 2. Workspace mount contributor
-	workspaceMount := injection.NewWorkspaceMountContributor(workspacePath, containerInfo.WorkspaceDir)
-	contributors = append(contributors, workspaceMount)
+	// 2. Workspace mount contributor(s)
+	if len(params.WorkspaceMounts) > 0 {
+		// Multi-mount path: build resolved mounts from metadata
+		var resolvedMounts []injection.ResolvedMount
+		for _, m := range params.WorkspaceMounts {
+			resolvedMounts = append(resolvedMounts, injection.ResolvedMount{
+				Name:          m.Name,
+				HostPath:      m.HostPath,
+				ContainerPath: m.ContainerPath,
+				ReadOnly:      m.ReadOnly,
+			})
+		}
+		contributors = append(contributors, injection.NewWorkspaceMountsContributor(resolvedMounts))
+	} else {
+		// Legacy single-mount path
+		workspaceMountContrib := injection.NewWorkspaceMountContributor(workspacePath, containerInfo.WorkspaceDir)
+		contributors = append(contributors, workspaceMountContrib)
+	}
 
 	// 3. Secrets contributor (if secrets are configured)
 	if secretsPath != "" {
@@ -93,8 +112,14 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 		contributors = append(contributors, secrets)
 	}
 
-	// 4. Workspace backend contributor (if available)
-	if wsBackend != nil {
+	// 4. Workspace backend contributor(s)
+	if len(params.WorkspaceMounts) > 0 && params.MountBackends != nil {
+		// Multi-mount: add per-mount VCS backends
+		for _, backend := range params.MountBackends {
+			contributors = append(contributors, backend)
+		}
+	} else if wsBackend != nil {
+		// Legacy: single workspace backend
 		contributors = append(contributors, wsBackend)
 	}
 
@@ -260,7 +285,7 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 	}
 
 	// Build contribution sources
-	contribResult := buildContributionSources(ContributionSourcesParams{
+	contribParams := ContributionSourcesParams{
 		Runtime:       rt,
 		Template:      template,
 		Metadata:      metadata,
@@ -273,7 +298,24 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 		ProxyURL:      proxyURL,
 		SandboxName:   metadata.Name,
 		HostConfig:    hostConfig,
-	})
+	}
+
+	// Use multi-mount data from metadata if present
+	if len(metadata.WorkspaceMounts) > 0 {
+		contribParams.WorkspaceMounts = metadata.WorkspaceMounts
+		mountBackends := make(map[string]workspace.Backend)
+		for _, m := range metadata.WorkspaceMounts {
+			if m.SourceRepo != "" {
+				if b := workspace.BackendForMode(m.Mode); b != nil {
+					mountBackends[m.Name] = b
+				}
+			}
+		}
+		if len(mountBackends) > 0 {
+			contribParams.MountBackends = mountBackends
+		}
+	}
+	contribResult := buildContributionSources(contribParams)
 
 	// Collect contributions
 	collector := injection.NewCollector()

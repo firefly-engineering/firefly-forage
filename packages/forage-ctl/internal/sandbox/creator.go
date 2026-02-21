@@ -248,7 +248,7 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
 
 	// Build contribution sources from all backends
-	contribResult := buildContributionSources(ContributionSourcesParams{
+	contribParams := ContributionSourcesParams{
 		Runtime:       c.rt,
 		Template:      resources.template,
 		Metadata:      metadata,
@@ -261,7 +261,12 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 		ProxyURL:      proxyURL,
 		SandboxName:   opts.Name,
 		HostConfig:    c.hostConfig,
-	})
+	}
+	if len(ws.mounts) > 0 {
+		contribParams.WorkspaceMounts = ws.mounts
+		contribParams.MountBackends = ws.backends
+	}
+	contribResult := buildContributionSources(contribParams)
 
 	// Collect contributions from all sources
 	collector := injection.NewCollector()
