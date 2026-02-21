@@ -288,6 +288,15 @@ func GenerateSkillFiles(metadata *config.SandboxMetadata, template *config.Templ
 
 	// Conventional commits skill (emitted for any VCS)
 	hasVCS := info != nil && (info.HasGit || info.HasJJ)
+	if !hasVCS {
+		// Check multi-mount modes
+		for _, m := range metadata.WorkspaceMounts {
+			if m.Mode == "jj" || m.Mode == "git-worktree" {
+				hasVCS = true
+				break
+			}
+		}
+	}
 	if hasVCS || metadata.WorkspaceMode == "jj" || metadata.WorkspaceMode == "git-worktree" {
 		result["forage-commits"] = renderTemplate("skill-conventional-commits.md.tmpl", nil)
 	}
@@ -301,6 +310,20 @@ func GenerateSkillFiles(metadata *config.SandboxMetadata, template *config.Templ
 }
 
 func vcsSkillTemplate(metadata *config.SandboxMetadata, info *ProjectInfo) (string, any) {
+	// Check multi-mount modes
+	if len(metadata.WorkspaceMounts) > 0 {
+		for _, m := range metadata.WorkspaceMounts {
+			if m.Mode == "jj" {
+				return "skill-vcs-jj.md.tmpl", nil
+			}
+		}
+		for _, m := range metadata.WorkspaceMounts {
+			if m.Mode == "git-worktree" {
+				return "skill-vcs-git-worktree.md.tmpl", metadata
+			}
+		}
+	}
+	// Legacy single-workspace check
 	if metadata.WorkspaceMode == "jj" || (info != nil && info.HasJJ) {
 		return "skill-vcs-jj.md.tmpl", nil
 	}
@@ -326,11 +349,17 @@ type systemPromptData struct {
 	Agents          []agentEntry
 	UseProxy        bool
 	MuxInstructions string
+	Mounts          []mountEntry // non-nil when using composable mounts
 }
 
 type agentEntry struct {
 	Name      string
 	AuthLabel string // e.g. "$ANTHROPIC_API_KEY" or "proxy"
+}
+
+type mountEntry struct {
+	ContainerPath string
+	Description   string // e.g. "jj workspace from ~/my-project"
 }
 
 func buildSystemPromptData(metadata *config.SandboxMetadata, template *config.Template) *systemPromptData {
@@ -345,6 +374,17 @@ func buildSystemPromptData(metadata *config.SandboxMetadata, template *config.Te
 		AllowedHosts:    template.AllowedHosts,
 		UseProxy:        template.UseProxy,
 		MuxInstructions: mux.PromptInstructions(),
+	}
+
+	// Populate composable mount descriptions
+	if len(metadata.WorkspaceMounts) > 0 {
+		for _, m := range metadata.WorkspaceMounts {
+			desc := describeMountMode(m)
+			data.Mounts = append(data.Mounts, mountEntry{
+				ContainerPath: m.ContainerPath,
+				Description:   desc,
+			})
+		}
 	}
 
 	if metadata.AgentIdentity != nil {
@@ -370,6 +410,18 @@ func buildSystemPromptData(metadata *config.SandboxMetadata, template *config.Te
 	}
 
 	return data
+}
+
+// describeMountMode returns a human-readable description of a mount.
+func describeMountMode(m config.WorkspaceMountMeta) string {
+	if m.SourceRepo == "" {
+		return "direct mount from " + m.HostPath
+	}
+	desc := m.Mode + " workspace from " + m.SourceRepo
+	if m.Branch != "" {
+		desc += " (branch " + m.Branch + ")"
+	}
+	return desc
 }
 
 // GenerateSkills generates skill content based on project analysis.

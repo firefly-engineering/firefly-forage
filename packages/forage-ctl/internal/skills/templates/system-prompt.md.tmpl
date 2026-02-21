@@ -2,6 +2,11 @@
 
 - **Sandbox**: {{.Name}}
 - **Template**: {{.Template}}
+{{- if .Mounts}}
+{{- range .Mounts}}
+- **{{.ContainerPath}}**: {{.Description}}
+{{- end}}
+{{- else}}
 - **Workspace**: /workspace
 {{- if eq .WorkspaceMode "jj"}}
 - **Mode**: jj workspace (isolated from source)
@@ -10,6 +15,7 @@
 - **Mode**: git worktree (isolated from source)
 - **Source Repo**: {{.SourceRepo}}
 - **Branch**: {{.GitBranch}}
+{{- end}}
 {{- end}}
 
 {{if eq .Network "none" -}}
