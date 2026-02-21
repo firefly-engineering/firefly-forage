@@ -92,6 +92,9 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	if len(resources.template.WorkspaceMounts) > 0 {
 		ws, err = c.setupWorkspaceMounts(opts, resources.template)
 	} else {
+		if opts.RepoPath == "" {
+			return nil, fmt.Errorf("--repo is required (template has no workspace mounts configured)")
+		}
 		ws, err = c.setupWorkspace(opts)
 	}
 	if err != nil {

@@ -100,7 +100,7 @@ func (e *testEnv) createWorkspace(t *testing.T, name string) string {
 func executeCommand(args ...string) (string, string, error) {
 	// Reset flag values before each test
 	upTemplate = ""
-	upRepo = ""
+	upRepos = nil
 	upDirect = false
 	logsFollow = false
 	logsLines = 50

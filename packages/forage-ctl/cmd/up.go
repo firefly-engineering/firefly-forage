@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -21,7 +23,7 @@ var upCmd = &cobra.Command{
 
 var (
 	upTemplate    string
-	upRepo        string
+	upRepos       []string
 	upSSHKeys     []string
 	upNoMuxConfig bool
 	upDirect      bool
@@ -32,7 +34,7 @@ var (
 
 func init() {
 	upCmd.Flags().StringVarP(&upTemplate, "template", "t", "", "Template to use (required)")
-	upCmd.Flags().StringVarP(&upRepo, "repo", "r", "", "Repository or directory path")
+	upCmd.Flags().StringArrayVarP(&upRepos, "repo", "r", nil, "Repository or directory path (repeatable; use name=path for named repos)")
 	upCmd.Flags().BoolVar(&upDirect, "direct", false, "Mount directory directly (skip VCS isolation)")
 	upCmd.Flags().StringArrayVar(&upSSHKeys, "ssh-key", nil, "SSH public key for sandbox access (can be repeated)")
 	upCmd.Flags().BoolVar(&upNoMuxConfig, "no-mux-config", false, "Don't mount host multiplexer config into sandbox")
@@ -44,9 +46,8 @@ func init() {
 	if err := upCmd.MarkFlagRequired("template"); err != nil {
 		panic(err)
 	}
-	if err := upCmd.MarkFlagRequired("repo"); err != nil {
-		panic(err)
-	}
+	// --repo is no longer unconditionally required; templates with workspace.mounts
+	// may fully specify all mount sources without needing --repo.
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -62,7 +63,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 	logging.Debug("starting sandbox creation", "name", name, "template", upTemplate)
 
 	// Parse workspace mode from flags
-	opts := parseCreateOptions(name)
+	opts, err := parseCreateOptions(name)
+	if err != nil {
+		return errors.New(errors.ExitGeneralError, err.Error())
+	}
 
 	// Create the sandbox using the sandbox package
 	creator, err := sandbox.NewCreator()
@@ -91,17 +95,48 @@ func runUp(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// parseRepoFlags parses --repo flags into a default repo path and named repos map.
+// Formats:
+//   - --repo /path/to/repo          → default repo
+//   - --repo name=/path/to/repo     → named repo "name"
+func parseRepoFlags(repos []string) (defaultRepo string, namedRepos map[string]string, err error) {
+	namedRepos = make(map[string]string)
+	for _, r := range repos {
+		if idx := strings.IndexByte(r, '='); idx > 0 {
+			name := r[:idx]
+			path := r[idx+1:]
+			absPath, absErr := filepath.Abs(path)
+			if absErr != nil {
+				return "", nil, fmt.Errorf("invalid repo path for %q: %w", name, absErr)
+			}
+			namedRepos[name] = absPath
+		} else {
+			if defaultRepo != "" {
+				return "", nil, fmt.Errorf("multiple default repos specified; use name=path for additional repos")
+			}
+			defaultRepo = r
+		}
+	}
+	return defaultRepo, namedRepos, nil
+}
+
 // parseCreateOptions parses command flags into CreateOptions.
-func parseCreateOptions(name string) sandbox.CreateOptions {
+func parseCreateOptions(name string) (sandbox.CreateOptions, error) {
+	defaultRepo, namedRepos, err := parseRepoFlags(upRepos)
+	if err != nil {
+		return sandbox.CreateOptions{}, err
+	}
+
 	return sandbox.CreateOptions{
 		Name:        name,
 		Template:    upTemplate,
-		RepoPath:    upRepo,
+		RepoPath:    defaultRepo,
+		Repos:       namedRepos,
 		Direct:      upDirect,
 		SSHKeys:     upSSHKeys,
 		NoMuxConfig: upNoMuxConfig,
 		GitUser:     upGitUser,
 		GitEmail:    upGitEmail,
 		SSHKeyPath:  upSSHKeyPath,
-	}
+	}, nil
 }
