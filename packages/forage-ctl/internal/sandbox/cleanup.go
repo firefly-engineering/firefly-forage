@@ -73,16 +73,45 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 		}
 	}
 
-	// Clean up workspace if using a VCS backend
-	if opts.CleanupWorkspace && metadata.SourceRepo != "" {
-		backend := workspace.BackendForMode(metadata.WorkspaceMode)
-		if backend != nil {
-			logging.Debug("cleaning up workspace",
-				"backend", backend.Name(),
-				"repo", metadata.SourceRepo,
-				"name", name)
-			if err := backend.Remove(metadata.SourceRepo, name, metadata.Workspace); err != nil {
-				logging.Warn("failed to remove workspace", "error", err)
+	// Clean up workspaces
+	if opts.CleanupWorkspace {
+		if len(metadata.WorkspaceMounts) > 0 {
+			// Multi-mount cleanup: iterate each mount
+			for _, m := range metadata.WorkspaceMounts {
+				if m.SourceRepo == "" {
+					continue // hostPath mounts don't need cleanup
+				}
+				backend := workspace.BackendForMode(m.Mode)
+				if backend == nil {
+					continue
+				}
+				// Workspace name matches the pattern used in setupWorkspaceMounts
+				wsName := name + "-" + m.Name
+				logging.Debug("cleaning up workspace mount",
+					"mount", m.Name,
+					"backend", backend.Name(),
+					"repo", m.SourceRepo,
+					"wsName", wsName)
+				if err := backend.Remove(m.SourceRepo, wsName, m.HostPath); err != nil {
+					logging.Warn("failed to remove workspace mount", "mount", m.Name, "error", err)
+				}
+			}
+			// Remove the managed workspace subdirectory for this sandbox
+			sandboxWsDir := filepath.Join(paths.WorkspacesDir, name)
+			if err := os.RemoveAll(sandboxWsDir); err != nil {
+				logging.Warn("failed to remove sandbox workspace directory", "path", sandboxWsDir, "error", err)
+			}
+		} else if metadata.SourceRepo != "" {
+			// Legacy single-workspace cleanup
+			backend := workspace.BackendForMode(metadata.WorkspaceMode)
+			if backend != nil {
+				logging.Debug("cleaning up workspace",
+					"backend", backend.Name(),
+					"repo", metadata.SourceRepo,
+					"name", name)
+				if err := backend.Remove(metadata.SourceRepo, name, metadata.Workspace); err != nil {
+					logging.Warn("failed to remove workspace", "error", err)
+				}
 			}
 		}
 	}
