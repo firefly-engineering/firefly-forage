@@ -650,6 +650,242 @@ func TestCreator_runInitCommands_ProjectInit(t *testing.T) {
 	}
 }
 
+func TestValidateMountSpecs(t *testing.T) {
+	tests := []struct {
+		name    string
+		mounts  map[string]*config.WorkspaceMount
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid single mount",
+			mounts: map[string]*config.WorkspaceMount{
+				"main": {ContainerPath: "/workspace"},
+			},
+		},
+		{
+			name: "valid multiple mounts",
+			mounts: map[string]*config.WorkspaceMount{
+				"main":  {ContainerPath: "/workspace", Mode: "jj"},
+				"beads": {ContainerPath: "/workspace/.beads", Mode: "jj"},
+			},
+		},
+		{
+			name: "duplicate container paths",
+			mounts: map[string]*config.WorkspaceMount{
+				"a": {ContainerPath: "/workspace"},
+				"b": {ContainerPath: "/workspace"},
+			},
+			wantErr: true,
+			errMsg:  "both claim container path",
+		},
+		{
+			name: "missing container path",
+			mounts: map[string]*config.WorkspaceMount{
+				"bad": {ContainerPath: ""},
+			},
+			wantErr: true,
+			errMsg:  "containerPath is required",
+		},
+		{
+			name: "both hostPath and repo",
+			mounts: map[string]*config.WorkspaceMount{
+				"bad": {ContainerPath: "/workspace", HostPath: "/tmp/dir", Repo: "myrepo"},
+			},
+			wantErr: true,
+			errMsg:  "cannot set both",
+		},
+		{
+			name:   "empty mounts",
+			mounts: map[string]*config.WorkspaceMount{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMountSpecs(tt.mounts)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateMountSpecs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && tt.errMsg != "" {
+				if err == nil || !contains(err.Error(), tt.errMsg) {
+					t.Errorf("error = %v, want containing %q", err, tt.errMsg)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveRepoPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		repoRef  string
+		opts     CreateOptions
+		wantErr  bool
+		wantPath string // empty means don't check (absolute paths vary)
+	}{
+		{
+			name:    "empty ref uses default repo",
+			repoRef: "",
+			opts:    CreateOptions{RepoPath: "/home/user/project"},
+		},
+		{
+			name:    "empty ref with no default repo errors",
+			repoRef: "",
+			opts:    CreateOptions{},
+			wantErr: true,
+		},
+		{
+			name:     "absolute path used as-is",
+			repoRef:  "/home/user/other-project",
+			opts:     CreateOptions{},
+			wantPath: "/home/user/other-project",
+		},
+		{
+			name:    "named repo found",
+			repoRef: "data",
+			opts:    CreateOptions{Repos: map[string]string{"data": "/home/user/data-repo"}},
+		},
+		{
+			name:    "named repo not found",
+			repoRef: "missing",
+			opts:    CreateOptions{Repos: map[string]string{"data": "/home/user/data-repo"}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := resolveRepoPath(tt.repoRef, tt.opts)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveRepoPath() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if tt.wantPath != "" && path != tt.wantPath {
+				t.Errorf("path = %q, want %q", path, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestCreator_setupWorkspaceMounts_HostPath(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	// Create a host directory
+	hostDir := filepath.Join(env.TmpDir, "host-data")
+	if err := os.MkdirAll(hostDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	template := &config.Template{
+		Name: "test",
+		WorkspaceMounts: map[string]*config.WorkspaceMount{
+			"data": {
+				ContainerPath: "/workspace/data",
+				HostPath:      hostDir,
+				ReadOnly:      true,
+			},
+		},
+	}
+
+	ws, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	if err != nil {
+		t.Fatalf("setupWorkspaceMounts() failed: %v", err)
+	}
+
+	if len(ws.mounts) != 1 {
+		t.Fatalf("mounts length = %d, want 1", len(ws.mounts))
+	}
+
+	m := ws.mounts[0]
+	if m.Name != "data" {
+		t.Errorf("mount name = %q, want %q", m.Name, "data")
+	}
+	if m.Mode != "direct" {
+		t.Errorf("mount mode = %q, want %q", m.Mode, "direct")
+	}
+	if !m.ReadOnly {
+		t.Error("mount should be read-only")
+	}
+	if m.SourceRepo != "" {
+		t.Errorf("mount sourceRepo = %q, want empty", m.SourceRepo)
+	}
+}
+
+func TestCreator_setupWorkspaceMounts_MissingHostPath(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	template := &config.Template{
+		Name: "test",
+		WorkspaceMounts: map[string]*config.WorkspaceMount{
+			"data": {
+				ContainerPath: "/workspace/data",
+				HostPath:      "/nonexistent/path",
+			},
+		},
+	}
+
+	_, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	if err == nil {
+		t.Fatal("setupWorkspaceMounts() should fail for missing hostPath")
+	}
+}
+
+func TestCreator_setupWorkspaceMounts_MissingRepo(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	defer env.Cleanup()
+
+	creator := &Creator{
+		paths:      env.Paths,
+		hostConfig: env.HostConfig,
+		rt:         env.Runtime,
+	}
+
+	template := &config.Template{
+		Name: "test",
+		WorkspaceMounts: map[string]*config.WorkspaceMount{
+			"main": {
+				ContainerPath: "/workspace",
+				Repo:          "missing-repo",
+			},
+		},
+	}
+
+	_, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	if err == nil {
+		t.Fatal("setupWorkspaceMounts() should fail for missing named repo")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestWorkspaceBackendFor(t *testing.T) {
 	tests := []struct {
 		mode     WorkspaceMode

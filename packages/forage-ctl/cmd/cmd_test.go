@@ -370,3 +370,72 @@ func TestCommandRequiresArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRepoFlags(t *testing.T) {
+	tests := []struct {
+		name        string
+		repos       []string
+		wantDefault string
+		wantNamed   map[string]string
+		wantErr     bool
+	}{
+		{
+			name:        "single default repo",
+			repos:       []string{"/home/user/project"},
+			wantDefault: "/home/user/project",
+			wantNamed:   map[string]string{},
+		},
+		{
+			name:        "named repo only",
+			repos:       []string{"data=/home/user/data-repo"},
+			wantDefault: "",
+			wantNamed:   map[string]string{"data": "/home/user/data-repo"},
+		},
+		{
+			name:        "default plus named",
+			repos:       []string{"/home/user/project", "data=/home/user/data-repo"},
+			wantDefault: "/home/user/project",
+			wantNamed:   map[string]string{"data": "/home/user/data-repo"},
+		},
+		{
+			name:        "multiple named repos",
+			repos:       []string{"proj=/home/user/project", "data=/home/user/data"},
+			wantDefault: "",
+			wantNamed:   map[string]string{"proj": "/home/user/project", "data": "/home/user/data"},
+		},
+		{
+			name:    "duplicate default repos",
+			repos:   []string{"/home/user/a", "/home/user/b"},
+			wantErr: true,
+		},
+		{
+			name:        "empty repos",
+			repos:       nil,
+			wantDefault: "",
+			wantNamed:   map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defaultRepo, namedRepos, err := parseRepoFlags(tt.repos)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseRepoFlags() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if defaultRepo != tt.wantDefault {
+				t.Errorf("defaultRepo = %q, want %q", defaultRepo, tt.wantDefault)
+			}
+			if len(namedRepos) != len(tt.wantNamed) {
+				t.Errorf("namedRepos length = %d, want %d", len(namedRepos), len(tt.wantNamed))
+			}
+			for k, v := range tt.wantNamed {
+				if got, ok := namedRepos[k]; !ok || got != v {
+					t.Errorf("namedRepos[%q] = %q, want %q", k, got, v)
+				}
+			}
+		})
+	}
+}

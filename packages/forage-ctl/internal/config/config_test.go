@@ -1300,3 +1300,180 @@ func TestValidateSandboxName(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspaceMountMeta_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	metadata := &SandboxMetadata{
+		Name:        "multi-mount-test",
+		Template:    "claude",
+		NetworkSlot: 5,
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		Workspace:   "/var/lib/firefly-forage/workspaces/multi-mount-test/main",
+		WorkspaceMounts: []WorkspaceMountMeta{
+			{
+				Name:          "main",
+				ContainerPath: "/workspace",
+				HostPath:      "/var/lib/firefly-forage/workspaces/multi-mount-test/main",
+				SourceRepo:    "/home/user/project",
+				Mode:          "jj",
+			},
+			{
+				Name:          "beads",
+				ContainerPath: "/workspace/.beads",
+				HostPath:      "/var/lib/firefly-forage/workspaces/multi-mount-test/beads",
+				SourceRepo:    "/home/user/project",
+				Mode:          "jj",
+				Branch:        "beads-sync",
+			},
+			{
+				Name:          "data",
+				ContainerPath: "/workspace/data",
+				HostPath:      "/mnt/data",
+				Mode:          "direct",
+				ReadOnly:      true,
+			},
+		},
+	}
+
+	if err := SaveSandboxMetadata(tmpDir, metadata); err != nil {
+		t.Fatalf("SaveSandboxMetadata failed: %v", err)
+	}
+
+	loaded, err := LoadSandboxMetadata(tmpDir, "multi-mount-test")
+	if err != nil {
+		t.Fatalf("LoadSandboxMetadata failed: %v", err)
+	}
+
+	if len(loaded.WorkspaceMounts) != 3 {
+		t.Fatalf("WorkspaceMounts length = %d, want 3", len(loaded.WorkspaceMounts))
+	}
+
+	main := loaded.WorkspaceMounts[0]
+	if main.Name != "main" || main.ContainerPath != "/workspace" || main.Mode != "jj" {
+		t.Errorf("main mount = %+v, unexpected", main)
+	}
+
+	beads := loaded.WorkspaceMounts[1]
+	if beads.Name != "beads" || beads.Branch != "beads-sync" || beads.Mode != "jj" {
+		t.Errorf("beads mount = %+v, unexpected", beads)
+	}
+
+	data := loaded.WorkspaceMounts[2]
+	if data.Name != "data" || !data.ReadOnly || data.Mode != "direct" {
+		t.Errorf("data mount = %+v, unexpected", data)
+	}
+}
+
+func TestSandboxMetadata_Validate_WorkspaceMounts(t *testing.T) {
+	// Valid: has WorkspaceMounts but empty Workspace
+	meta := &SandboxMetadata{
+		Name:        "test",
+		Template:    "claude",
+		NetworkSlot: 1,
+		WorkspaceMounts: []WorkspaceMountMeta{
+			{Name: "main", ContainerPath: "/workspace", HostPath: "/tmp/ws", Mode: "direct"},
+		},
+	}
+	if err := meta.Validate(); err != nil {
+		t.Errorf("expected valid metadata with WorkspaceMounts, got error: %v", err)
+	}
+
+	// Invalid: neither Workspace nor WorkspaceMounts
+	meta2 := &SandboxMetadata{
+		Name:        "test",
+		Template:    "claude",
+		NetworkSlot: 1,
+	}
+	if err := meta2.Validate(); err == nil {
+		t.Error("expected error for metadata with no workspace or mounts")
+	}
+
+	// Invalid mode in mount
+	meta3 := &SandboxMetadata{
+		Name:        "test",
+		Template:    "claude",
+		NetworkSlot: 1,
+		WorkspaceMounts: []WorkspaceMountMeta{
+			{Name: "bad", ContainerPath: "/workspace", HostPath: "/tmp/ws", Mode: "invalid-mode"},
+		},
+	}
+	if err := meta3.Validate(); err == nil {
+		t.Error("expected error for invalid mount mode")
+	}
+}
+
+func TestWorkspaceMount_TemplateJSON(t *testing.T) {
+	template := &Template{
+		Name:    "test",
+		Network: "full",
+		Agents: map[string]AgentConfig{
+			"claude": {PackagePath: "claude", HostConfigDir: "/home/user/.claude", ContainerConfigDir: "/home/agent/.claude"},
+		},
+		WorkspaceMounts: map[string]*WorkspaceMount{
+			"main": {
+				Name:          "main",
+				ContainerPath: "/workspace",
+				Mode:          "jj",
+			},
+			"data": {
+				Name:          "data",
+				ContainerPath: "/workspace/data",
+				Repo:          "data",
+				Mode:          "git-worktree",
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal template: %v", err)
+	}
+
+	var loaded Template
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("failed to unmarshal template: %v", err)
+	}
+
+	if len(loaded.WorkspaceMounts) != 2 {
+		t.Fatalf("WorkspaceMounts length = %d, want 2", len(loaded.WorkspaceMounts))
+	}
+
+	mainMount := loaded.WorkspaceMounts["main"]
+	if mainMount == nil || mainMount.ContainerPath != "/workspace" || mainMount.Mode != "jj" {
+		t.Errorf("main mount = %+v, unexpected", mainMount)
+	}
+
+	dataMount := loaded.WorkspaceMounts["data"]
+	if dataMount == nil || dataMount.Repo != "data" || dataMount.Mode != "git-worktree" {
+		t.Errorf("data mount = %+v, unexpected", dataMount)
+	}
+}
+
+func TestSandboxMetadata_BackwardCompat_NoWorkspaceMounts(t *testing.T) {
+	// Simulate loading old metadata that has no workspaceMounts field
+	oldJSON := `{
+		"name": "legacy-sandbox",
+		"template": "claude",
+		"workspace": "/var/lib/firefly-forage/workspaces/legacy-sandbox",
+		"networkSlot": 3,
+		"createdAt": "2024-01-01T00:00:00Z",
+		"workspaceMode": "jj",
+		"sourceRepo": "/home/user/project"
+	}`
+
+	var meta SandboxMetadata
+	if err := json.Unmarshal([]byte(oldJSON), &meta); err != nil {
+		t.Fatalf("failed to unmarshal legacy metadata: %v", err)
+	}
+
+	if meta.Workspace != "/var/lib/firefly-forage/workspaces/legacy-sandbox" {
+		t.Errorf("Workspace = %q, unexpected", meta.Workspace)
+	}
+	if len(meta.WorkspaceMounts) != 0 {
+		t.Errorf("WorkspaceMounts should be empty for legacy metadata, got %d", len(meta.WorkspaceMounts))
+	}
+	if err := meta.Validate(); err != nil {
+		t.Errorf("legacy metadata should validate, got: %v", err)
+	}
+}
