@@ -14,8 +14,13 @@ type CreateOptions struct {
 	// Template is the template name to use (required)
 	Template string
 
-	// RepoPath is the target path (repo or directory)
+	// RepoPath is the target path (repo or directory).
+	// This is the default (unnamed) repo for mounts that don't specify one.
 	RepoPath string
+
+	// Repos holds named repo parameters from --repo name=path flags.
+	// Keys are repo names, values are absolute paths.
+	Repos map[string]string
 
 	// Direct forces direct mount, skipping VCS isolation
 	Direct bool
