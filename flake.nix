@@ -64,32 +64,34 @@
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              # Go toolchain
-              go
-              gopls
-              gotools
-              go-tools # staticcheck
-              golangci-lint
+            packages =
+              with pkgs;
+              [
+                # Go toolchain
+                go
+                gopls
+                gotools
+                go-tools # staticcheck
+                golangci-lint
 
-              # Nix tooling
-              nixfmt-tree
-              nil
+                # Nix tooling
+                nixfmt-tree
+                nil
 
-              # Documentation
-              mdbook
+                # Documentation
+                mdbook
 
-              # Testing dependencies
-              git
-              jujutsu
+                # Testing dependencies
+                git
+                jujutsu
 
-              # Task runner
-              just
-            ]
-            ++ (with toolbox.packages.${system}; [
-              beads-rust-default
-              beads-viewer-default
-            ]);
+                # Task runner
+                just
+              ]
+              ++ (with toolbox.packages.${system}; [
+                beads-rust-default
+                beads-viewer-default
+              ]);
           };
         }
       );

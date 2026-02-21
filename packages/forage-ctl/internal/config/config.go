@@ -298,8 +298,8 @@ func (r *ResourceLimits) IsEmpty() bool {
 // WorkspaceMount defines a single mount source within the sandbox.
 // Each mount declares what to put where inside the container.
 type WorkspaceMount struct {
-	Name          string `json:"name"`                    // identifier (from template key or generated)
-	ContainerPath string `json:"containerPath"`           // e.g. "/workspace/.beads"
+	Name          string `json:"name"`          // identifier (from template key or generated)
+	ContainerPath string `json:"containerPath"` // e.g. "/workspace/.beads"
 
 	// Source — exactly one of HostPath or Repo must be set
 	HostPath string `json:"hostPath,omitempty"` // literal bind mount from host
@@ -314,20 +314,20 @@ type WorkspaceMount struct {
 
 // Template represents a sandbox template configuration
 type Template struct {
-	Name              string                      `json:"name"`
-	Description       string                      `json:"description"`
-	Network           string                      `json:"network"`
-	AllowedHosts      []string                    `json:"allowedHosts"`
-	Agents            map[string]AgentConfig      `json:"agents"`
-	ExtraPackages     []string                    `json:"extraPackages"`
-	UseProxy          bool                        `json:"useProxy,omitempty"`          // Use forage-proxy for API calls
-	AgentIdentity     *AgentIdentity              `json:"agentIdentity,omitempty"`     // Template-level default agent identity
-	TmuxWindows       []TmuxWindow                `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
-	Multiplexer       string                      `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
-	ReadOnlyWorkspace bool                        `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
-	ResourceLimits    *ResourceLimits             `json:"resourceLimits,omitempty"`    // Container resource limits
-	InitCommands      []string                    `json:"initCommands,omitempty"`      // Commands to run after container creation
-	WorkspaceMounts   map[string]*WorkspaceMount  `json:"workspaceMounts,omitempty"`   // Composable workspace mounts (keyed by name)
+	Name              string                     `json:"name"`
+	Description       string                     `json:"description"`
+	Network           string                     `json:"network"`
+	AllowedHosts      []string                   `json:"allowedHosts"`
+	Agents            map[string]AgentConfig     `json:"agents"`
+	ExtraPackages     []string                   `json:"extraPackages"`
+	UseProxy          bool                       `json:"useProxy,omitempty"`          // Use forage-proxy for API calls
+	AgentIdentity     *AgentIdentity             `json:"agentIdentity,omitempty"`     // Template-level default agent identity
+	TmuxWindows       []TmuxWindow               `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
+	Multiplexer       string                     `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
+	ReadOnlyWorkspace bool                       `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
+	ResourceLimits    *ResourceLimits            `json:"resourceLimits,omitempty"`    // Container resource limits
+	InitCommands      []string                   `json:"initCommands,omitempty"`      // Commands to run after container creation
+	WorkspaceMounts   map[string]*WorkspaceMount `json:"workspaceMounts,omitempty"`   // Composable workspace mounts (keyed by name)
 }
 
 // AgentPermissions controls agent permission settings.
@@ -433,11 +433,11 @@ func (a *AgentConfig) Validate() error {
 type WorkspaceMountMeta struct {
 	Name          string `json:"name"`
 	ContainerPath string `json:"containerPath"`
-	HostPath      string `json:"hostPath"`                // effective host path (managed dir or literal)
-	SourceRepo    string `json:"sourceRepo,omitempty"`    // source repo path (for VCS-backed mounts)
-	Mode          string `json:"mode"`                    // "direct", "jj", "git-worktree"
-	Branch        string `json:"branch,omitempty"`        // branch/ref checked out
-	GitBranch     string `json:"gitBranch,omitempty"`     // git branch name (for git-worktree mode)
+	HostPath      string `json:"hostPath"`             // effective host path (managed dir or literal)
+	SourceRepo    string `json:"sourceRepo,omitempty"` // source repo path (for VCS-backed mounts)
+	Mode          string `json:"mode"`                 // "direct", "jj", "git-worktree"
+	Branch        string `json:"branch,omitempty"`     // branch/ref checked out
+	GitBranch     string `json:"gitBranch,omitempty"`  // git branch name (for git-worktree mode)
 	ReadOnly      bool   `json:"readOnly,omitempty"`
 }
 
