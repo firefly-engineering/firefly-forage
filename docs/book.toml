@@ -1,0 +1,15 @@
+[book]
+title = "Firefly Forage"
+authors = ["Firefly Engineering"]
+description = "Isolated, ephemeral sandboxes for AI coding agents on NixOS"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/firefly-engineering/firefly-forage"
+edit-url-template = "https://github.com/firefly-engineering/firefly-forage/edit/main/docs/{path}"

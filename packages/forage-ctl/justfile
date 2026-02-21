@@ -1,0 +1,56 @@
+# Firefly Forage CLI - Development Tasks
+
+# Default recipe: show available commands
+default:
+    @just --list
+
+# Run all tests
+test:
+    go test ./...
+
+# Run tests with verbose output
+test-v:
+    go test -v ./...
+
+# Run only unit tests (fast, skips long-running tests)
+test-unit:
+    go test -short ./...
+
+# Run a specific test package
+test-pkg pkg:
+    go test -v ./internal/{{pkg}}/...
+
+# Run docker integration tests (requires docker)
+test-docker:
+    FORAGE_INTEGRATION_TESTS=1 FORAGE_RUNTIME=docker go test -v ./internal/integration/...
+
+# Run all tests including docker integration
+test-all: test test-docker
+
+# Run linter
+lint:
+    golangci-lint run
+
+# Fix linter issues
+lint-fix:
+    golangci-lint run --fix
+
+# Format code
+fmt:
+    go fmt ./...
+
+# Build the binary
+build:
+    go build -o forage-ctl .
+
+# Clean build artifacts
+clean:
+    rm -f forage-ctl
+    go clean
+
+# Update dependencies
+update-deps:
+    go get -u ./... && go mod tidy
+
+# Run all checks (fmt, lint, test)
+check: fmt lint test

@@ -1,0 +1,182 @@
+package sandbox
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
+)
+
+// CleanupOptions configures sandbox cleanup behavior.
+type CleanupOptions struct {
+	// DestroyContainer if true, destroys the container via runtime.
+	DestroyContainer bool
+
+	// CleanupWorkspace if true, removes VCS workspace (jj/git-worktree).
+	CleanupWorkspace bool
+
+	// CleanupSecrets if true, removes the secrets directory.
+	CleanupSecrets bool
+
+	// CleanupConfig if true, removes the nix config file.
+	CleanupConfig bool
+
+	// CleanupSkills if true, removes the skills markdown file.
+	CleanupSkills bool
+
+	// CleanupPermissions if true, removes agent permissions files (*-permissions.json).
+	CleanupPermissions bool
+
+	// CleanupMetadata if true, removes the sandbox metadata file.
+	CleanupMetadata bool
+
+	// CleanupAuditLog if true, removes the sandbox audit log.
+	CleanupAuditLog bool
+}
+
+// DefaultCleanupOptions returns options that clean up everything.
+func DefaultCleanupOptions() CleanupOptions {
+	return CleanupOptions{
+		DestroyContainer:   true,
+		CleanupWorkspace:   true,
+		CleanupSecrets:     true,
+		CleanupConfig:      true,
+		CleanupSkills:      true,
+		CleanupPermissions: true,
+		CleanupMetadata:    true,
+		CleanupAuditLog:    true,
+	}
+}
+
+// Cleanup removes sandbox resources.
+// This is the canonical cleanup function used by both the down command
+// and error recovery in the create flow.
+// The rt parameter is optional; if nil, container destruction is skipped.
+func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts CleanupOptions, rt runtime.Runtime) {
+	if metadata == nil {
+		return
+	}
+
+	name := metadata.Name
+	logging.Debug("cleaning up sandbox", "name", name)
+
+	// Destroy container if requested (always attempt — unit file cleanup
+	// must happen even after the container has already been stopped).
+	if opts.DestroyContainer && rt != nil {
+		logging.Debug("destroying container", "name", name)
+		if err := rt.Destroy(context.Background(), name); err != nil {
+			logging.Warn("container destroy failed during cleanup", "name", name, "error", err)
+		}
+	}
+
+	// Clean up workspaces
+	if opts.CleanupWorkspace {
+		if len(metadata.WorkspaceMounts) > 0 {
+			// Multi-mount cleanup: iterate each mount
+			for _, m := range metadata.WorkspaceMounts {
+				if m.SourceRepo == "" {
+					continue // hostPath mounts don't need cleanup
+				}
+				backend := workspace.BackendForMode(m.Mode)
+				if backend == nil {
+					continue
+				}
+				// Workspace name matches the pattern used in setupWorkspaceMounts
+				wsName := name + "-" + m.Name
+				logging.Debug("cleaning up workspace mount",
+					"mount", m.Name,
+					"backend", backend.Name(),
+					"repo", m.SourceRepo,
+					"wsName", wsName)
+				if err := backend.Remove(m.SourceRepo, wsName, m.HostPath); err != nil {
+					logging.Warn("failed to remove workspace mount", "mount", m.Name, "error", err)
+				}
+			}
+			// Remove the managed workspace subdirectory for this sandbox
+			sandboxWsDir := filepath.Join(paths.WorkspacesDir, name)
+			if err := os.RemoveAll(sandboxWsDir); err != nil {
+				logging.Warn("failed to remove sandbox workspace directory", "path", sandboxWsDir, "error", err)
+			}
+		} else if metadata.SourceRepo != "" {
+			// Legacy single-workspace cleanup
+			backend := workspace.BackendForMode(metadata.WorkspaceMode)
+			if backend != nil {
+				logging.Debug("cleaning up workspace",
+					"backend", backend.Name(),
+					"repo", metadata.SourceRepo,
+					"name", name)
+				if err := backend.Remove(metadata.SourceRepo, name, metadata.Workspace); err != nil {
+					logging.Warn("failed to remove workspace", "error", err)
+				}
+			}
+		}
+	}
+
+	// Remove secrets directory
+	if opts.CleanupSecrets {
+		secretsPath := filepath.Join(paths.SecretsDir, name)
+		logging.Debug("removing secrets", "path", secretsPath)
+		if err := os.RemoveAll(secretsPath); err != nil {
+			logging.Warn("failed to remove secrets directory", "path", secretsPath, "error", err)
+		}
+	}
+
+	// Remove skills file
+	if opts.CleanupSkills {
+		skillsPath := filepath.Join(paths.SandboxesDir, name+".skills.md")
+		if err := os.Remove(skillsPath); err != nil && !os.IsNotExist(err) {
+			logging.Warn("failed to remove skills file", "path", skillsPath, "error", err)
+		}
+	}
+
+	// Remove permissions files (e.g. <name>.claude-permissions.json)
+	if opts.CleanupPermissions {
+		pattern := filepath.Join(paths.SandboxesDir, name+".*-permissions.json")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			logging.Warn("failed to glob permissions files", "pattern", pattern, "error", err)
+		}
+		for _, match := range matches {
+			logging.Debug("removing permissions file", "path", match)
+			if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
+				logging.Warn("failed to remove permissions file", "path", match, "error", err)
+			}
+		}
+	}
+
+	// Remove nix config file
+	if opts.CleanupConfig {
+		configPath := filepath.Join(paths.SandboxesDir, name+".nix")
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			logging.Warn("failed to remove config file", "path", configPath, "error", err)
+		}
+	}
+
+	// Remove generated file staging directory
+	if opts.CleanupConfig {
+		generatedDir := filepath.Join(paths.SandboxesDir, name+".generated")
+		if err := os.RemoveAll(generatedDir); err != nil {
+			logging.Warn("failed to remove generated files directory", "path", generatedDir, "error", err)
+		}
+	}
+
+	// Remove audit log
+	if opts.CleanupAuditLog {
+		auditPath := filepath.Join(paths.StateDir, "sandboxes", name+".events.jsonl")
+		if err := os.Remove(auditPath); err != nil && !os.IsNotExist(err) {
+			logging.Warn("failed to remove audit log", "path", auditPath, "error", err)
+		}
+	}
+
+	// Remove metadata
+	if opts.CleanupMetadata {
+		logging.Debug("removing metadata", "name", name)
+		if err := config.DeleteSandboxMetadata(paths.SandboxesDir, name); err != nil {
+			logging.Warn("failed to remove metadata", "name", name, "error", err)
+		}
+	}
+}

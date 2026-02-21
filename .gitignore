@@ -1,0 +1,9 @@
+result
+result-*
+.direnv/
+docs/book/
+
+# Go vendor directories (dependencies managed by Nix)
+**/vendor/
+
+.claude/

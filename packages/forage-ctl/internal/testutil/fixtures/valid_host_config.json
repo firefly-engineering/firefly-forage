@@ -1,0 +1,14 @@
+{
+  "user": "testuser",
+  "authorizedKeys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample test@example.com"
+  ],
+  "secrets": {
+    "anthropic-api-key": "/run/secrets/anthropic-api-key",
+    "openai-api-key": "/run/secrets/openai-api-key"
+  },
+  "stateDir": "/var/lib/firefly-forage",
+  "extraContainerPath": "/nix/store/abc123-extra-container/bin/extra-container",
+  "nixpkgsPath": "/nix/store/abc123-nixpkgs-src",
+  "nixpkgsRev": "abc123def456"
+}

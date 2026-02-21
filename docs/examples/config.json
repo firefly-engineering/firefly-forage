@@ -1,0 +1,17 @@
+{
+  "user": "youruser",
+  "portRange": {
+    "from": 2200,
+    "to": 2299
+  },
+  "authorizedKeys": [
+    "ssh-ed25519 AAAA... user@host"
+  ],
+  "secrets": {
+    "anthropic": "/run/secrets/anthropic-api-key"
+  },
+  "stateDir": "/var/lib/firefly-forage",
+  "extraContainerPath": "/nix/store/.../bin/extra-container",
+  "nixpkgsRev": "nixos-24.05",
+  "proxyUrl": ""
+}

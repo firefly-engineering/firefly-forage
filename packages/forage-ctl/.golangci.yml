@@ -1,0 +1,75 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - unparam
+    - gosec
+  disable:
+    - prealloc  # Suggestions only, not errors
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    gosec:
+      excludes:
+        - G104  # Errors unhandled (covered by errcheck)
+        - G204  # Subprocess with variable - expected for sandbox tool
+        - G301  # Directory permissions 0755 - acceptable for non-secret dirs
+        - G304  # File path from variable - expected behavior
+        - G306  # File permissions 0644 - acceptable for config files
+        - G101  # Hardcoded credentials - false positive on constant names
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+      - linters:
+          - unparam
+        text: "always receives"
+
+      # Allow unchecked errors on tabwriter/stdout writes
+      - linters:
+          - errcheck
+        text: "fmt\\.(Fprint|Fprintf|Fprintln)"
+
+      # Allow unchecked cleanup operations
+      - linters:
+          - errcheck
+        text: "(os\\.Remove|os\\.RemoveAll)"
+
+      # Suppress empty branch warnings - sometimes intentional
+      - linters:
+          - staticcheck
+        text: "SA9003"
+
+      # Style suggestion - capitalized error strings acceptable for user-facing
+      - linters:
+          - staticcheck
+        text: "ST1005"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/firefly-engineering/firefly-forage
