@@ -32,17 +32,15 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	// Find the command to execute (everything after --)
+	// cobra/pflag strips "--" from args, so we use ArgsLenAtDash()
+	// to find the position where "--" was in the original argv.
+	dash := cmd.ArgsLenAtDash()
 	var execArgs []string
-	foundSeparator := false
-	for i, arg := range args {
-		if arg == "--" {
-			execArgs = args[i+1:]
-			foundSeparator = true
-			break
-		}
+	if dash >= 0 && dash < len(args) {
+		execArgs = args[dash:]
 	}
 
-	if !foundSeparator || len(execArgs) == 0 {
+	if len(execArgs) == 0 {
 		return errors.ValidationError("usage: forage-ctl exec <name> -- <command>")
 	}
 
