@@ -32,6 +32,10 @@ test-all:
 test-vm:
     nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').vm-integration
 
+# Run E2E tests in a QEMU VM (full sandbox lifecycle, Linux only, KVM recommended)
+test-e2e:
+    nix run .#e2e-driver
+
 # Format all code
 fmt:
     nix fmt -- .

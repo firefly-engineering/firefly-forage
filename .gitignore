@@ -7,3 +7,6 @@ docs/book/
 **/vendor/
 
 .claude/
+
+# E2E test VM disk images
+*.qcow2

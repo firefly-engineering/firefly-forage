@@ -38,6 +38,8 @@
         system:
         let
           pkgs = pkgsFor system;
+          isLinux = pkgs.stdenv.isLinux;
+          e2e = import ./tests/e2e/vm.nix { inherit pkgs self; };
         in
         {
           forage-ctl = pkgs.callPackage ./packages/forage-ctl { };
@@ -54,6 +56,12 @@
             '';
           };
           default = self.packages.${system}.forage-ctl;
+        }
+        // nixpkgs.lib.optionalAttrs isLinux {
+          # E2E test VM (QEMU) - builds the bootable VM image
+          e2e-vm = e2e.vm;
+          # E2E test driver - boots VM and runs full lifecycle tests
+          e2e-driver = e2e.testDriver;
         }
       );
 
