@@ -323,6 +323,171 @@ func generateFullConfig(slot int) string {
         networking.firewall.allowedTCPPorts = [ 22 ];`, slot)
 }
 
+// GenerateNixNetworkConfigCached generates a slot-independent version of the
+// network config suitable for the cached inner system. The gateway IP and
+// slot-dependent nftables rules are deferred to runtime.
+//
+// For ModeFull: omits defaultGateway (set by forage-network service at runtime)
+// For ModeRestricted: omits defaultGateway and loads nftables from a bind-mounted file
+// For ModeNone: unchanged (already slot-independent)
+func GenerateNixNetworkConfigCached(cfg *Config) string {
+	switch cfg.Mode {
+	case ModeNone:
+		return generateNoneConfig()
+	case ModeRestricted:
+		return generateRestrictedConfigCached(cfg)
+	default: // ModeFull
+		return generateFullConfigCached()
+	}
+}
+
+func generateFullConfigCached() string {
+	return `# Full network access (gateway set at runtime by forage-network service)
+        networking.nameservers = [
+          "1.1.1.1"
+          "8.8.8.8"
+        ];
+        networking.firewall.allowedTCPPorts = [ 22 ];`
+}
+
+func generateRestrictedConfigCached(cfg *Config) string {
+	if len(cfg.AllowedHosts) == 0 {
+		return generateNoneConfig()
+	}
+
+	// Build dnsmasq server lines (not slot-dependent)
+	var dnsServers []string
+	for _, host := range cfg.AllowedHosts {
+		if strings.HasPrefix(host, "*.") {
+			domain := strings.TrimPrefix(host, "*.")
+			dnsServers = append(dnsServers, fmt.Sprintf("server=/%s/1.1.1.1", domain))
+		} else {
+			dnsServers = append(dnsServers, fmt.Sprintf("server=/%s/1.1.1.1", host))
+		}
+	}
+
+	return fmt.Sprintf(`# Restricted network - gateway and nftables rules set at runtime
+        networking.nameservers = [ "127.0.0.1" ]; # Use local DNS filter
+
+        # DNS filtering with dnsmasq
+        services.dnsmasq = {
+          enable = true;
+          settings = {
+            # Don't use system resolv.conf
+            no-resolv = true;
+
+            # Listen only on localhost
+            listen-address = "127.0.0.1";
+            bind-interfaces = true;
+
+            # Forward allowed domains to public DNS
+            server = [
+              %s
+            ];
+
+            # Block all other queries
+            address = "/#/";
+
+            # Cache settings
+            cache-size = 1000;
+
+            # Security
+            domain-needed = true;
+            bogus-priv = true;
+          };
+        };
+
+        # nftables ruleset loaded from bind-mounted file at runtime
+        networking.nftables = {
+          enable = true;
+          rulesetFile = "/etc/forage-nftables.conf";
+        };
+
+        # Disable iptables (using nftables instead)
+        networking.firewall.enable = false;`,
+		formatNixList(dnsServers),
+	)
+}
+
+// GenerateNftablesRuleset generates the content of the nftables ruleset file
+// for restricted mode. This is written to a generated file and bind-mounted.
+func GenerateNftablesRuleset(cfg *Config) string {
+	if cfg.Mode != ModeRestricted || len(cfg.AllowedHosts) == 0 {
+		return ""
+	}
+
+	resolved, _ := ResolveHosts(cfg.AllowedHosts)
+
+	var allowedIPv4 []string
+	var allowedIPv6 []string
+
+	gatewayIP := fmt.Sprintf("10.100.%d.1", cfg.NetworkSlot)
+	allowedIPv4 = append(allowedIPv4, gatewayIP, "127.0.0.1")
+	allowedIPv6 = append(allowedIPv6, "::1")
+
+	for _, h := range resolved {
+		for _, ip := range h.IPs {
+			parsed := net.ParseIP(ip)
+			if parsed == nil {
+				continue
+			}
+			if parsed.To4() != nil {
+				allowedIPv4 = append(allowedIPv4, ip)
+			} else {
+				allowedIPv6 = append(allowedIPv6, ip)
+			}
+		}
+	}
+
+	return fmt.Sprintf(`table inet filter {
+  set allowed_ipv4 {
+    type ipv4_addr
+    flags interval
+    elements = { %s }
+  }
+
+  set allowed_ipv6 {
+    type ipv6_addr
+    flags interval
+    elements = { %s }
+  }
+
+  chain input {
+    type filter hook input priority 0; policy accept;
+  }
+
+  chain forward {
+    type filter hook forward priority 0; policy accept;
+  }
+
+  chain output {
+    type filter hook output priority 0; policy drop;
+
+    # Allow loopback
+    oif "lo" accept
+
+    # Allow established/related
+    ct state established,related accept
+
+    # Allow ICMP
+    ip protocol icmp accept
+    ip6 nexthdr icmpv6 accept
+
+    # Allow DNS to local resolver
+    tcp dport 53 ip daddr 127.0.0.1 accept
+    udp dport 53 ip daddr 127.0.0.1 accept
+
+    # Allow connections to allowed hosts
+    ip daddr @allowed_ipv4 accept
+    ip6 daddr @allowed_ipv6 accept
+
+    # Reject everything else
+    reject with icmp type admin-prohibited
+  }
+}
+`, strings.Join(allowedIPv4, ", "), strings.Join(allowedIPv6, ", "))
+}
+
 func formatNixList(items []string) string {
 	if len(items) == 0 {
 		return ""
