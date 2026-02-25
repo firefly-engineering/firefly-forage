@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -14,6 +15,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 )
+
+//go:embed eval_config.nix
+var EvalConfigNix string
 
 // ContainerConfig holds the configuration for generating a container.
 // All mounts, packages, env vars, and tmpfiles rules come from Contributions.
@@ -220,6 +224,197 @@ func resolveClaudeWrapper(data *TemplateData, cfg *ContainerConfig) {
 		}
 	}
 	data.AgentPackages = filtered
+}
+
+// GenerateInnerNixConfig generates the cached inner system NixOS configuration.
+// This is template-level (identical for all sandboxes) and produces a standalone
+// NixOS module that is built via nix-build '<nixpkgs/nixos>' -A system.build.toplevel.
+func GenerateInnerNixConfig(cfg *ContainerConfig) (string, error) {
+	if err := cfg.Validate(); err != nil {
+		return "", fmt.Errorf("invalid container config: %w", err)
+	}
+
+	data := buildInnerTemplateData(cfg)
+
+	var buf bytes.Buffer
+	if err := innerTemplate.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute inner template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// GenerateOuterNixConfig generates the per-sandbox outer container definition.
+// This references a pre-built inner system by store path and adds only the
+// per-sandbox shell (networking, bind mounts). Evaluates in ~0.5s.
+func GenerateOuterNixConfig(data *OuterTemplateData) (string, error) {
+	var buf bytes.Buffer
+	if err := outerTemplate.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute outer template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// buildInnerTemplateData constructs InnerTemplateData from a ContainerConfig.
+// Uses the template name as canonical hostname and generates slot-independent
+// network config.
+func buildInnerTemplateData(cfg *ContainerConfig) *InnerTemplateData {
+	username := cfg.Username
+	if username == "" {
+		username = "agent"
+	}
+	workspaceDir := cfg.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = "/workspace"
+	}
+	stateVersion := cfg.StateVersion
+	if stateVersion == "" {
+		stateVersion = "24.11"
+	}
+
+	data := &InnerTemplateData{
+		TemplateName:   cfg.Template.Name,
+		StateVersion:   stateVersion,
+		Username:       username,
+		HomeDir:        "/home/" + username,
+		WorkspaceDir:   workspaceDir,
+		AuthorizedKeys: cfg.AuthorizedKeys,
+		NetworkConfig:  buildNetworkConfigCached(cfg.Template.Network, cfg.Template.AllowedHosts),
+		UID:            cfg.UID,
+		GID:            cfg.GID,
+		NixpkgsPath:    cfg.NixpkgsPath,
+	}
+
+	// Set resource limits if configured
+	if cfg.ResourceLimits != nil && !cfg.ResourceLimits.IsEmpty() {
+		data.ResourceLimits = cfg.ResourceLimits
+	}
+
+	// Use provided multiplexer
+	mux := cfg.Mux
+	if mux == nil {
+		mux = multiplexer.New(multiplexer.TypeTmux)
+	}
+	data.MuxPackages = mux.NixPackages()
+
+	// Compute windows
+	var windows []multiplexer.Window
+	if len(cfg.Template.TmuxWindows) > 0 {
+		for _, w := range cfg.Template.TmuxWindows {
+			windows = append(windows, multiplexer.Window{Name: w.Name, Command: w.Command})
+		}
+	} else {
+		names := make([]string, 0, len(cfg.Template.Agents))
+		for name := range cfg.Template.Agents {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			windows = append(windows, multiplexer.Window{Name: name, Command: name})
+		}
+	}
+	data.MuxInitScript = mux.InitScript(windows)
+
+	// Apply packages and tmpfiles from contributions (no mounts or env vars for inner)
+	if cfg.Contributions != nil {
+		applyInnerContributions(data, cfg.Contributions, cfg.Reproducibility)
+	}
+
+	// Set identity fields
+	if cfg.AgentIdentity != nil {
+		data.GitUser = cfg.AgentIdentity.GitUser
+		data.GitEmail = cfg.AgentIdentity.GitEmail
+		if cfg.AgentIdentity.SSHKeyPath != "" {
+			data.SSHKeyName = filepath.Base(cfg.AgentIdentity.SSHKeyPath)
+		}
+	}
+
+	// Detect system prompt for claude wrapper
+	resolveClaudeWrapperInner(data, cfg)
+
+	return data
+}
+
+// buildNetworkConfigCached generates slot-independent network configuration.
+func buildNetworkConfigCached(networkMode string, allowedHosts []string) string {
+	cfg := &network.Config{
+		Mode:         network.Mode(networkMode),
+		AllowedHosts: allowedHosts,
+		NetworkSlot:  0, // Not used for cached config
+	}
+
+	if cfg.Mode == "" {
+		cfg.Mode = network.ModeFull
+	}
+
+	return network.GenerateNixNetworkConfigCached(cfg)
+}
+
+// resolveClaudeWrapperInner detects system-prompt.md in contributions and
+// configures the claude wrapper for the inner template.
+func resolveClaudeWrapperInner(data *InnerTemplateData, cfg *ContainerConfig) {
+	if cfg.Contributions == nil {
+		return
+	}
+
+	for _, m := range cfg.Contributions.Mounts {
+		if strings.HasSuffix(m.ContainerPath, "system-prompt.md") {
+			data.SystemPromptFile = m.ContainerPath
+			for name, agent := range cfg.Template.Agents {
+				if name == "claude" && agent.PackagePath != "" {
+					data.ClaudePackagePath = agent.PackagePath
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if data.ClaudePackagePath == "" {
+		return
+	}
+
+	resolved := "pkgs." + data.ClaudePackagePath
+	filtered := data.AgentPackages[:0]
+	for _, pkg := range data.AgentPackages {
+		if pkg != resolved {
+			filtered = append(filtered, pkg)
+		}
+	}
+	data.AgentPackages = filtered
+}
+
+// applyInnerContributions populates inner template data from contributions.
+// Only packages and tmpfiles rules go into the inner system (not mounts or env vars).
+func applyInnerContributions(data *InnerTemplateData, contributions *injection.Contributions, repro reproducibility.Reproducibility) {
+	// Add contributed tmpfiles rules (deduplicated)
+	seen := make(map[string]bool)
+	for _, r := range contributions.TmpfilesRules {
+		if !seen[r] {
+			data.ExtraTmpfilesRules = append(data.ExtraTmpfilesRules, r)
+			seen[r] = true
+		}
+	}
+
+	// Resolve and add contributed packages
+	if repro != nil {
+		existingPkgs := make(map[string]bool)
+		for _, p := range data.MuxPackages {
+			existingPkgs[p] = true
+		}
+		for _, pkg := range contributions.Packages {
+			resolved, err := repro.ResolvePackage(pkg)
+			if err != nil {
+				logging.Warn("skipping unresolvable package", "package", pkg.Name, "error", err)
+				continue
+			}
+			if !existingPkgs[resolved] {
+				data.AgentPackages = append(data.AgentPackages, resolved)
+				existingPkgs[resolved] = true
+			}
+		}
+	}
 }
 
 // applyContributions populates template data from the injection contributions.

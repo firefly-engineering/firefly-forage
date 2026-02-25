@@ -252,11 +252,35 @@ const containerTemplateText = `{ pkgs, ... }:
 }
 `
 
-// containerTemplate is the parsed template, initialized at package load time.
-var containerTemplate *template.Template
+// InnerTemplateData holds data for the cached inner system NixOS module.
+// Unlike TemplateData, it uses TemplateName (canonical) instead of per-sandbox
+// Hostname, and omits per-sandbox fields (SandboxName, Runtime, ContainerName).
+type InnerTemplateData struct {
+	TemplateName       string
+	StateVersion       string
+	Username           string
+	HomeDir            string
+	WorkspaceDir       string
+	AuthorizedKeys     []string
+	NetworkConfig      string // Pre-rendered from network package (slot-independent)
+	AgentPackages      []string
+	MuxPackages        []string
+	MuxInitScript      string
+	UID                int
+	GID                int
+	ExtraTmpfilesRules []string
+	GitUser            string
+	GitEmail           string
+	SSHKeyName         string
+	SystemPromptFile   string
+	ClaudePackagePath  string
+	NixpkgsPath        string
+	ResourceLimits     *config.ResourceLimits
+}
 
-func init() {
-	funcs := template.FuncMap{
+// nixTemplateFuncs returns the shared template function map.
+func nixTemplateFuncs() template.FuncMap {
+	return template.FuncMap{
 		"nixBool":           nixBool,
 		"nixEscape":         nixEscape,
 		"nixEscapeIndented": nixEscapeIndented,
@@ -264,5 +288,20 @@ func init() {
 			return shellquote.Join(s)
 		},
 	}
+}
+
+// containerTemplate is the parsed template, initialized at package load time.
+var containerTemplate *template.Template
+
+// innerTemplate is the parsed inner system template.
+var innerTemplate *template.Template
+
+// outerTemplate is the parsed outer container definition template.
+var outerTemplate *template.Template
+
+func init() {
+	funcs := nixTemplateFuncs()
 	containerTemplate = template.Must(template.New("container").Funcs(funcs).Parse(containerTemplateText))
+	innerTemplate = template.Must(template.New("inner").Funcs(funcs).Parse(innerTemplateText))
+	outerTemplate = template.Must(template.New("outer").Funcs(funcs).Parse(outerTemplateText))
 }
