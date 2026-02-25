@@ -10,3 +10,6 @@ docs/book/
 
 # E2E test VM disk images
 *.qcow2
+
+# local environment files
+.*.local
