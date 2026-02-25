@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 // LocalSystem runs commands on the local machine via os/exec.
@@ -26,6 +28,9 @@ func NewLocalSystem(sshKeyPath string) *LocalSystem {
 
 // Run executes a shell command locally.
 func (l *LocalSystem) Run(ctx context.Context, cmd string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "local.exec")
+	defer span.End()
+
 	c := exec.CommandContext(ctx, "bash", "-c", cmd)
 	output, err := c.CombinedOutput()
 	if err != nil {
@@ -36,6 +41,9 @@ func (l *LocalSystem) Run(ctx context.Context, cmd string) (string, error) {
 
 // ForageCtl runs forage-ctl with the given arguments locally.
 func (l *LocalSystem) ForageCtl(ctx context.Context, args ...string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "local.forage-ctl")
+	defer span.End()
+
 	c := exec.CommandContext(ctx, "forage-ctl", args...)
 	output, err := c.CombinedOutput()
 	if err != nil {

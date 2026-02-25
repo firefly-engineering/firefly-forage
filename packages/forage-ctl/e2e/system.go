@@ -13,6 +13,8 @@ import (
 	"fmt"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 // System represents a host where forage-ctl and sandbox containers run.
@@ -39,6 +41,9 @@ type SandboxConn struct {
 
 // Run executes a command inside the sandbox container.
 func (s *SandboxConn) Run(ctx context.Context, cmd string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "sandbox.exec")
+	defer span.End()
+
 	session, err := s.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("new session: %w", err)

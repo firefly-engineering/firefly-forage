@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 // sharedEnv holds the singleton VM system shared across all tests.
@@ -25,6 +27,13 @@ type TestEnv struct {
 //   - E2E_LOCAL=1 → Local mode (run tests against current machine)
 //   - Neither set → skip all E2E tests gracefully (return 0)
 func SetupSharedEnv(m *testing.M) int {
+	ctx := context.Background()
+	shutdown, err := telemetry.Init(ctx, "forage-e2e")
+	if err != nil {
+		log.Printf("telemetry init: %v", err)
+	}
+	defer shutdown()
+
 	if vmScript := os.Getenv("E2E_VM"); vmScript != "" {
 		// VM mode (existing behavior)
 		sshKey := os.Getenv("E2E_SSH_KEY")
@@ -32,7 +41,6 @@ func SetupSharedEnv(m *testing.M) int {
 			log.Fatal("E2E_SSH_KEY not set.")
 		}
 
-		ctx := context.Background()
 		sys, err := NewVMSystem(ctx, VMConfig{
 			VMScript:    vmScript,
 			SSHKeyPath:  sshKey,
@@ -141,6 +149,8 @@ func (e *TestEnv) WaitForSandbox(t *testing.T, ip string, timeout time.Duration)
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	ctx, span := telemetry.Start(ctx, "e2e.wait-for-sandbox")
+	defer span.End()
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

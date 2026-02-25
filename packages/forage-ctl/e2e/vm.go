@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 // VMConfig configures the QEMU VM for testing.
@@ -117,6 +119,9 @@ func NewVMSystem(ctx context.Context, cfg VMConfig) (*VMSystem, error) {
 
 // Run executes a shell command in the VM via SSH.
 func (vm *VMSystem) Run(ctx context.Context, cmd string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "vm.exec")
+	defer span.End()
+
 	session, err := vm.sshClient.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("new session: %w", err)
@@ -146,6 +151,9 @@ func (vm *VMSystem) Run(ctx context.Context, cmd string) (string, error) {
 
 // ForageCtl runs forage-ctl with the given arguments in the VM.
 func (vm *VMSystem) ForageCtl(ctx context.Context, args ...string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "vm.forage-ctl")
+	defer span.End()
+
 	cmd := "forage-ctl " + strings.Join(args, " ")
 	return vm.Run(ctx, cmd)
 }
@@ -274,6 +282,9 @@ func (vm *VMSystem) patchRunScript() error {
 
 // boot starts the QEMU VM process.
 func (vm *VMSystem) boot(ctx context.Context) error {
+	ctx, span := telemetry.Start(ctx, "vm.boot")
+	defer span.End()
+
 	log.Printf("booting VM on SSH port %d...", vm.sshPort)
 
 	// Clean up any stale disk images in our tmpdir
