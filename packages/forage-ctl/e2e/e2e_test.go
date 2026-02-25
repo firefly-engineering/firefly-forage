@@ -55,6 +55,13 @@ func TestModuleSetup(t *testing.T) {
 	t.Run("secrets directory", func(t *testing.T) {
 		AssertSuccess(t, env.System, "secrets directory exists", "test -d /run/forage-secrets")
 	})
+
+	t.Run("templates command", func(t *testing.T) {
+		AssertOutputContains(t, env.System, "templates lists test template",
+			"test", "forage-ctl templates")
+		AssertOutputContains(t, env.System, "templates shows agent name",
+			"test-agent", "forage-ctl templates")
+	})
 }
 
 func TestSandboxLifecycle(t *testing.T) {
