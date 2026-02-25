@@ -94,12 +94,12 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	// Phase 3: Set up workspace
 	var ws *workspaceSetup
 	if len(resources.template.WorkspaceMounts) > 0 {
-		ws, err = c.setupWorkspaceMounts(opts, resources.template)
+		ws, err = c.setupWorkspaceMounts(ctx, opts, resources.template)
 	} else {
 		if opts.RepoPath == "" {
 			return nil, fmt.Errorf("--repo is required (template has no workspace mounts configured)")
 		}
-		ws, err = c.setupWorkspace(opts)
+		ws, err = c.setupWorkspace(ctx, opts)
 	}
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	var secretsPath string
 	if c.templateHasSecrets(resources.template) {
 		secretsPath = filepath.Join(c.paths.SecretsDir, opts.Name)
-		if err = c.setupSecrets(secretsPath, resources.template); err != nil {
+		if err = c.setupSecrets(ctx, secretsPath, resources.template); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("failed to setup secrets: %w", err)
 		}
@@ -137,13 +137,13 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	}
 
 	// Phase 8: Create and start container
-	if err := c.startContainer(opts.Name, configPath); err != nil {
+	if err := c.startContainer(ctx, opts.Name, configPath); err != nil {
 		cleanup()
 		return nil, err
 	}
 
 	// Phase 9: Post-creation setup (wait for SSH)
-	c.postCreationSetup(metadata)
+	c.postCreationSetup(ctx, metadata)
 
 	// Phase 10: Run init commands
 	initResult := c.runInitCommands(ctx, metadata, resources.template)
@@ -328,9 +328,9 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 }
 
 // startContainer creates and starts the container via the runtime.
-func (c *Creator) startContainer(name, configPath string) error {
+func (c *Creator) startContainer(ctx context.Context, name, configPath string) error {
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := c.rt.Create(context.Background(), runtime.CreateOptions{
+	if err := c.rt.Create(ctx, runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,
@@ -343,6 +343,9 @@ func (c *Creator) startContainer(name, configPath string) error {
 // runInitCommands executes template-level init commands and per-project .forage/init
 // inside the container. Failures are logged as warnings and do not block creation.
 func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxMetadata, template *config.Template) *InitCommandResult {
+	ctx, span := telemetry.Start(ctx, "sandbox.init-commands")
+	defer span.End()
+
 	containerName := metadata.ResolvedContainerName()
 	username := c.hostConfig.ResolvedContainerUsername()
 	workspacePath := c.hostConfig.ResolvedWorkspacePath()
@@ -402,10 +405,10 @@ func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxM
 }
 
 // postCreationSetup performs post-creation setup (SSH wait).
-func (c *Creator) postCreationSetup(metadata *config.SandboxMetadata) {
+func (c *Creator) postCreationSetup(ctx context.Context, metadata *config.SandboxMetadata) {
 	containerIP := metadata.ContainerIP()
 	logging.Debug("waiting for SSH", "host", containerIP, "timeout", health.SSHReadyTimeoutSeconds)
-	c.waitForSSH(containerIP, health.SSHReadyTimeoutSeconds)
+	c.waitForSSH(ctx, containerIP, health.SSHReadyTimeoutSeconds)
 }
 
 // workspaceSetup holds workspace setup results.
@@ -422,8 +425,8 @@ type workspaceSetup struct {
 }
 
 // setupWorkspace sets up the workspace based on the options (legacy single-mount path).
-func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
-	_, span := telemetry.Start(context.Background(), "sandbox.setup-workspace")
+func (c *Creator) setupWorkspace(ctx context.Context, opts CreateOptions) (*workspaceSetup, error) {
+	_, span := telemetry.Start(ctx, "sandbox.setup-workspace")
 	defer span.End()
 
 	ws := &workspaceSetup{}
@@ -521,7 +524,7 @@ func validateMountSpecs(mounts map[string]*config.WorkspaceMount) error {
 }
 
 // setupWorkspaceMounts sets up multiple workspace mounts from template specs.
-func (c *Creator) setupWorkspaceMounts(opts CreateOptions, template *config.Template) (*workspaceSetup, error) {
+func (c *Creator) setupWorkspaceMounts(ctx context.Context, opts CreateOptions, template *config.Template) (*workspaceSetup, error) {
 	ws := &workspaceSetup{
 		backends: make(map[string]workspace.Backend),
 	}
@@ -659,8 +662,8 @@ func (c *Creator) templateHasSecrets(template *config.Template) bool {
 
 // setupSecrets reads secrets from host file paths and writes them to the sandbox secrets directory.
 // Files are owned by the configured agent UID/GID so the container user can read them.
-func (c *Creator) setupSecrets(secretsPath string, template *config.Template) error {
-	_, span := telemetry.Start(context.Background(), "sandbox.setup-secrets")
+func (c *Creator) setupSecrets(ctx context.Context, secretsPath string, template *config.Template) error {
+	_, span := telemetry.Start(ctx, "sandbox.setup-secrets")
 	defer span.End()
 
 	if err := os.MkdirAll(secretsPath, 0700); err != nil {
@@ -700,8 +703,11 @@ func (c *Creator) setupSecrets(secretsPath string, template *config.Template) er
 }
 
 // waitForSSH waits for SSH to be ready on the given host.
-func (c *Creator) waitForSSH(host string, timeoutSeconds int) bool {
-	for i := 0; i < timeoutSeconds; i++ {
+func (c *Creator) waitForSSH(ctx context.Context, host string, timeoutSeconds int) bool {
+	_, span := telemetry.Start(ctx, "sandbox.wait-ssh")
+	defer span.End()
+
+	for i := range timeoutSeconds {
 		if health.CheckSSH(host) {
 			logging.Debug("SSH ready", "attempt", i+1)
 			return true

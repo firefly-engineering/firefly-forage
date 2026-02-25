@@ -197,7 +197,7 @@ func TestCreator_setupSecrets(t *testing.T) {
 	template := testutil.DefaultTemplate()
 	secretsPath := filepath.Join(env.TmpDir, "test-secrets")
 
-	err := creator.setupSecrets(secretsPath, template)
+	err := creator.setupSecrets(context.Background(), secretsPath, template)
 	if err != nil {
 		t.Fatalf("setupSecrets() failed: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestCreator_setupSecrets_MissingSecret(t *testing.T) {
 	secretsPath := filepath.Join(env.TmpDir, "test-secrets")
 
 	// Should not fail, just skip the missing secret
-	err := creator.setupSecrets(secretsPath, template)
+	err := creator.setupSecrets(context.Background(), secretsPath, template)
 	if err != nil {
 		t.Fatalf("setupSecrets() should not fail for missing secret: %v", err)
 	}
@@ -797,7 +797,7 @@ func TestCreator_setupWorkspaceMounts_HostPath(t *testing.T) {
 		},
 	}
 
-	ws, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	ws, err := creator.setupWorkspaceMounts(context.Background(), CreateOptions{Name: "test-sandbox"}, template)
 	if err != nil {
 		t.Fatalf("setupWorkspaceMounts() failed: %v", err)
 	}
@@ -841,7 +841,7 @@ func TestCreator_setupWorkspaceMounts_MissingHostPath(t *testing.T) {
 		},
 	}
 
-	_, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	_, err := creator.setupWorkspaceMounts(context.Background(), CreateOptions{Name: "test-sandbox"}, template)
 	if err == nil {
 		t.Fatal("setupWorkspaceMounts() should fail for missing hostPath")
 	}
@@ -867,7 +867,7 @@ func TestCreator_setupWorkspaceMounts_MissingRepo(t *testing.T) {
 		},
 	}
 
-	_, err := creator.setupWorkspaceMounts(CreateOptions{Name: "test-sandbox"}, template)
+	_, err := creator.setupWorkspaceMounts(context.Background(), CreateOptions{Name: "test-sandbox"}, template)
 	if err == nil {
 		t.Fatal("setupWorkspaceMounts() should fail for missing named repo")
 	}

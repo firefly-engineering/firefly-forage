@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
@@ -209,6 +211,10 @@ func (r *NspawnRuntime) Status(ctx context.Context, name string) (*ContainerInfo
 
 // Exec executes a command inside a container
 func (r *NspawnRuntime) Exec(ctx context.Context, name string, command []string, opts ExecOptions) (*ExecResult, error) {
+	ctx, span := telemetry.Start(ctx, "nspawn.exec",
+		telemetry.WithAttr(attribute.String("cmd", strings.Join(command, " "))))
+	defer span.End()
+
 	containerName := r.containerName(name)
 
 	args := []string{"machinectl", "shell"}
