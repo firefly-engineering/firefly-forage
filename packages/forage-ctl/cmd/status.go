@@ -30,7 +30,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
-	result := health.Check(name, metadata.ContainerIP(), getRuntime(), mux)
+	result := health.Check(cmd.Context(), name, metadata.ContainerIP(), getRuntime(), mux)
 
 	fmt.Printf("Sandbox: %s\n", metadata.Name)
 	fmt.Printf("Template: %s\n", metadata.Template)

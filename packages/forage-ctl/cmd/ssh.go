@@ -25,7 +25,7 @@ func init() {
 func runSSH(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	metadata, err := loadRunningSandbox(name)
+	metadata, err := loadRunningSandbox(cmd.Context(), name)
 	if err != nil {
 		return err
 	}

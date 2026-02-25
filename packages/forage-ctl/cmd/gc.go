@@ -55,7 +55,7 @@ func (r *gcResult) empty() bool {
 func runGC(cmd *cobra.Command, args []string) error {
 	p := paths()
 	rt := getRuntime()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// 1. Collect sandbox names from disk files
 	diskNames, err := sandboxNamesFromDisk(p.SandboxesDir)
@@ -219,7 +219,7 @@ func executeGC(ctx context.Context, result *gcResult, p *config.Paths, rt interf
 		if meta, ok := metadataSet[name]; ok {
 			opts := sandbox.DefaultCleanupOptions()
 			opts.DestroyContainer = false // container doesn't exist
-			sandbox.Cleanup(meta, p, opts, nil)
+			sandbox.Cleanup(ctx, meta, p, opts, nil)
 		} else {
 			// No valid metadata -- remove files manually
 			removeOrphanedFiles(name, p)

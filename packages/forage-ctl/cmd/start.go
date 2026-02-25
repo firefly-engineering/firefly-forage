@@ -27,12 +27,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if isRunning(name) {
+	if isRunning(cmd.Context(), name) {
 		logInfo("Sandbox %s is already running", name)
 		return nil
 	}
 
-	if err := app.Default.Start(name); err != nil {
+	if err := app.Default.Start(cmd.Context(), name); err != nil {
 		return errors.ContainerFailed("start", err)
 	}
 

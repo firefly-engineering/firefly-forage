@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,7 +51,7 @@ func TestCleanup_RemovesPermissionsFiles(t *testing.T) {
 	opts := CleanupOptions{
 		CleanupPermissions: true,
 	}
-	Cleanup(metadata, paths, opts, nil)
+	Cleanup(context.Background(), metadata, paths, opts, nil)
 
 	// Verify permissions files were removed
 	for _, f := range permFiles {

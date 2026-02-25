@@ -76,44 +76,44 @@ func New(opts ...Option) *App {
 }
 
 // IsRunning checks if a container is running using the app's runtime
-func (a *App) IsRunning(name string) bool {
+func (a *App) IsRunning(ctx context.Context, name string) bool {
 	if a.Runtime == nil {
 		return false
 	}
-	running, _ := a.Runtime.IsRunning(context.Background(), name)
+	running, _ := a.Runtime.IsRunning(ctx, name)
 	return running
 }
 
 // Start starts a container using the app's runtime
-func (a *App) Start(name string) error {
+func (a *App) Start(ctx context.Context, name string) error {
 	if a.Runtime == nil {
 		return nil
 	}
-	return a.Runtime.Start(context.Background(), name)
+	return a.Runtime.Start(ctx, name)
 }
 
 // Stop stops a container using the app's runtime
-func (a *App) Stop(name string) error {
+func (a *App) Stop(ctx context.Context, name string) error {
 	if a.Runtime == nil {
 		return nil
 	}
-	return a.Runtime.Stop(context.Background(), name)
+	return a.Runtime.Stop(ctx, name)
 }
 
 // Destroy destroys a container using the app's runtime
-func (a *App) Destroy(name string) error {
+func (a *App) Destroy(ctx context.Context, name string) error {
 	if a.Runtime == nil {
 		return nil
 	}
-	return a.Runtime.Destroy(context.Background(), name)
+	return a.Runtime.Destroy(ctx, name)
 }
 
 // Create creates a container using the app's runtime
-func (a *App) Create(opts runtime.CreateOptions) error {
+func (a *App) Create(ctx context.Context, opts runtime.CreateOptions) error {
 	if a.Runtime == nil {
 		return nil
 	}
-	return a.Runtime.Create(context.Background(), opts)
+	return a.Runtime.Create(ctx, opts)
 }
 
 // Default is the default application instance

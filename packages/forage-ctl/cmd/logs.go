@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -37,5 +36,5 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("log viewing is not supported by the %s runtime", rt.Name())
 	}
 
-	return lv.ViewLogs(context.Background(), name, logsFollow, logsLines)
+	return lv.ViewLogs(cmd.Context(), name, logsFollow, logsLines)
 }

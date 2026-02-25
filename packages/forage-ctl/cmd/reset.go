@@ -34,10 +34,10 @@ func runReset(cmd *cobra.Command, args []string) error {
 	}
 
 	// Stop the container if running
-	if isRunning(name) {
+	if isRunning(cmd.Context(), name) {
 		logInfo("Stopping container...")
 		logging.Debug("destroying container", "name", name)
-		if err := app.Default.Destroy(name); err != nil {
+		if err := app.Default.Destroy(cmd.Context(), name); err != nil {
 			logWarning("Failed to stop container: %v", err)
 		}
 	}
@@ -48,7 +48,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 	// The container config should still exist in the sandboxes directory
 	configPath := filepath.Join(p.SandboxesDir, name+".nix")
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := app.Default.Create(runtime.CreateOptions{
+	if err := app.Default.Create(cmd.Context(), runtime.CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,

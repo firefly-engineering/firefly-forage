@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -141,8 +142,8 @@ type Model struct {
 
 // NewPicker creates a new sandbox picker.
 // The rt parameter is optional; if nil, all sandboxes will show as stopped.
-func NewPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) Model {
-	items := buildGroupedItems(sandboxes, rt)
+func NewPicker(ctx context.Context, sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) Model {
+	items := buildGroupedItems(ctx, sandboxes, rt)
 
 	delegate := newGroupedDelegate()
 	l := list.New(items, delegate, 80, 20)
@@ -309,7 +310,7 @@ func (m Model) Result() PickerResult {
 
 // RunPicker runs the interactive sandbox picker.
 // The rt parameter is optional; if nil, all sandboxes will show as stopped.
-func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) (PickerResult, error) {
+func RunPicker(ctx context.Context, sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime, opts PickerOptions) (PickerResult, error) {
 	if len(sandboxes) == 0 {
 		if opts.AllowCreate {
 			// Go directly to wizard
@@ -334,7 +335,7 @@ func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runt
 		return PickerResult{Action: ActionNew}, nil
 	}
 
-	m := NewPicker(sandboxes, paths, rt, opts)
+	m := NewPicker(ctx, sandboxes, paths, rt, opts)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
@@ -351,7 +352,7 @@ func RunPicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runt
 
 // SimplePicker is a non-interactive picker that just lists sandboxes.
 // The rt parameter is optional; if nil, all sandboxes will show as stopped.
-func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) string {
+func SimplePicker(ctx context.Context, sandboxes []*config.SandboxMetadata, paths *config.Paths, rt runtime.Runtime) string {
 	var sb strings.Builder
 
 	sb.WriteString("Firefly Forage - Sandboxes\n")
@@ -365,7 +366,7 @@ func SimplePicker(sandboxes []*config.SandboxMetadata, paths *config.Paths, rt r
 
 	for i, sandbox := range sandboxes {
 		mux := multiplexer.New(multiplexer.Type(sandbox.Multiplexer))
-		status := health.GetSummary(sandbox.Name, sandbox.ContainerIP(), rt, mux)
+		status := health.GetSummary(ctx, sandbox.Name, sandbox.ContainerIP(), rt, mux)
 		statusIcon := "●"
 		switch status {
 		case health.StatusHealthy:

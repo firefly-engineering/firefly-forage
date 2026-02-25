@@ -56,7 +56,7 @@ func DefaultCleanupOptions() CleanupOptions {
 // This is the canonical cleanup function used by both the down command
 // and error recovery in the create flow.
 // The rt parameter is optional; if nil, container destruction is skipped.
-func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts CleanupOptions, rt runtime.Runtime) {
+func Cleanup(ctx context.Context, metadata *config.SandboxMetadata, paths *config.Paths, opts CleanupOptions, rt runtime.Runtime) {
 	if metadata == nil {
 		return
 	}
@@ -68,7 +68,7 @@ func Cleanup(metadata *config.SandboxMetadata, paths *config.Paths, opts Cleanup
 	// must happen even after the container has already been stopped).
 	if opts.DestroyContainer && rt != nil {
 		logging.Debug("destroying container", "name", name)
-		if err := rt.Destroy(context.Background(), name); err != nil {
+		if err := rt.Destroy(ctx, name); err != nil {
 			logging.Warn("container destroy failed during cleanup", "name", name, "error", err)
 		}
 	}

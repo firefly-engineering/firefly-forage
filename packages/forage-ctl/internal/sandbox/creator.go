@@ -110,7 +110,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 
 	// Set up cleanup on failure
 	cleanup := func() {
-		c.cleanup(metadata)
+		c.cleanup(ctx, metadata)
 	}
 
 	// Phase 5: Set up secrets (only if any agent uses secrets)
@@ -524,7 +524,7 @@ func validateMountSpecs(mounts map[string]*config.WorkspaceMount) error {
 }
 
 // setupWorkspaceMounts sets up multiple workspace mounts from template specs.
-func (c *Creator) setupWorkspaceMounts(ctx context.Context, opts CreateOptions, template *config.Template) (*workspaceSetup, error) {
+func (c *Creator) setupWorkspaceMounts(_ context.Context, opts CreateOptions, template *config.Template) (*workspaceSetup, error) {
 	ws := &workspaceSetup{
 		backends: make(map[string]workspace.Backend),
 	}
@@ -719,11 +719,11 @@ func (c *Creator) waitForSSH(ctx context.Context, host string, timeoutSeconds in
 }
 
 // cleanup removes resources created during a failed sandbox creation.
-func (c *Creator) cleanup(metadata *config.SandboxMetadata) {
+func (c *Creator) cleanup(ctx context.Context, metadata *config.SandboxMetadata) {
 	logging.Debug("cleaning up failed sandbox creation", "name", metadata.Name)
 
 	// Use unified cleanup function with all options enabled
-	Cleanup(metadata, c.paths, DefaultCleanupOptions(), c.rt)
+	Cleanup(ctx, metadata, c.paths, DefaultCleanupOptions(), c.rt)
 }
 
 // resolveIdentity merges identity from four levels (lowest to highest priority):

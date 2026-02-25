@@ -95,7 +95,7 @@ func (m *Monitor) checkAll(ctx context.Context) []CheckResult {
 		}
 
 		mux := multiplexer.New(multiplexer.Type(sb.Multiplexer))
-		status := health.GetSummary(sb.Name, sb.ContainerIP(), m.rt, mux)
+		status := health.GetSummary(ctx, sb.Name, sb.ContainerIP(), m.rt, mux)
 		result := CheckResult{
 			Sandbox: sb.Name,
 			Status:  status,

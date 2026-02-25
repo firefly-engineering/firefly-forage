@@ -41,7 +41,7 @@ func runPs(cmd *cobra.Command, args []string) error {
 	for _, sb := range sandboxes {
 		mode := sb.WorkspaceMode
 		mux := multiplexer.New(multiplexer.Type(sb.Multiplexer))
-		status := health.GetSummary(sb.Name, sb.ContainerIP(), rt, mux)
+		status := health.GetSummary(cmd.Context(), sb.Name, sb.ContainerIP(), rt, mux)
 		statusStr := formatStatus(status)
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",

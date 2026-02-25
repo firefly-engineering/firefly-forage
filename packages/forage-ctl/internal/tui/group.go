@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sort"
@@ -37,7 +38,7 @@ func groupKey(sb *config.SandboxMetadata) string {
 // buildGroupedItems groups sandboxes by project and returns list items
 // with headerItem separators. The rt parameter is optional; if nil, all
 // sandboxes will show as stopped.
-func buildGroupedItems(sandboxes []*config.SandboxMetadata, rt runtime.Runtime) []list.Item {
+func buildGroupedItems(ctx context.Context, sandboxes []*config.SandboxMetadata, rt runtime.Runtime) []list.Item {
 	if len(sandboxes) == 0 {
 		return nil
 	}
@@ -73,10 +74,10 @@ func buildGroupedItems(sandboxes []*config.SandboxMetadata, rt runtime.Runtime) 
 		items = append(items, headerItem{label: g.key})
 		for _, sb := range g.sandboxes {
 			mux := multiplexer.New(multiplexer.Type(sb.Multiplexer))
-			status := health.GetSummary(sb.Name, sb.ContainerIP(), rt, mux)
+			status := health.GetSummary(ctx, sb.Name, sb.ContainerIP(), rt, mux)
 			uptime := "stopped"
 			if status != health.StatusStopped {
-				uptime = health.GetUptime(sb.Name, rt)
+				uptime = health.GetUptime(ctx, sb.Name, rt)
 			}
 			items = append(items, sandboxItem{
 				metadata: sb,

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -53,7 +52,7 @@ func init() {
 
 func runUp(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Validate sandbox name early
 	if err := config.ValidateSandboxName(name); err != nil {

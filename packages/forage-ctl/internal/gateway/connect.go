@@ -14,14 +14,14 @@ import (
 // Connect loads sandbox metadata, verifies it is running, and replaces the
 // current process with an SSH session to the sandbox (with the appropriate
 // multiplexer attach command, if any).
-func Connect(name, sandboxesDir string, rt runtime.Runtime) error {
+func Connect(ctx context.Context, name, sandboxesDir string, rt runtime.Runtime) error {
 	metadata, err := config.LoadSandboxMetadata(sandboxesDir, name)
 	if err != nil {
 		return fmt.Errorf("sandbox not found: %s", name)
 	}
 
 	if rt != nil {
-		running, _ := rt.IsRunning(context.Background(), name)
+		running, _ := rt.IsRunning(ctx, name)
 		if !running {
 			return fmt.Errorf("sandbox %s is not running", name)
 		}

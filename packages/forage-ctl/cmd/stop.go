@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -28,13 +27,13 @@ func init() {
 func runStop(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	_, err := loadRunningSandbox(name)
+	_, err := loadRunningSandbox(cmd.Context(), name)
 	if err != nil {
 		return err
 	}
 
 	rt := getRuntime()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	var stopErr error
 	if stopTimeout > 0 {

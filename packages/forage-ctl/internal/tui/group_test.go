@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -51,7 +52,7 @@ func TestGroupKey(t *testing.T) {
 
 func TestBuildGroupedItems(t *testing.T) {
 	t.Run("empty sandboxes", func(t *testing.T) {
-		items := buildGroupedItems(nil, nil)
+		items := buildGroupedItems(context.Background(), nil, nil)
 		if items != nil {
 			t.Errorf("expected nil, got %d items", len(items))
 		}
@@ -62,7 +63,7 @@ func TestBuildGroupedItems(t *testing.T) {
 			{Name: "sb1", Template: "claude", Workspace: "/home/user/project"},
 			{Name: "sb2", Template: "aider", Workspace: "/home/user/project"},
 		}
-		items := buildGroupedItems(sandboxes, nil)
+		items := buildGroupedItems(context.Background(), sandboxes, nil)
 
 		// Expect 1 header + 2 sandbox items
 		if len(items) != 3 {
@@ -93,7 +94,7 @@ func TestBuildGroupedItems(t *testing.T) {
 			{Name: "sb2", Template: "aider", SourceRepo: "/home/user/repo-a"},
 			{Name: "sb3", Template: "claude", SourceRepo: "/home/user/repo-b"},
 		}
-		items := buildGroupedItems(sandboxes, nil)
+		items := buildGroupedItems(context.Background(), sandboxes, nil)
 
 		// Expect 2 headers + 3 sandbox items = 5
 		if len(items) != 5 {
@@ -124,7 +125,7 @@ func TestBuildGroupedItems(t *testing.T) {
 			{Name: "sb1", Template: "claude", SourceRepo: "/home/user/repo", Workspace: "/var/lib/ws/sb1"},
 			{Name: "sb2", Template: "aider", Workspace: "/home/user/project"},
 		}
-		items := buildGroupedItems(sandboxes, nil)
+		items := buildGroupedItems(context.Background(), sandboxes, nil)
 
 		// Expect 2 headers + 2 sandbox items = 4
 		if len(items) != 4 {

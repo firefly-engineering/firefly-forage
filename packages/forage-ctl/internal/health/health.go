@@ -61,12 +61,12 @@ func GetMuxWindows(host string, mux multiplexer.Multiplexer) []string {
 
 // GetUptime returns the container uptime in human-readable format.
 // Uses the runtime-agnostic Status method to get container start time.
-func GetUptime(sandboxName string, rt runtime.Runtime) string {
+func GetUptime(ctx context.Context, sandboxName string, rt runtime.Runtime) string {
 	if rt == nil {
 		return "unknown"
 	}
 
-	info, err := rt.Status(context.Background(), sandboxName)
+	info, err := rt.Status(ctx, sandboxName)
 	if err != nil || info == nil {
 		return "unknown"
 	}
@@ -117,19 +117,19 @@ func formatDuration(d time.Duration) string {
 
 // Check performs all health checks for a sandbox.
 // The rt parameter is optional; if nil, container running check returns false.
-func Check(sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) *CheckResult {
+func Check(ctx context.Context, sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) *CheckResult {
 	result := &CheckResult{}
 
 	// Check container
 	if rt != nil {
-		result.ContainerRunning, _ = rt.IsRunning(context.Background(), sandboxName)
+		result.ContainerRunning, _ = rt.IsRunning(ctx, sandboxName)
 	}
 	if !result.ContainerRunning {
 		return result
 	}
 
 	// Check uptime
-	result.Uptime = GetUptime(sandboxName, rt)
+	result.Uptime = GetUptime(ctx, sandboxName, rt)
 
 	// Check SSH
 	result.SSHReachable = CheckSSH(host)
@@ -148,11 +148,11 @@ func Check(sandboxName string, host string, rt runtime.Runtime, mux multiplexer.
 
 // GetSummary returns a summary health status.
 // The rt parameter is optional; if nil, returns StatusStopped.
-func GetSummary(sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) Status {
+func GetSummary(ctx context.Context, sandboxName string, host string, rt runtime.Runtime, mux multiplexer.Multiplexer) Status {
 	if rt == nil {
 		return StatusStopped
 	}
-	running, _ := rt.IsRunning(context.Background(), sandboxName)
+	running, _ := rt.IsRunning(ctx, sandboxName)
 	if !running {
 		return StatusStopped
 	}

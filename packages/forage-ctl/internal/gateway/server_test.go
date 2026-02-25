@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"testing"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
@@ -25,7 +26,7 @@ func TestServer_HandleConnection_InvalidName(t *testing.T) {
 
 	for _, name := range invalidNames {
 		t.Run(name, func(t *testing.T) {
-			err := server.HandleConnection([]string{name})
+			err := server.HandleConnection(context.Background(), []string{name})
 			if err == nil {
 				t.Errorf("HandleConnection(%q) should have failed with invalid name", name)
 			}
@@ -40,7 +41,7 @@ func TestServer_HandleConnection_ValidNameNotFound(t *testing.T) {
 	server := NewServer(env.Paths, env.Runtime)
 
 	// Valid name but sandbox doesn't exist
-	err := server.HandleConnection([]string{"nonexistent"})
+	err := server.HandleConnection(context.Background(), []string{"nonexistent"})
 	if err == nil {
 		t.Error("HandleConnection should fail for nonexistent sandbox")
 	}
@@ -53,7 +54,7 @@ func TestServer_ConnectToSandbox_InvalidName(t *testing.T) {
 	server := NewServer(env.Paths, env.Runtime)
 
 	// Test path traversal attack
-	err := server.ConnectToSandbox("../../../etc/passwd")
+	err := server.ConnectToSandbox(context.Background(), "../../../etc/passwd")
 	if err == nil {
 		t.Error("ConnectToSandbox should fail for path traversal")
 	}
@@ -75,7 +76,7 @@ func TestServer_ConnectToSandbox_NotRunning(t *testing.T) {
 
 	server := NewServer(env.Paths, env.Runtime)
 
-	err := server.ConnectToSandbox("stopped-sandbox")
+	err := server.ConnectToSandbox(context.Background(), "stopped-sandbox")
 	if err == nil {
 		t.Error("ConnectToSandbox should fail for stopped sandbox")
 	}
@@ -88,7 +89,7 @@ func TestServer_ShowPicker_NoSandboxes(t *testing.T) {
 	server := NewServer(env.Paths, env.Runtime)
 
 	// ShowPicker should not error when there are no sandboxes
-	err := server.ShowPicker()
+	err := server.ShowPicker(context.Background())
 	if err != nil {
 		t.Errorf("ShowPicker() failed: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestServer_ListSandboxes_Empty(t *testing.T) {
 
 	server := NewServer(env.Paths, env.Runtime)
 
-	result, err := server.ListSandboxes()
+	result, err := server.ListSandboxes(context.Background())
 	if err != nil {
 		t.Errorf("ListSandboxes() failed: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestServer_ListSandboxes_WithSandboxes(t *testing.T) {
 
 	server := NewServer(env.Paths, env.Runtime)
 
-	result, err := server.ListSandboxes()
+	result, err := server.ListSandboxes(context.Background())
 	if err != nil {
 		t.Errorf("ListSandboxes() failed: %v", err)
 	}

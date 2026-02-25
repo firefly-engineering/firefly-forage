@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -37,7 +38,7 @@ func runGateway(cmd *cobra.Command, args []string) error {
 
 	// If sandbox name provided, connect directly
 	if len(args) == 1 {
-		return connectToSandbox(args[0], p)
+		return connectToSandbox(cmd.Context(), args[0], p)
 	}
 
 	// List sandboxes
@@ -47,7 +48,7 @@ func runGateway(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run interactive picker (no creation wizard in gateway mode)
-	result, err := tui.RunPicker(sandboxes, p, rt, tui.PickerOptions{})
+	result, err := tui.RunPicker(cmd.Context(), sandboxes, p, rt, tui.PickerOptions{})
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}
@@ -57,7 +58,7 @@ func runGateway(cmd *cobra.Command, args []string) error {
 	switch result.Action {
 	case tui.ActionAttach:
 		if result.Sandbox != nil {
-			return connectToSandbox(result.Sandbox.Name, p)
+			return connectToSandbox(cmd.Context(), result.Sandbox.Name, p)
 		}
 
 	case tui.ActionNew:
@@ -84,6 +85,6 @@ func runGateway(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func connectToSandbox(name string, paths *config.Paths) error {
-	return gateway.Connect(name, paths.SandboxesDir, getRuntime())
+func connectToSandbox(ctx context.Context, name string, paths *config.Paths) error {
+	return gateway.Connect(ctx, name, paths.SandboxesDir, getRuntime())
 }

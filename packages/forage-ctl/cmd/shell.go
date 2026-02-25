@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
@@ -23,7 +21,7 @@ func init() {
 func runShell(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	_, err := loadRunningSandbox(name)
+	_, err := loadRunningSandbox(cmd.Context(), name)
 	if err != nil {
 		return err
 	}
@@ -34,5 +32,5 @@ func runShell(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use runtime's interactive exec to get a shell
-	return rt.ExecInteractive(context.Background(), name, []string{"/bin/bash"}, runtime.ExecOptions{})
+	return rt.ExecInteractive(cmd.Context(), name, []string{"/bin/bash"}, runtime.ExecOptions{})
 }

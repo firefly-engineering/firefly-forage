@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -45,7 +44,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 	// Attempt graceful stop before destroy if timeout > 0
 	if downTimeout > 0 {
 		if gs, ok := rt.(runtime.GracefulStopper); ok {
-			ctx := context.Background()
+			ctx := cmd.Context()
 			running, _ := rt.IsRunning(ctx, name)
 			if running {
 				logging.Debug("attempting graceful stop before destroy", "timeout", downTimeout)
@@ -55,7 +54,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use unified cleanup function
-	sandbox.Cleanup(metadata, p, sandbox.DefaultCleanupOptions(), rt)
+	sandbox.Cleanup(cmd.Context(), metadata, p, sandbox.DefaultCleanupOptions(), rt)
 
 	auditLog := audit.NewLogger(p.StateDir)
 	_ = auditLog.LogEvent(audit.EventDestroy, name, "")

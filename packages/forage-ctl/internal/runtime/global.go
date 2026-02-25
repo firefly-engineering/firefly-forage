@@ -58,47 +58,47 @@ func InitGlobal(cfg *Config) error {
 // Helper functions that use the global runtime
 
 // IsRunning checks if a container is running using the global runtime
-func IsRunning(name string) bool {
+func IsRunning(ctx context.Context, name string) bool {
 	rt := Global()
 	if rt == nil {
 		return false
 	}
-	running, _ := rt.IsRunning(context.Background(), name)
+	running, _ := rt.IsRunning(ctx, name)
 	return running
 }
 
 // Destroy destroys a container using the global runtime
-func Destroy(name string) error {
+func Destroy(ctx context.Context, name string) error {
 	rt := Global()
 	if rt == nil {
 		return nil
 	}
-	return rt.Destroy(context.Background(), name)
+	return rt.Destroy(ctx, name)
 }
 
 // Start starts a container using the global runtime
-func Start(name string) error {
+func Start(ctx context.Context, name string) error {
 	rt := Global()
 	if rt == nil {
 		return nil
 	}
-	return rt.Start(context.Background(), name)
+	return rt.Start(ctx, name)
 }
 
 // Stop stops a container using the global runtime
-func Stop(name string) error {
+func Stop(ctx context.Context, name string) error {
 	rt := Global()
 	if rt == nil {
 		return nil
 	}
-	return rt.Stop(context.Background(), name)
+	return rt.Stop(ctx, name)
 }
 
 // Create creates a container using the global runtime
-func Create(opts CreateOptions) error {
+func Create(ctx context.Context, opts CreateOptions) error {
 	rt := Global()
 	if rt == nil {
 		return nil
 	}
-	return rt.Create(context.Background(), opts)
+	return rt.Create(ctx, opts)
 }

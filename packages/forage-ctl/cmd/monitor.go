@@ -51,7 +51,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 
 	logInfo("Starting health monitor (interval: %ds, auto-restart: %v)", monitorInterval, monitorAutoRestart)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	err := mon.Run(ctx)

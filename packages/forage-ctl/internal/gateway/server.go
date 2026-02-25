@@ -2,6 +2,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -25,7 +26,7 @@ func NewServer(paths *config.Paths, rt runtime.Runtime) *Server {
 
 // HandleConnection handles an incoming connection
 // This is designed to be called from SSH ForceCommand
-func (s *Server) HandleConnection(args []string) error {
+func (s *Server) HandleConnection(ctx context.Context, args []string) error {
 	logging.Debug("gateway connection", "args", args)
 
 	// If a sandbox name is provided as argument, connect directly
@@ -35,16 +36,16 @@ func (s *Server) HandleConnection(args []string) error {
 		if err := config.ValidateSandboxName(sandboxName); err != nil {
 			return fmt.Errorf("invalid sandbox name: %w", err)
 		}
-		return s.ConnectToSandbox(sandboxName)
+		return s.ConnectToSandbox(ctx, sandboxName)
 	}
 
 	// Otherwise, show the interactive picker
-	return s.ShowPicker()
+	return s.ShowPicker(ctx)
 }
 
 // HandleSSHOriginalCommand handles SSH_ORIGINAL_COMMAND environment variable
 // This is used when the gateway is set up as SSH ForceCommand
-func (s *Server) HandleSSHOriginalCommand() error {
+func (s *Server) HandleSSHOriginalCommand(ctx context.Context) error {
 	originalCmd := os.Getenv("SSH_ORIGINAL_COMMAND")
 	logging.Debug("SSH_ORIGINAL_COMMAND", "value", originalCmd)
 
@@ -57,16 +58,16 @@ func (s *Server) HandleSSHOriginalCommand() error {
 			if err := config.ValidateSandboxName(sandboxName); err != nil {
 				return fmt.Errorf("invalid sandbox name in SSH command: %w", err)
 			}
-			return s.ConnectToSandbox(sandboxName)
+			return s.ConnectToSandbox(ctx, sandboxName)
 		}
 	}
 
 	// No command specified, show picker
-	return s.ShowPicker()
+	return s.ShowPicker(ctx)
 }
 
 // ShowPicker displays the interactive sandbox picker
-func (s *Server) ShowPicker() error {
+func (s *Server) ShowPicker(ctx context.Context) error {
 	sandboxes, err := config.ListSandboxes(s.Paths.SandboxesDir)
 	if err != nil {
 		return fmt.Errorf("failed to list sandboxes: %w", err)
@@ -79,7 +80,7 @@ func (s *Server) ShowPicker() error {
 		return nil
 	}
 
-	result, err := tui.RunPicker(sandboxes, s.Paths, s.Runtime, tui.PickerOptions{})
+	result, err := tui.RunPicker(ctx, sandboxes, s.Paths, s.Runtime, tui.PickerOptions{})
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}
@@ -87,7 +88,7 @@ func (s *Server) ShowPicker() error {
 	switch result.Action {
 	case tui.ActionAttach:
 		if result.Sandbox != nil {
-			return s.ConnectToSandbox(result.Sandbox.Name)
+			return s.ConnectToSandbox(ctx, result.Sandbox.Name)
 		}
 
 	case tui.ActionNew:
@@ -105,21 +106,21 @@ func (s *Server) ShowPicker() error {
 }
 
 // ConnectToSandbox connects to a specific sandbox
-func (s *Server) ConnectToSandbox(name string) error {
+func (s *Server) ConnectToSandbox(ctx context.Context, name string) error {
 	// Validate name to prevent path traversal or injection
 	if err := config.ValidateSandboxName(name); err != nil {
 		return fmt.Errorf("invalid sandbox name: %w", err)
 	}
 
-	return Connect(name, s.Paths.SandboxesDir, s.Runtime)
+	return Connect(ctx, name, s.Paths.SandboxesDir, s.Runtime)
 }
 
 // ListSandboxes returns a formatted list of sandboxes
-func (s *Server) ListSandboxes() (string, error) {
+func (s *Server) ListSandboxes(ctx context.Context) (string, error) {
 	sandboxes, err := config.ListSandboxes(s.Paths.SandboxesDir)
 	if err != nil {
 		return "", err
 	}
 
-	return tui.SimplePicker(sandboxes, s.Paths, s.Runtime), nil
+	return tui.SimplePicker(ctx, sandboxes, s.Paths, s.Runtime), nil
 }

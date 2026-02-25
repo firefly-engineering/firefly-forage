@@ -49,7 +49,7 @@ func runPick(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run interactive picker
-	result, err := tui.RunPicker(sandboxes, p, rt, opts)
+	result, err := tui.RunPicker(cmd.Context(), sandboxes, p, rt, opts)
 	if err != nil {
 		return fmt.Errorf("picker error: %w", err)
 	}
@@ -59,12 +59,12 @@ func runPick(cmd *cobra.Command, args []string) error {
 	switch result.Action {
 	case tui.ActionAttach:
 		if result.Sandbox != nil {
-			return attachToSandbox(result.Sandbox, p)
+			return attachToSandbox(cmd.Context(), result.Sandbox, p)
 		}
 
 	case tui.ActionNew:
 		if result.CreateOptions != nil {
-			return createSandboxFromWizard(result.CreateOptions)
+			return createSandboxFromWizard(cmd.Context(), result.CreateOptions)
 		}
 		fmt.Println("\nTo create a new sandbox, run:")
 		fmt.Println("  forage-ctl up <name> -t <template> -w <workspace>")
@@ -87,8 +87,7 @@ func runPick(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createSandboxFromWizard(opts *tui.CreateOptions) error {
-	ctx := context.Background()
+func createSandboxFromWizard(ctx context.Context, opts *tui.CreateOptions) error {
 
 	creator, err := sandbox.NewCreator()
 	if err != nil {
@@ -121,6 +120,6 @@ func createSandboxFromWizard(opts *tui.CreateOptions) error {
 	return nil
 }
 
-func attachToSandbox(metadata *config.SandboxMetadata, paths *config.Paths) error {
-	return connectToSandbox(metadata.Name, paths)
+func attachToSandbox(ctx context.Context, metadata *config.SandboxMetadata, paths *config.Paths) error {
+	return connectToSandbox(ctx, metadata.Name, paths)
 }

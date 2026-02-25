@@ -226,7 +226,7 @@ func TestWorkflow_CleanupRemovesAllArtifacts(t *testing.T) {
 		Name:     sandboxName,
 		Template: "test",
 	}
-	sandbox.Cleanup(metadata, env.Paths, sandbox.CleanupOptions{
+	sandbox.Cleanup(context.Background(), metadata, env.Paths, sandbox.CleanupOptions{
 		DestroyContainer: false, // No container to destroy
 		CleanupWorkspace: false, // No VCS workspace
 		CleanupSecrets:   true,

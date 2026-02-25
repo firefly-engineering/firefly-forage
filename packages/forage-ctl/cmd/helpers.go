@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
@@ -19,8 +21,8 @@ func getRuntime() runtime.Runtime {
 }
 
 // isRunning checks if a container is running using the app's runtime.
-func isRunning(name string) bool {
-	return app.Default.IsRunning(name)
+func isRunning(ctx context.Context, name string) bool {
+	return app.Default.IsRunning(ctx, name)
 }
 
 // loadSandbox loads sandbox metadata or returns a SandboxNotFound error.
@@ -36,13 +38,13 @@ func loadSandbox(name string) (*config.SandboxMetadata, error) {
 // loadRunningSandbox loads sandbox metadata and verifies it's running.
 // Returns SandboxNotFound if the sandbox doesn't exist,
 // or SandboxNotRunning if it exists but isn't running.
-func loadRunningSandbox(name string) (*config.SandboxMetadata, error) {
+func loadRunningSandbox(ctx context.Context, name string) (*config.SandboxMetadata, error) {
 	metadata, err := loadSandbox(name)
 	if err != nil {
 		return nil, err
 	}
 
-	if !isRunning(name) {
+	if !isRunning(ctx, name) {
 		return nil, errors.SandboxNotRunning(name)
 	}
 

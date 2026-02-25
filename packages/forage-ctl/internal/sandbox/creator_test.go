@@ -291,7 +291,7 @@ func TestCreator_cleanup(t *testing.T) {
 	env.Runtime.AddContainer("cleanup-test", runtime.StatusRunning)
 
 	// Run cleanup
-	creator.cleanup(metadata)
+	creator.cleanup(context.Background(), metadata)
 
 	// Verify resources were cleaned up
 	if env.SandboxExists("cleanup-test") {
