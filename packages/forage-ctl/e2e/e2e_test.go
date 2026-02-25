@@ -119,6 +119,29 @@ func TestSandboxLifecycle(t *testing.T) {
 			"cd /workspace && jj log --no-graph -r @ -T description 2>&1")
 	})
 
+	t.Run("exec/secrets", func(t *testing.T) {
+		// The test template configures test-secret with authEnvVar=TEST_KEY.
+		// Verify the secret file is mounted and the env var is set.
+		AssertSandboxOutputContains(t, sb, "secret file mounted",
+			"test-api-key-e2e", "cat /run/secrets/test-secret")
+		AssertSandboxOutputContains(t, sb, "auth env var set",
+			"test-api-key-e2e", "printenv TEST_KEY")
+	})
+
+	t.Run("exec/network-none", func(t *testing.T) {
+		// The test template uses network=none. Outbound traffic should
+		// be blocked, but SSH management access works (already proven
+		// by all the exec tests above).
+		AssertSandboxFailure(t, sb, "outbound ping blocked",
+			"ping -c 1 -W 2 8.8.8.8")
+	})
+
+	t.Run("audit-log", func(t *testing.T) {
+		// After forage-ctl up, the audit log should contain a create event
+		AssertOutputContains(t, env.System, "audit log has create event",
+			"create", "forage-ctl audit-log e2e-test")
+	})
+
 	t.Run("exec/file sync", func(t *testing.T) {
 		AssertSandboxSuccess(t, sb, "can create files in workspace",
 			"echo hello-from-sandbox > /workspace/sandbox-created.txt")

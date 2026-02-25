@@ -222,6 +222,17 @@ func AssertSandboxSuccess(t *testing.T, sb *SandboxConn, desc, cmd string) {
 	}
 }
 
+// AssertSandboxFailure asserts that a command fails in a sandbox.
+func AssertSandboxFailure(t *testing.T, sb *SandboxConn, desc, cmd string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if _, err := sb.Run(ctx, cmd); err == nil {
+		t.Errorf("%s: expected failure but succeeded", desc)
+	}
+}
+
 // AssertSandboxOutputContains asserts sandbox command output contains expected string.
 func AssertSandboxOutputContains(t *testing.T, sb *SandboxConn, desc, expected, cmd string) {
 	t.Helper()
