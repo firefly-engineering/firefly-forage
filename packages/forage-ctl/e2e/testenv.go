@@ -20,40 +20,58 @@ type TestEnv struct {
 	System System
 }
 
-// SetupSharedEnv boots a single VM for all tests. Call from TestMain.
+// SetupSharedEnv initializes the shared test environment based on env vars:
+//   - E2E_VM set → VM mode (boot QEMU, run tests via SSH)
+//   - E2E_LOCAL=1 → Local mode (run tests against current machine)
+//   - Neither set → skip all E2E tests gracefully (return 0)
 func SetupSharedEnv(m *testing.M) int {
-	vmScript := os.Getenv("E2E_VM")
-	if vmScript == "" {
-		log.Fatal("E2E_VM not set. Run via 'just test-e2e' or the nix wrapper.")
+	if vmScript := os.Getenv("E2E_VM"); vmScript != "" {
+		// VM mode (existing behavior)
+		sshKey := os.Getenv("E2E_SSH_KEY")
+		if sshKey == "" {
+			log.Fatal("E2E_SSH_KEY not set.")
+		}
+
+		ctx := context.Background()
+		sys, err := NewVMSystem(ctx, VMConfig{
+			VMScript:    vmScript,
+			SSHKeyPath:  sshKey,
+			BootTimeout: 5 * time.Minute,
+		})
+		if err != nil {
+			log.Fatalf("failed to boot VM: %v", err)
+		}
+
+		sharedEnv = &TestEnv{System: sys}
+		code := m.Run()
+		sys.Close()
+		return code
 	}
-	sshKey := os.Getenv("E2E_SSH_KEY")
-	if sshKey == "" {
-		log.Fatal("E2E_SSH_KEY not set.")
+
+	if os.Getenv("E2E_LOCAL") != "" {
+		// Local mode: run against current machine
+		sshKey := os.Getenv("E2E_SSH_KEY")
+		if sshKey == "" {
+			sshKey = "/etc/firefly-forage/ssh-key"
+		}
+
+		sharedEnv = &TestEnv{System: NewLocalSystem(sshKey)}
+		code := m.Run()
+		sharedEnv.System.Close()
+		return code
 	}
 
-	ctx := context.Background()
-	sys, err := NewVMSystem(ctx, VMConfig{
-		VMScript:    vmScript,
-		SSHKeyPath:  sshKey,
-		BootTimeout: 5 * time.Minute,
-	})
-	if err != nil {
-		log.Fatalf("failed to boot VM: %v", err)
-	}
-
-	sharedEnv = &TestEnv{System: sys}
-
-	code := m.Run()
-
-	sys.Close()
-	return code
+	// No mode set: skip gracefully
+	log.Println("E2E_VM and E2E_LOCAL not set; skipping E2E tests")
+	return 0
 }
 
-// GetSharedEnv returns the shared TestEnv. Must be called after SetupSharedEnv.
+// GetSharedEnv returns the shared TestEnv, or skips the test if no
+// environment was configured (neither E2E_VM nor E2E_LOCAL set).
 func GetSharedEnv(t *testing.T) *TestEnv {
 	t.Helper()
 	if sharedEnv == nil {
-		t.Fatal("shared env not initialized; call SetupSharedEnv from TestMain")
+		t.Skip("E2E environment not configured; set E2E_VM or E2E_LOCAL")
 	}
 	return sharedEnv
 }
