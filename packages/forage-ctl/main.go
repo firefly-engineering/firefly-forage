@@ -14,7 +14,11 @@ func main() {
 	shutdown, _ := telemetry.Init(ctx, "forage-ctl")
 	defer shutdown()
 
-	if err := cmd.Execute(); err != nil {
+	// Extract parent trace context from environment (e.g., TRACEPARENT
+	// set by E2E test framework for cross-process trace continuity).
+	ctx = telemetry.ContextFromEnv(ctx)
+
+	if err := cmd.Execute(ctx); err != nil {
 		os.Exit(errors.GetExitCode(err))
 	}
 }

@@ -34,6 +34,9 @@ func (l *LocalSystem) Run(ctx context.Context, cmd string) (string, error) {
 		telemetry.WithAttr(attribute.String("cmd", cmd)))
 	defer span.End()
 
+	// Propagate trace context + OTEL config to child processes
+	cmd = telemetry.EnvPrefix(ctx) + cmd
+
 	c := exec.CommandContext(ctx, "bash", "-c", cmd)
 	output, err := c.CombinedOutput()
 	if err != nil {
@@ -49,6 +52,9 @@ func (l *LocalSystem) ForageCtl(ctx context.Context, args ...string) (string, er
 	defer span.End()
 
 	c := exec.CommandContext(ctx, "forage-ctl", args...)
+	if extra := telemetry.PropagationEnv(ctx); len(extra) > 0 {
+		c.Env = append(os.Environ(), extra...)
+	}
 	output, err := c.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("forage-ctl %s: %w\noutput: %s", strings.Join(args, " "), err, output)

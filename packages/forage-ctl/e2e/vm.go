@@ -125,6 +125,9 @@ func (vm *VMSystem) Run(ctx context.Context, cmd string) (string, error) {
 		telemetry.WithAttr(attribute.String("cmd", cmd)))
 	defer span.End()
 
+	// Propagate trace context + OTEL config to child processes
+	cmd = telemetry.EnvPrefix(ctx) + cmd
+
 	session, err := vm.sshClient.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("new session: %w", err)
