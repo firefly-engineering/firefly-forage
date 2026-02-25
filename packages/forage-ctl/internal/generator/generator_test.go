@@ -1547,3 +1547,183 @@ func TestGenerateNixConfig_RestrictedNetwork(t *testing.T) {
 		}
 	}
 }
+
+// Tests for the two-phase cached config generation
+
+func TestGenerateInnerNixConfig(t *testing.T) {
+	cfg := validTestConfig()
+
+	result, err := GenerateInnerNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateInnerNixConfig failed: %v", err)
+	}
+
+	// Inner config should use template name as hostname (not sandbox name)
+	if !strings.Contains(result, `networking.hostName = "claude"`) {
+		t.Error("Inner config should use template name as hostname")
+	}
+
+	// Inner config should have forage-network service (runtime gateway injection)
+	if !strings.Contains(result, "forage-network") {
+		t.Error("Inner config should contain forage-network service")
+	}
+	if !strings.Contains(result, "ip route replace default") {
+		t.Error("Inner config should set gateway via ip route")
+	}
+	if !strings.Contains(result, "/run/forage/config.json") {
+		t.Error("Inner config should read from /run/forage/config.json")
+	}
+
+	// Inner config should have forage-hostname service
+	if !strings.Contains(result, "forage-hostname") {
+		t.Error("Inner config should contain forage-hostname service")
+	}
+
+	// Inner config should NOT have per-sandbox hostname
+	if strings.Contains(result, `networking.hostName = "test-sandbox"`) {
+		t.Error("Inner config should NOT use sandbox name as hostname")
+	}
+
+	// Inner config should NOT have per-sandbox forage.json (bind-mounted at runtime)
+	if strings.Contains(result, `environment.etc."forage.json"`) {
+		t.Error("Inner config should NOT contain static forage.json")
+	}
+
+	// Inner config should NOT have defaultGateway (set at runtime)
+	if strings.Contains(result, "defaultGateway") {
+		t.Error("Inner config should NOT contain defaultGateway (set at runtime)")
+	}
+
+	// Inner config should still have packages and services
+	if !strings.Contains(result, "jujutsu") {
+		t.Error("Inner config should include jujutsu package")
+	}
+	if !strings.Contains(result, "openssh") {
+		t.Error("Inner config should include openssh")
+	}
+	if !strings.Contains(result, "forage-init") {
+		t.Error("Inner config should include forage-init service")
+	}
+
+	// Inner config should have nixpkgs registry
+	if !strings.Contains(result, `path = "/nix/store/test-nixpkgs"`) {
+		t.Error("Inner config should pin nixpkgs registry")
+	}
+}
+
+func TestGenerateInnerNixConfig_FullNetwork(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Network = "full"
+
+	result, err := GenerateInnerNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateInnerNixConfig failed: %v", err)
+	}
+
+	// Full mode should have nameservers but no defaultGateway
+	if !strings.Contains(result, "nameservers") {
+		t.Error("Full network inner config should have nameservers")
+	}
+	if strings.Contains(result, "defaultGateway") {
+		t.Error("Full network inner config should NOT have defaultGateway")
+	}
+}
+
+func TestGenerateInnerNixConfig_NoneNetwork(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Template.Network = "none"
+
+	result, err := GenerateInnerNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateInnerNixConfig failed: %v", err)
+	}
+
+	// None mode should have the drop policy
+	if !strings.Contains(result, "policy drop") {
+		t.Error("None network inner config should have drop policy")
+	}
+}
+
+func TestGenerateInnerNixConfig_WithIdentity(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.AgentIdentity = &config.AgentIdentity{
+		GitUser:  "Agent Bot",
+		GitEmail: "agent@example.com",
+	}
+
+	result, err := GenerateInnerNixConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateInnerNixConfig failed: %v", err)
+	}
+
+	if !strings.Contains(result, "forage-agent-identity") {
+		t.Error("Inner config should contain identity service")
+	}
+	if !strings.Contains(result, "Agent Bot") {
+		t.Error("Inner config should contain git user name")
+	}
+}
+
+func TestGenerateOuterNixConfig(t *testing.T) {
+	data := &OuterTemplateData{
+		ContainerName: "f1",
+		NetworkSlot:   1,
+		SystemPath:    "/nix/store/abc123-nixos-system",
+		BindMounts: []BindMount{
+			{Path: "/workspace", HostPath: "/home/user/project", ReadOnly: false},
+			{Path: "/nix/store", HostPath: "/nix/store", ReadOnly: true},
+			{Path: "/run/forage/config.json", HostPath: "/var/lib/forage/sandboxes/test.runtime/config.json", ReadOnly: true},
+		},
+	}
+
+	result, err := GenerateOuterNixConfig(data)
+	if err != nil {
+		t.Fatalf("GenerateOuterNixConfig failed: %v", err)
+	}
+
+	// Should reference pre-built system path
+	if !strings.Contains(result, "/nix/store/abc123-nixos-system") {
+		t.Error("Outer config should reference the cached system path")
+	}
+
+	// Should have container definition
+	if !strings.Contains(result, "containers.f1") {
+		t.Error("Outer config should define container")
+	}
+
+	// Should have network addressing
+	if !strings.Contains(result, `hostAddress = "10.100.1.1"`) {
+		t.Error("Outer config should have host address")
+	}
+	if !strings.Contains(result, `localAddress = "10.100.1.2"`) {
+		t.Error("Outer config should have local address")
+	}
+
+	// Should have bind mounts
+	if !strings.Contains(result, "/workspace") {
+		t.Error("Outer config should have workspace mount")
+	}
+	if !strings.Contains(result, "/run/forage/config.json") {
+		t.Error("Outer config should have runtime config mount")
+	}
+
+	// Should be minimal (no config = { } block)
+	if strings.Contains(result, "config =") {
+		t.Error("Outer config should NOT have an inner config block")
+	}
+}
+
+func TestEvalConfigNix_Embedded(t *testing.T) {
+	if EvalConfigNix == "" {
+		t.Fatal("EvalConfigNix should be embedded and non-empty")
+	}
+	if !strings.Contains(EvalConfigNix, "baseModules") {
+		t.Error("EvalConfigNix should contain baseModules")
+	}
+	if !strings.Contains(EvalConfigNix, "nixos-containers.nix") {
+		t.Error("EvalConfigNix should reference nixos-containers module")
+	}
+	if !strings.Contains(EvalConfigNix, "eval-config.nix") {
+		t.Error("EvalConfigNix should import eval-config.nix")
+	}
+}
