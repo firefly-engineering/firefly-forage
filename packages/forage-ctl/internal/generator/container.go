@@ -33,6 +33,11 @@ type ContainerConfig struct {
 	WorkspaceDir string // Container workspace path (default: "/workspace")
 	StateVersion string // NixOS state version (default: "24.11")
 
+	// NixpkgsPath is the nix store path to nixpkgs source, injected as a
+	// literal string into the container's nix registry to avoid an expensive
+	// pkgs.path evaluation (~10s) during container creation.
+	NixpkgsPath string
+
 	// ResourceLimits are optional cgroup limits for the container.
 	ResourceLimits *config.ResourceLimits
 
@@ -118,6 +123,7 @@ func buildTemplateData(cfg *ContainerConfig) *TemplateData {
 		GID:            cfg.GID,
 		SandboxName:    cfg.Name,
 		Runtime:        cfg.Runtime,
+		NixpkgsPath:    cfg.NixpkgsPath,
 	}
 
 	// Set resource limits if configured

@@ -35,6 +35,7 @@ type TemplateData struct {
 	ClaudePackagePath  string                 // Nix store path of unwrapped claude package (empty if not wrapping)
 	SandboxName        string                 // Sandbox name (for in-container metadata)
 	Runtime            string                 // Runtime backend name (for in-container metadata)
+	NixpkgsPath        string                 // Nix store path to nixpkgs source (avoids expensive pkgs.path eval)
 	ResourceLimits     *config.ResourceLimits // Optional resource limits for systemd
 }
 
@@ -164,7 +165,7 @@ const containerTemplateText = `{ pkgs, ... }:
               };
               to = {
                 type = "path";
-                path = "${pkgs.path}";
+                path = "{{.NixpkgsPath}}";
               };
             }
           ];

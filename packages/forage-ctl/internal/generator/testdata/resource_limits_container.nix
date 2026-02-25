@@ -84,7 +84,7 @@
               };
               to = {
                 type = "path";
-                path = "${pkgs.path}";
+                path = "/nix/store/test-nixpkgs";
               };
             }
           ];

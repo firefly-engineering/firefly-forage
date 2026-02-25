@@ -55,6 +55,7 @@ func validTestConfig() *ContainerConfig {
 		},
 		UID:             1000,
 		GID:             100,
+		NixpkgsPath:     "/nix/store/test-nixpkgs",
 		Contributions:   testContributions(),
 		Reproducibility: reproducibility.NewNixReproducibility(),
 	}
@@ -107,9 +108,9 @@ func TestGenerateNixConfig(t *testing.T) {
 		t.Error("Config should contain authorized keys")
 	}
 
-	// Check nixpkgs registry uses local store path
-	if !strings.Contains(result, `path = "${pkgs.path}"`) {
-		t.Error("Config should pin nixpkgs registry to local pkgs.path")
+	// Check nixpkgs registry uses literal store path
+	if !strings.Contains(result, `path = "/nix/store/test-nixpkgs"`) {
+		t.Error("Config should pin nixpkgs registry to literal store path")
 	}
 
 	// Check packages
@@ -767,6 +768,7 @@ func goldenTestConfig() *ContainerConfig {
 		},
 		UID:             1000,
 		GID:             100,
+		NixpkgsPath:     "/nix/store/test-nixpkgs",
 		Contributions:   testContributions(),
 		Reproducibility: reproducibility.NewNixReproducibility(),
 	}

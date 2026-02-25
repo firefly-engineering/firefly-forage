@@ -337,6 +337,7 @@ func RebuildContainerConfig(ctx context.Context, params RebuildContainerConfigPa
 		Username:        hostConfig.ResolvedContainerUsername(),
 		WorkspaceDir:    hostConfig.ResolvedWorkspacePath(),
 		StateVersion:    hostConfig.ResolvedStateVersion(),
+		NixpkgsPath:     hostConfig.NixpkgsPath,
 		Contributions:   contributions,
 		Reproducibility: contribResult.Reproducibility,
 	}, nil
