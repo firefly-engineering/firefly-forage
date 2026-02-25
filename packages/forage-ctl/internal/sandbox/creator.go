@@ -649,9 +649,13 @@ func (c *Creator) templateHasSecrets(template *config.Template) bool {
 }
 
 // setupSecrets reads secrets from host file paths and writes them to the sandbox secrets directory.
+// Files are owned by the configured agent UID/GID so the container user can read them.
 func (c *Creator) setupSecrets(secretsPath string, template *config.Template) error {
 	if err := os.MkdirAll(secretsPath, 0700); err != nil {
 		return err
+	}
+	if err := os.Chown(secretsPath, c.hostConfig.UID, c.hostConfig.GID); err != nil {
+		return fmt.Errorf("failed to chown secrets directory: %w", err)
 	}
 
 	for _, agent := range template.Agents {
@@ -673,6 +677,9 @@ func (c *Creator) setupSecrets(secretsPath string, template *config.Template) er
 		secretFile := filepath.Join(secretsPath, agent.SecretName)
 		if err := os.WriteFile(secretFile, secretData, 0600); err != nil {
 			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
+		}
+		if err := os.Chown(secretFile, c.hostConfig.UID, c.hostConfig.GID); err != nil {
+			return fmt.Errorf("failed to chown secret %s: %w", agent.SecretName, err)
 		}
 		logging.Debug("secret written", "secret", agent.SecretName)
 	}
