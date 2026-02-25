@@ -17,6 +17,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/workspace"
 )
 
@@ -57,6 +58,9 @@ func NewCreator() (*Creator, error) {
 // Create creates a new sandbox with the given options.
 // File locking is used to prevent TOCTOU races during slot allocation.
 func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult, error) {
+	ctx, span := telemetry.Start(ctx, "sandbox.create")
+	defer span.End()
+
 	logging.Debug("starting sandbox creation", "name", opts.Name, "template", opts.Template)
 
 	// Phase 1: Validate inputs
@@ -240,6 +244,8 @@ func (c *Creator) createMetadata(opts CreateOptions, resources *resourceAllocati
 
 // writeContainerConfig generates and writes the Nix container configuration using the contribution system.
 func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) (string, error) {
+	ctx, span := telemetry.Start(ctx, "sandbox.generate-nix-config")
+	defer span.End()
 	// Determine proxy URL
 	proxyURL := ""
 	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
@@ -417,6 +423,9 @@ type workspaceSetup struct {
 
 // setupWorkspace sets up the workspace based on the options (legacy single-mount path).
 func (c *Creator) setupWorkspace(opts CreateOptions) (*workspaceSetup, error) {
+	_, span := telemetry.Start(context.Background(), "sandbox.setup-workspace")
+	defer span.End()
+
 	ws := &workspaceSetup{}
 
 	absPath, err := filepath.Abs(opts.RepoPath)
@@ -651,6 +660,9 @@ func (c *Creator) templateHasSecrets(template *config.Template) bool {
 // setupSecrets reads secrets from host file paths and writes them to the sandbox secrets directory.
 // Files are owned by the configured agent UID/GID so the container user can read them.
 func (c *Creator) setupSecrets(secretsPath string, template *config.Template) error {
+	_, span := telemetry.Start(context.Background(), "sandbox.setup-secrets")
+	defer span.End()
+
 	if err := os.MkdirAll(secretsPath, 0700); err != nil {
 		return err
 	}

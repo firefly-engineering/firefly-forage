@@ -5,9 +5,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/sandbox"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 var (
@@ -27,6 +29,15 @@ Each sandbox is a lightweight container with:
   - SSH access with tmux session`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		logging.Setup(verbose, jsonOutput, os.Stderr)
+		ctx, span := telemetry.Command(cmd.Context(), cmd.Name())
+		cmd.SetContext(ctx)
+		// span ended in PersistentPostRun
+		_ = span
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if span := trace.SpanFromContext(cmd.Context()); span.IsRecording() {
+			span.End()
+		}
 	},
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
 // NspawnRuntime implements the Runtime interface using systemd-nspawn
@@ -71,6 +72,9 @@ func (r *NspawnRuntime) Name() string {
 
 // Create creates a new container using extra-container
 func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
+	ctx, span := telemetry.Start(ctx, "nspawn.create")
+	defer span.End()
+
 	logging.Debug("creating container", "name", opts.Name, "config", opts.ConfigPath)
 
 	args := []string{r.ExtraContainerPath, "create"}
@@ -99,6 +103,9 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 // extra-container managed containers after terminate/stop because the
 // ephemeral root filesystem is destroyed when the container shuts down.
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
+	ctx, span := telemetry.Start(ctx, "nspawn.start")
+	defer span.End()
+
 	configPath := r.SandboxesDir + "/" + name + ".nix"
 	logging.Debug("starting container via extra-container", "name", name, "config", configPath)
 
@@ -111,6 +118,9 @@ func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 
 // Stop stops a running container
 func (r *NspawnRuntime) Stop(ctx context.Context, name string) error {
+	ctx, span := telemetry.Start(ctx, "nspawn.stop")
+	defer span.End()
+
 	containerName := r.containerName(name)
 	logging.Debug("stopping container", "container", containerName)
 
@@ -124,6 +134,9 @@ func (r *NspawnRuntime) Stop(ctx context.Context, name string) error {
 
 // Destroy stops and removes a container
 func (r *NspawnRuntime) Destroy(ctx context.Context, name string) error {
+	ctx, span := telemetry.Start(ctx, "nspawn.destroy")
+	defer span.End()
+
 	containerName := r.containerName(name)
 	logging.Debug("destroying container", "container", containerName)
 
@@ -328,6 +341,9 @@ func (r *NspawnRuntime) SSHHost(ctx context.Context, name string) (string, error
 
 // SSHExec executes a command via SSH
 func (r *NspawnRuntime) SSHExec(ctx context.Context, name string, command []string, opts ExecOptions) (*ExecResult, error) {
+	ctx, span := telemetry.Start(ctx, "nspawn.ssh-exec")
+	defer span.End()
+
 	host, err := r.SSHHost(ctx, name)
 	if err != nil {
 		return nil, err
