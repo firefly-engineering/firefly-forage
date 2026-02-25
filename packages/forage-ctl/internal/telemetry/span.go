@@ -32,6 +32,11 @@ func Exec(ctx context.Context, binary string, args ...string) (context.Context, 
 	))
 }
 
+// WithAttr returns a SpanStartOption that sets attributes on the span.
+func WithAttr(attrs ...attribute.KeyValue) trace.SpanStartOption {
+	return trace.WithAttributes(attrs...)
+}
+
 // RecordError records an error on the current span and sets error status.
 func RecordError(ctx context.Context, err error) {
 	span := trace.SpanFromContext(ctx)

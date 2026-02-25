@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -18,7 +17,7 @@ func TestModuleSetup(t *testing.T) {
 
 	t.Run("forage-ctl installed", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.System, "forage-ctl is available", "which forage-ctl")
+		AssertSuccess(t, env.Ctx(t), env.System, "forage-ctl is available", "which forage-ctl")
 	})
 
 	t.Run("directories", func(t *testing.T) {
@@ -30,51 +29,50 @@ func TestModuleSetup(t *testing.T) {
 			"/etc/firefly-forage/templates",
 		}
 		for _, dir := range dirs {
-			AssertSuccess(t, env.System, dir+" exists", "test -d "+dir)
+			AssertSuccess(t, env.Ctx(t), env.System, dir+" exists", "test -d "+dir)
 		}
 	})
 
 	t.Run("host config", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.System, "host config exists",
+		AssertSuccess(t, env.Ctx(t), env.System, "host config exists",
 			"test -f /etc/firefly-forage/config.json")
-		AssertOutputContains(t, env.System, "host config has correct user",
+		AssertOutputContains(t, env.Ctx(t), env.System, "host config has correct user",
 			`"user"`, "cat /etc/firefly-forage/config.json")
 	})
 
 	t.Run("template", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.System, "template JSON exists",
+		AssertSuccess(t, env.Ctx(t), env.System, "template JSON exists",
 			"test -f /etc/firefly-forage/templates/test.json")
-		AssertOutputContains(t, env.System, "template has network config",
+		AssertOutputContains(t, env.Ctx(t), env.System, "template has network config",
 			`"network"`, "cat /etc/firefly-forage/templates/test.json")
 	})
 
 	t.Run("extra-container available", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.System, "extra-container is available", "which extra-container")
+		AssertSuccess(t, env.Ctx(t), env.System, "extra-container is available", "which extra-container")
 	})
 
 	t.Run("secrets directory", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.System, "secrets directory exists", "test -d /run/forage-secrets")
+		AssertSuccess(t, env.Ctx(t), env.System, "secrets directory exists", "test -d /run/forage-secrets")
 	})
 
 	t.Run("templates command", func(t *testing.T) {
 		t.Parallel()
-		AssertOutputContains(t, env.System, "templates lists test template",
+		AssertOutputContains(t, env.Ctx(t), env.System, "templates lists test template",
 			"test", "forage-ctl templates")
-		AssertOutputContains(t, env.System, "templates shows agent name",
+		AssertOutputContains(t, env.Ctx(t), env.System, "templates shows agent name",
 			"test-agent", "forage-ctl templates")
 	})
 }
 
 func TestSandboxLifecycle(t *testing.T) {
 	env := GetSharedEnv(t)
-	ctx := context.Background()
 
 	// Clean up any stale sandboxes
-	env.System.ForageCtl(ctx, "down", "e2e-test")
+	env.System.ForageCtl(env.Ctx(t), "down", "e2e-test")
 
 	// Create test repository
 	env.InitGitRepo(t, "/tmp/e2e-project", map[string]string{
@@ -85,7 +83,7 @@ func TestSandboxLifecycle(t *testing.T) {
 	t.Log("running forage-ctl up...")
 	env.MustRun(t, "forage-ctl up e2e-test -t test --repo /tmp/e2e-project --direct > /tmp/forage-up.log 2>&1")
 	t.Cleanup(func() {
-		env.System.ForageCtl(context.Background(), "down", "e2e-test")
+		env.System.ForageCtl(env.Ctx(t), "down", "e2e-test")
 	})
 
 	// Wait for sandbox
@@ -101,31 +99,31 @@ func TestSandboxLifecycle(t *testing.T) {
 	t.Run("verify", func(t *testing.T) {
 		t.Run("connectivity", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxSuccess(t, sb, "can run commands in sandbox", "true")
+			AssertSandboxSuccess(t, env.Ctx(t), sb, "can run commands in sandbox", "true")
 		})
 
 		t.Run("workspace", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sb, "workspace has README",
+			AssertSandboxOutputContains(t, env.Ctx(t), sb, "workspace has README",
 				"E2E Test Project", "cat /workspace/README.md")
 		})
 
 		t.Run("forage metadata", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sb, "forage.json has sandbox name",
+			AssertSandboxOutputContains(t, env.Ctx(t), sb, "forage.json has sandbox name",
 				"e2e-test", "cat /etc/forage.json")
 		})
 
 		t.Run("packages", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxSuccess(t, sb, "git is available", "which git")
-			AssertSandboxSuccess(t, sb, "jj is available", "which jj")
-			AssertSandboxSuccess(t, sb, "tmux is available", "which tmux")
+			AssertSandboxSuccess(t, env.Ctx(t), sb, "git is available", "which git")
+			AssertSandboxSuccess(t, env.Ctx(t), sb, "jj is available", "which jj")
+			AssertSandboxSuccess(t, env.Ctx(t), sb, "tmux is available", "which tmux")
 		})
 
 		t.Run("vcs", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sb, "git log works",
+			AssertSandboxOutputContains(t, env.Ctx(t), sb, "git log works",
 				"Initial commit", "cd /workspace && git log --oneline -1")
 			// Note: jj init is skipped here because it mutates workspace state.
 			// It was tested in the original sequential flow but is not safe to
@@ -134,7 +132,7 @@ func TestSandboxLifecycle(t *testing.T) {
 
 		t.Run("secrets", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sb, "secret file mounted",
+			AssertSandboxOutputContains(t, env.Ctx(t), sb, "secret file mounted",
 				"test-api-key-e2e", "cat /run/secrets/test-secret")
 			// Note: auth env var (TEST_KEY) is only set for recognized agent
 			// types (e.g. "claude"). The generic "test-agent" doesn't get
@@ -143,25 +141,25 @@ func TestSandboxLifecycle(t *testing.T) {
 
 		t.Run("network-none", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxFailure(t, sb, "outbound ping blocked",
+			AssertSandboxFailure(t, env.Ctx(t), sb, "outbound ping blocked",
 				"ping -c 1 -W 2 8.8.8.8")
 		})
 
 		t.Run("audit-log", func(t *testing.T) {
 			t.Parallel()
-			AssertOutputContains(t, env.System, "audit log has create event",
+			AssertOutputContains(t, env.Ctx(t), env.System, "audit log has create event",
 				"create", "forage-ctl audit-log e2e-test")
 		})
 
 		t.Run("status", func(t *testing.T) {
 			t.Parallel()
-			AssertOutputContains(t, env.System, "status shows container healthy",
+			AssertOutputContains(t, env.Ctx(t), env.System, "status shows container healthy",
 				"Container:", "forage-ctl status e2e-test")
 		})
 
 		t.Run("ps", func(t *testing.T) {
 			t.Parallel()
-			AssertOutputContains(t, env.System, "ps shows sandbox",
+			AssertOutputContains(t, env.Ctx(t), env.System, "ps shows sandbox",
 				"e2e-test", "forage-ctl ps")
 		})
 	})
@@ -169,20 +167,20 @@ func TestSandboxLifecycle(t *testing.T) {
 	// Phase 2: Sequential operations that mutate state
 
 	t.Run("file sync", func(t *testing.T) {
-		AssertSandboxSuccess(t, sb, "can create files in workspace",
+		AssertSandboxSuccess(t, env.Ctx(t), sb, "can create files in workspace",
 			"echo hello-from-sandbox > /workspace/sandbox-created.txt")
 
 		// Verify file visible on host
-		AssertSuccess(t, env.System, "file visible on host",
+		AssertSuccess(t, env.Ctx(t), env.System, "file visible on host",
 			"test -f /tmp/e2e-project/sandbox-created.txt")
-		AssertOutputContains(t, env.System, "content matches",
+		AssertOutputContains(t, env.Ctx(t), env.System, "content matches",
 			"hello-from-sandbox", "cat /tmp/e2e-project/sandbox-created.txt")
 	})
 
 	t.Run("jj init", func(t *testing.T) {
-		AssertSandboxSuccess(t, sb, "jj init works",
+		AssertSandboxSuccess(t, env.Ctx(t), sb, "jj init works",
 			"cd /workspace && jj git init --colocate 2>&1")
-		AssertSandboxSuccess(t, sb, "jj log works after init",
+		AssertSandboxSuccess(t, env.Ctx(t), sb, "jj log works after init",
 			"cd /workspace && jj log --no-graph -r @ -T description 2>&1")
 	})
 
@@ -193,15 +191,15 @@ func TestSandboxLifecycle(t *testing.T) {
 		sb.Close()
 
 		t.Log("stopping sandbox...")
-		AssertSuccess(t, env.System, "forage-ctl stop succeeds",
+		AssertSuccess(t, env.Ctx(t), env.System, "forage-ctl stop succeeds",
 			"forage-ctl stop e2e-test")
 
 		// Verify status shows container not running (✗ = not running)
-		AssertOutputContains(t, env.System, "status shows container down after stop",
+		AssertOutputContains(t, env.Ctx(t), env.System, "status shows container down after stop",
 			"Container: ✗", "forage-ctl status e2e-test 2>&1 || true")
 
 		t.Log("starting sandbox...")
-		AssertSuccess(t, env.System, "forage-ctl start succeeds",
+		AssertSuccess(t, env.Ctx(t), env.System, "forage-ctl start succeeds",
 			"forage-ctl start e2e-test")
 
 		// Wait for sandbox to be reachable again
@@ -209,7 +207,7 @@ func TestSandboxLifecycle(t *testing.T) {
 
 		// Reconnect and verify workspace survived the stop/start cycle
 		sbAfter := env.ConnectSandbox(t, "e2e-test", containerIP)
-		AssertSandboxOutputContains(t, sbAfter, "workspace intact after stop/start",
+		AssertSandboxOutputContains(t, env.Ctx(t), sbAfter, "workspace intact after stop/start",
 			"E2E Test Project", "cat /workspace/README.md")
 		sbAfter.Close()
 	})
@@ -217,12 +215,12 @@ func TestSandboxLifecycle(t *testing.T) {
 	t.Run("reset", func(t *testing.T) {
 		// Create a file outside /workspace (ephemeral container state)
 		sbPre := env.ConnectSandbox(t, "e2e-test", containerIP)
-		AssertSandboxSuccess(t, sbPre, "create ephemeral file",
+		AssertSandboxSuccess(t, env.Ctx(t), sbPre, "create ephemeral file",
 			"touch /tmp/ephemeral-marker")
 		sbPre.Close()
 
 		t.Log("resetting sandbox...")
-		AssertSuccess(t, env.System, "forage-ctl reset succeeds",
+		AssertSuccess(t, env.Ctx(t), env.System, "forage-ctl reset succeeds",
 			"forage-ctl reset e2e-test")
 
 		// Wait for sandbox to be reachable after reset
@@ -230,37 +228,36 @@ func TestSandboxLifecycle(t *testing.T) {
 
 		// Verify ephemeral state is gone but workspace persists
 		sbPost := env.ConnectSandbox(t, "e2e-test", containerIP)
-		AssertSandboxFailure(t, sbPost, "ephemeral file gone after reset",
+		AssertSandboxFailure(t, env.Ctx(t), sbPost, "ephemeral file gone after reset",
 			"test -f /tmp/ephemeral-marker")
-		AssertSandboxOutputContains(t, sbPost, "workspace intact after reset",
+		AssertSandboxOutputContains(t, env.Ctx(t), sbPost, "workspace intact after reset",
 			"E2E Test Project", "cat /workspace/README.md")
 		sbPost.Close()
 	})
 
 	t.Run("down", func(t *testing.T) {
 		t.Log("running forage-ctl down...")
-		AssertSuccess(t, env.System, "forage-ctl down succeeds",
+		AssertSuccess(t, env.Ctx(t), env.System, "forage-ctl down succeeds",
 			"forage-ctl down e2e-test")
-		AssertFailure(t, env.System, "sandbox no longer exists after down",
+		AssertFailure(t, env.Ctx(t), env.System, "sandbox no longer exists after down",
 			"forage-ctl status e2e-test")
 
 		// Verify cleanup: metadata and secrets removed
-		AssertFailure(t, env.System, "metadata file removed",
+		AssertFailure(t, env.Ctx(t), env.System, "metadata file removed",
 			"test -f /var/lib/firefly-forage/sandboxes/e2e-test.json")
-		AssertFailure(t, env.System, "nix config file removed",
+		AssertFailure(t, env.Ctx(t), env.System, "nix config file removed",
 			"test -f /var/lib/firefly-forage/sandboxes/e2e-test.nix")
-		AssertFailure(t, env.System, "secrets directory removed",
+		AssertFailure(t, env.Ctx(t), env.System, "secrets directory removed",
 			"test -d /run/forage-secrets/e2e-test")
 	})
 }
 
 func TestMultipleSandboxes(t *testing.T) {
 	env := GetSharedEnv(t)
-	ctx := context.Background()
 
 	// Clean up any stale sandboxes
-	env.System.ForageCtl(ctx, "down", "e2e-multi-a")
-	env.System.ForageCtl(ctx, "down", "e2e-multi-b")
+	env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-a")
+	env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-b")
 
 	// Create two separate project directories
 	env.InitGitRepo(t, "/tmp/e2e-project-a", map[string]string{
@@ -274,14 +271,14 @@ func TestMultipleSandboxes(t *testing.T) {
 	t.Log("starting sandbox A...")
 	env.MustRun(t, "forage-ctl up e2e-multi-a -t test --repo /tmp/e2e-project-a --direct > /tmp/forage-multi-a.log 2>&1")
 	t.Cleanup(func() {
-		env.System.ForageCtl(context.Background(), "down", "e2e-multi-a")
+		env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-a")
 	})
 
 	// Start sandbox B
 	t.Log("starting sandbox B...")
 	env.MustRun(t, "forage-ctl up e2e-multi-b -t test --repo /tmp/e2e-project-b --direct > /tmp/forage-multi-b.log 2>&1")
 	t.Cleanup(func() {
-		env.System.ForageCtl(context.Background(), "down", "e2e-multi-b")
+		env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-b")
 	})
 
 	ipA := "10.100.1.2"
@@ -297,21 +294,21 @@ func TestMultipleSandboxes(t *testing.T) {
 	t.Run("verify", func(t *testing.T) {
 		t.Run("sandbox A has correct project", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sbA, "sandbox A has project-a README",
+			AssertSandboxOutputContains(t, env.Ctx(t), sbA, "sandbox A has project-a README",
 				"Project A", "cat /workspace/README.md")
 		})
 
 		t.Run("sandbox B has correct project", func(t *testing.T) {
 			t.Parallel()
-			AssertSandboxOutputContains(t, sbB, "sandbox B has project-b README",
+			AssertSandboxOutputContains(t, env.Ctx(t), sbB, "sandbox B has project-b README",
 				"Project B", "cat /workspace/README.md")
 		})
 
 		t.Run("ps shows both", func(t *testing.T) {
 			t.Parallel()
-			AssertOutputContains(t, env.System, "ps shows sandbox A",
+			AssertOutputContains(t, env.Ctx(t), env.System, "ps shows sandbox A",
 				"e2e-multi-a", "forage-ctl ps")
-			AssertOutputContains(t, env.System, "ps shows sandbox B",
+			AssertOutputContains(t, env.Ctx(t), env.System, "ps shows sandbox B",
 				"e2e-multi-b", "forage-ctl ps")
 		})
 	})
@@ -319,10 +316,9 @@ func TestMultipleSandboxes(t *testing.T) {
 
 func TestGarbageCollection(t *testing.T) {
 	env := GetSharedEnv(t)
-	ctx := context.Background()
 
 	// Clean up any stale sandbox
-	env.System.ForageCtl(ctx, "down", "e2e-gc")
+	env.System.ForageCtl(env.Ctx(t), "down", "e2e-gc")
 
 	// Create a sandbox
 	env.InitGitRepo(t, "/tmp/e2e-gc-project", map[string]string{
@@ -334,7 +330,7 @@ func TestGarbageCollection(t *testing.T) {
 
 	// Dry run: should report no orphans (sandbox is running)
 	t.Run("dry-run-clean", func(t *testing.T) {
-		AssertOutputContains(t, env.System, "gc dry run reports clean",
+		AssertOutputContains(t, env.Ctx(t), env.System, "gc dry run reports clean",
 			"No orphaned resources", "forage-ctl gc")
 	})
 
@@ -347,15 +343,15 @@ func TestGarbageCollection(t *testing.T) {
 
 	// Dry run: should detect the orphan
 	t.Run("dry-run-detects-orphan", func(t *testing.T) {
-		AssertOutputContains(t, env.System, "gc dry run detects orphaned file",
+		AssertOutputContains(t, env.Ctx(t), env.System, "gc dry run detects orphaned file",
 			"e2e-orphan", "forage-ctl gc")
 	})
 
 	// Force: should clean up the orphan
 	t.Run("force-cleans-orphan", func(t *testing.T) {
-		AssertSuccess(t, env.System, "gc force succeeds",
+		AssertSuccess(t, env.Ctx(t), env.System, "gc force succeeds",
 			"forage-ctl gc --force")
-		AssertFailure(t, env.System, "orphaned file removed",
+		AssertFailure(t, env.Ctx(t), env.System, "orphaned file removed",
 			"test -f /var/lib/firefly-forage/sandboxes/e2e-orphan.json")
 	})
 }

@@ -17,6 +17,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
@@ -119,7 +121,8 @@ func NewVMSystem(ctx context.Context, cfg VMConfig) (*VMSystem, error) {
 
 // Run executes a shell command in the VM via SSH.
 func (vm *VMSystem) Run(ctx context.Context, cmd string) (string, error) {
-	ctx, span := telemetry.Start(ctx, "vm.exec")
+	ctx, span := telemetry.Start(ctx, "vm.exec",
+		telemetry.WithAttr(attribute.String("cmd", cmd)))
 	defer span.End()
 
 	session, err := vm.sshClient.NewSession()
@@ -151,7 +154,8 @@ func (vm *VMSystem) Run(ctx context.Context, cmd string) (string, error) {
 
 // ForageCtl runs forage-ctl with the given arguments in the VM.
 func (vm *VMSystem) ForageCtl(ctx context.Context, args ...string) (string, error) {
-	ctx, span := telemetry.Start(ctx, "vm.forage-ctl")
+	ctx, span := telemetry.Start(ctx, "vm.forage-ctl",
+		telemetry.WithAttr(attribute.String("args", strings.Join(args, " "))))
 	defer span.End()
 
 	cmd := "forage-ctl " + strings.Join(args, " ")
@@ -282,7 +286,8 @@ func (vm *VMSystem) patchRunScript() error {
 
 // boot starts the QEMU VM process.
 func (vm *VMSystem) boot(ctx context.Context) error {
-	ctx, span := telemetry.Start(ctx, "vm.boot")
+	ctx, span := telemetry.Start(ctx, "vm.boot",
+		telemetry.WithAttr(attribute.Int("ssh.port", vm.sshPort)))
 	defer span.End()
 
 	log.Printf("booting VM on SSH port %d...", vm.sshPort)

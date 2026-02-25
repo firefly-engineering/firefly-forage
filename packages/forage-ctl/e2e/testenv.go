@@ -8,18 +8,55 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
-// sharedEnv holds the singleton VM system shared across all tests.
+// sharedEnv holds the singleton test environment shared across all tests.
 var sharedEnv *TestEnv
 
 // TestEnv ties a System to testing.T for convenient test helpers.
 type TestEnv struct {
-	System System
+	System  System
+	rootCtx context.Context
+
+	mu       sync.Mutex
+	testCtxs map[*testing.T]context.Context
+}
+
+// Ctx returns a context for the given test, creating a per-test span
+// on first call. The span is ended automatically via t.Cleanup.
+// All operations within a test should derive from this context so
+// that spans form a single trace: root → test → operations.
+func (e *TestEnv) Ctx(t *testing.T) context.Context {
+	t.Helper()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if ctx, ok := e.testCtxs[t]; ok {
+		return ctx
+	}
+
+	ctx, span := telemetry.Start(e.rootCtx, "test."+t.Name())
+	t.Cleanup(func() {
+		if t.Failed() {
+			span.SetStatus(codes.Error, "test failed")
+		}
+		span.End()
+
+		e.mu.Lock()
+		delete(e.testCtxs, t)
+		e.mu.Unlock()
+	})
+
+	e.testCtxs[t] = ctx
+	return ctx
 }
 
 // SetupSharedEnv initializes the shared test environment based on env vars:
@@ -32,8 +69,20 @@ func SetupSharedEnv(m *testing.M) int {
 	if err != nil {
 		log.Printf("telemetry init: %v", err)
 	}
-	defer shutdown()
 
+	ctx, rootSpan := telemetry.Start(ctx, "e2e.run")
+
+	// run executes the test suite and returns the exit code.
+	// Separated so we can explicitly end the root span and flush
+	// the exporter before os.Exit kills the process.
+	code := setupAndRun(ctx, m)
+
+	rootSpan.End()
+	shutdown()
+	return code
+}
+
+func setupAndRun(ctx context.Context, m *testing.M) int {
 	if vmScript := os.Getenv("E2E_VM"); vmScript != "" {
 		// VM mode (existing behavior)
 		sshKey := os.Getenv("E2E_SSH_KEY")
@@ -50,7 +99,11 @@ func SetupSharedEnv(m *testing.M) int {
 			log.Fatalf("failed to boot VM: %v", err)
 		}
 
-		sharedEnv = &TestEnv{System: sys}
+		sharedEnv = &TestEnv{
+			System:   sys,
+			rootCtx:  ctx,
+			testCtxs: make(map[*testing.T]context.Context),
+		}
 		code := m.Run()
 		sys.Close()
 		return code
@@ -63,7 +116,11 @@ func SetupSharedEnv(m *testing.M) int {
 			sshKey = "/etc/firefly-forage/ssh-key"
 		}
 
-		sharedEnv = &TestEnv{System: NewLocalSystem(sshKey)}
+		sharedEnv = &TestEnv{
+			System:   NewLocalSystem(sshKey),
+			rootCtx:  ctx,
+			testCtxs: make(map[*testing.T]context.Context),
+		}
 		code := m.Run()
 		sharedEnv.System.Close()
 		return code
@@ -87,7 +144,7 @@ func GetSharedEnv(t *testing.T) *TestEnv {
 // MustRun executes a command and fails the test if it errors.
 func (e *TestEnv) MustRun(t *testing.T, cmd string) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(e.Ctx(t), 2*time.Minute)
 	defer cancel()
 
 	output, err := e.System.Run(ctx, cmd)
@@ -100,7 +157,7 @@ func (e *TestEnv) MustRun(t *testing.T, cmd string) string {
 // MustForageCtl runs forage-ctl and fails the test if it errors.
 func (e *TestEnv) MustForageCtl(t *testing.T, args ...string) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(e.Ctx(t), 5*time.Minute)
 	defer cancel()
 
 	output, err := e.System.ForageCtl(ctx, args...)
@@ -113,7 +170,7 @@ func (e *TestEnv) MustForageCtl(t *testing.T, args ...string) string {
 // InitGitRepo creates a git repository in the VM with the given files.
 func (e *TestEnv) InitGitRepo(t *testing.T, path string, files map[string]string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(e.Ctx(t), 30*time.Second)
 	defer cancel()
 
 	// Remove any existing directory and create fresh
@@ -147,9 +204,10 @@ func (e *TestEnv) InitGitRepo(t *testing.T, path string, files map[string]string
 // WaitForSandbox waits for a sandbox to become SSH-reachable.
 func (e *TestEnv) WaitForSandbox(t *testing.T, ip string, timeout time.Duration) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(e.Ctx(t), timeout)
 	defer cancel()
-	ctx, span := telemetry.Start(ctx, "e2e.wait-for-sandbox")
+	ctx, span := telemetry.Start(ctx, "e2e.wait-for-sandbox",
+		telemetry.WithAttr(attribute.String("sandbox.ip", ip)))
 	defer span.End()
 
 	deadline := time.Now().Add(timeout)
@@ -169,7 +227,7 @@ func (e *TestEnv) WaitForSandbox(t *testing.T, ip string, timeout time.Duration)
 
 	// Diagnostics on failure
 	t.Logf("sandbox at %s not ready after %v, running diagnostics...", ip, timeout)
-	diagCtx, diagCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	diagCtx, diagCancel := context.WithTimeout(e.Ctx(t), 10*time.Second)
 	defer diagCancel()
 	if out, err := e.System.Run(diagCtx, "machinectl list"); err == nil {
 		t.Logf("machinectl list:\n%s", out)
@@ -187,7 +245,7 @@ func (e *TestEnv) WaitForSandbox(t *testing.T, ip string, timeout time.Duration)
 // ConnectSandbox connects to a sandbox and registers cleanup.
 func (e *TestEnv) ConnectSandbox(t *testing.T, name, ip string) *SandboxConn {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(e.Ctx(t), 10*time.Second)
 	defer cancel()
 
 	conn, err := e.System.DialSandbox(ctx, ip)
@@ -199,11 +257,12 @@ func (e *TestEnv) ConnectSandbox(t *testing.T, name, ip string) *SandboxConn {
 }
 
 // Assertion helpers that use testing.T for proper failure reporting.
+// All accept a context.Context to propagate trace context.
 
 // AssertSuccess asserts that a command succeeds in the system.
-func AssertSuccess(t *testing.T, sys System, desc, cmd string) {
+func AssertSuccess(t *testing.T, ctx context.Context, sys System, desc, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	if _, err := sys.Run(ctx, cmd); err != nil {
@@ -212,9 +271,9 @@ func AssertSuccess(t *testing.T, sys System, desc, cmd string) {
 }
 
 // AssertFailure asserts that a command fails in the system.
-func AssertFailure(t *testing.T, sys System, desc, cmd string) {
+func AssertFailure(t *testing.T, ctx context.Context, sys System, desc, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if _, err := sys.Run(ctx, cmd); err == nil {
@@ -223,9 +282,9 @@ func AssertFailure(t *testing.T, sys System, desc, cmd string) {
 }
 
 // AssertOutputContains asserts that a command's output contains expected string.
-func AssertOutputContains(t *testing.T, sys System, desc, expected, cmd string) {
+func AssertOutputContains(t *testing.T, ctx context.Context, sys System, desc, expected, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	output, err := sys.Run(ctx, cmd)
@@ -240,9 +299,9 @@ func AssertOutputContains(t *testing.T, sys System, desc, expected, cmd string) 
 }
 
 // AssertSandboxSuccess asserts that a command succeeds in a sandbox.
-func AssertSandboxSuccess(t *testing.T, sb *SandboxConn, desc, cmd string) {
+func AssertSandboxSuccess(t *testing.T, ctx context.Context, sb *SandboxConn, desc, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if _, err := sb.Run(ctx, cmd); err != nil {
@@ -251,9 +310,9 @@ func AssertSandboxSuccess(t *testing.T, sb *SandboxConn, desc, cmd string) {
 }
 
 // AssertSandboxFailure asserts that a command fails in a sandbox.
-func AssertSandboxFailure(t *testing.T, sb *SandboxConn, desc, cmd string) {
+func AssertSandboxFailure(t *testing.T, ctx context.Context, sb *SandboxConn, desc, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if _, err := sb.Run(ctx, cmd); err == nil {
@@ -262,9 +321,9 @@ func AssertSandboxFailure(t *testing.T, sb *SandboxConn, desc, cmd string) {
 }
 
 // AssertSandboxOutputContains asserts sandbox command output contains expected string.
-func AssertSandboxOutputContains(t *testing.T, sb *SandboxConn, desc, expected, cmd string) {
+func AssertSandboxOutputContains(t *testing.T, ctx context.Context, sb *SandboxConn, desc, expected, cmd string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	output, err := sb.Run(ctx, cmd)

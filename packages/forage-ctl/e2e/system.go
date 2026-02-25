@@ -14,6 +14,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
 
@@ -41,7 +43,8 @@ type SandboxConn struct {
 
 // Run executes a command inside the sandbox container.
 func (s *SandboxConn) Run(ctx context.Context, cmd string) (string, error) {
-	ctx, span := telemetry.Start(ctx, "sandbox.exec")
+	ctx, span := telemetry.Start(ctx, "sandbox.exec",
+		telemetry.WithAttr(attribute.String("cmd", cmd)))
 	defer span.End()
 
 	session, err := s.client.NewSession()
