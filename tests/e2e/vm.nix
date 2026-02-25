@@ -207,11 +207,11 @@ let
             pkgs.stdenv
             pkgs.stdenv.cc
             pkgs.perl
-            pkgs.desktop-file-utils  # needed by NixOS activation
-            pkgs.texinfo             # NixOS build dependency
-            pkgs.libxslt             # NixOS build dependency
-            pkgs.lndir               # NixOS build dependency
-            pkgs.shellcheck          # NixOS check phase
+            pkgs.desktop-file-utils # needed by NixOS activation
+            pkgs.texinfo # NixOS build dependency
+            pkgs.libxslt # NixOS build dependency
+            pkgs.lndir # NixOS build dependency
+            pkgs.shellcheck # NixOS check phase
           ];
 
           # --- QEMU VM settings ---
