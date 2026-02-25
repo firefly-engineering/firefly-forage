@@ -456,6 +456,7 @@ type SandboxMetadata struct {
 	Multiplexer     string         `json:"multiplexer,omitempty"`     // "tmux" (default) or "wezterm"
 	ContainerName   string         `json:"containerName,omitempty"`   // Short container name (e.g. "f42"); empty for legacy sandboxes
 	Runtime         string         `json:"runtime,omitempty"`         // Runtime backend used (e.g. "nspawn", "docker", "podman")
+	CachedEtcPath   string         `json:"cachedEtcPath,omitempty"`   // Cached /etc store path for fast restart
 
 	// Composable workspace mounts — supersedes Workspace/WorkspaceMode/SourceRepo when present.
 	WorkspaceMounts []WorkspaceMountMeta `json:"workspaceMounts,omitempty"`
