@@ -105,28 +105,30 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	return nil
 }
 
-// Start starts an existing container. Tries the fast path (cached /etc store
-// path from metadata) first; falls back to full rebuild from the .nix file.
+// Start starts an existing container. Tries the fast path (outer .nix with
+// cached inner system path) first; falls back to full rebuild from the .nix file.
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.start")
 	defer span.End()
 
-	// Fast path: use cached etc path from metadata
+	// Fast path: use outer config that references a cached inner system via path=
+	// (skips inner NixOS evaluation entirely)
 	if r.SandboxesDir != "" {
-		if meta, err := config.LoadSandboxMetadata(r.SandboxesDir, name); err == nil && meta.CachedEtcPath != "" {
-			if pathExists(meta.CachedEtcPath) {
-				logging.Debug("starting container via cached etc", "name", name, "etcPath", meta.CachedEtcPath)
-				if err := r.CreateFromEtc(ctx, meta.CachedEtcPath, true); err == nil {
-					return nil
-				}
-				logging.Warn("cached etc start failed, falling back to full rebuild", "name", name)
-			} else {
-				logging.Debug("cached etc path gone, falling back to full rebuild", "name", name)
+		outerPath := r.SandboxesDir + "/" + name + ".outer.nix"
+		if _, err := os.Stat(outerPath); err == nil {
+			logging.Debug("starting container via cached outer config", "name", name, "config", outerPath)
+			if err := r.Create(ctx, CreateOptions{
+				Name:       name,
+				ConfigPath: outerPath,
+				Start:      true,
+			}); err == nil {
+				return nil
 			}
+			logging.Warn("cached outer config start failed, falling back to full rebuild", "name", name)
 		}
 	}
 
-	// Slow path: rebuild from .nix config
+	// Slow path: rebuild from full .nix config
 	configPath := r.SandboxesDir + "/" + name + ".nix"
 	logging.Debug("starting container via extra-container", "name", name, "config", configPath)
 
@@ -179,84 +181,6 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 	return storePath, nil
 }
 
-// BuildOuterEtc builds the outer /etc from a container definition config.
-// Uses the embedded eval-config.nix (without extra-container's extraModule)
-// so only the container shell is evaluated, not the inner system.
-// Returns the /etc store path.
-func (r *NspawnRuntime) BuildOuterEtc(ctx context.Context, configPath, evalConfigPath string) (string, error) {
-	ctx, span := telemetry.Start(ctx, "nspawn.build-outer-etc")
-	defer span.End()
-
-	logging.Debug("building outer etc", "config", configPath)
-
-	nixpkgsPath := r.NixpkgsPath
-	if nixpkgsPath == "" {
-		nixpkgsPath = "<nixpkgs>"
-	}
-
-	// Use our eval-config.nix which avoids the expensive extraModule
-	expr := fmt.Sprintf(
-		`(import %s { nixosPath = %s; systemConfig = %s; }).config.system.build.etc`,
-		evalConfigPath, nixpkgsPath, configPath,
-	)
-
-	args := []string{"nix-build", "--expr", expr, "--no-out-link"}
-
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	var stdout bytes.Buffer
-	tracer := newNixOutputTracer(span)
-	cmd.Stdout = &stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
-
-	span.AddEvent("subprocess.start")
-	err := cmd.Run()
-	tracer.Flush()
-	if err != nil {
-		return "", fmt.Errorf("nix-build outer etc failed: %w", err)
-	}
-
-	etcPath := strings.TrimSpace(stdout.String())
-	if etcPath == "" {
-		return "", fmt.Errorf("nix-build outer etc produced empty output")
-	}
-
-	span.SetAttributes(attribute.String("etc.path", etcPath))
-	return etcPath, nil
-}
-
-// CreateFromEtc creates a container from a pre-built /etc store path.
-// Calls: sudo extra-container create <etcPath> --start
-func (r *NspawnRuntime) CreateFromEtc(ctx context.Context, etcPath string, start bool) error {
-	ctx, span := telemetry.Start(ctx, "nspawn.create-from-etc")
-	defer span.End()
-
-	logging.Debug("creating container from cached etc", "etcPath", etcPath)
-
-	args := []string{r.ExtraContainerPath, "create", etcPath}
-	if start {
-		args = append(args, "--start")
-	}
-
-	cmd := exec.CommandContext(ctx, "sudo", args...)
-	cmd.Stdout = os.Stdout
-	tracer := newNixOutputTracer(span)
-	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
-
-	span.AddEvent("subprocess.start")
-	err := cmd.Run()
-	tracer.Flush()
-	if err != nil {
-		return fmt.Errorf("extra-container create from etc failed: %w", err)
-	}
-
-	return nil
-}
-
-// pathExists returns true if the path exists on disk.
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
 
 // Stop stops a running container
 func (r *NspawnRuntime) Stop(ctx context.Context, name string) error {

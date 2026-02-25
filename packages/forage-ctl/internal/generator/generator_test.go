@@ -1713,17 +1713,3 @@ func TestGenerateOuterNixConfig(t *testing.T) {
 	}
 }
 
-func TestEvalConfigNix_Embedded(t *testing.T) {
-	if EvalConfigNix == "" {
-		t.Fatal("EvalConfigNix should be embedded and non-empty")
-	}
-	if !strings.Contains(EvalConfigNix, "baseModules") {
-		t.Error("EvalConfigNix should contain baseModules")
-	}
-	if !strings.Contains(EvalConfigNix, "nixos-containers.nix") {
-		t.Error("EvalConfigNix should reference nixos-containers module")
-	}
-	if !strings.Contains(EvalConfigNix, "eval-config.nix") {
-		t.Error("EvalConfigNix should import eval-config.nix")
-	}
-}

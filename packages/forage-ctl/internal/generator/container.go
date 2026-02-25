@@ -2,7 +2,6 @@ package generator
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -15,9 +14,6 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/reproducibility"
 )
-
-//go:embed eval_config.nix
-var EvalConfigNix string
 
 // ContainerConfig holds the configuration for generating a container.
 // All mounts, packages, env vars, and tmpfiles rules come from Contributions.

@@ -363,9 +363,11 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 	// Phase 1: Get or build inner system
 	systemPath := cache.Get(cacheKey)
 	if systemPath != "" {
-		logging.Debug("nixcache hit", "key", cacheKey[:12], "path", systemPath)
+		logging.Info("nixcache hit, skipping inner system build", "key", cacheKey[:12], "path", systemPath)
+		span.AddEvent("nixcache.hit")
 	} else {
-		logging.Debug("nixcache miss, building inner system", "key", cacheKey[:12])
+		logging.Info("nixcache miss, building inner system", "key", cacheKey[:12])
+		span.AddEvent("nixcache.miss")
 
 		// Build contribution sources for the inner config
 		proxyURL := ""
@@ -452,7 +454,7 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 	}
 
 	// Phase 2: Generate runtime files and stage them as bind mounts
-	runtimeMounts, err := c.generateRuntimeFiles(ctx, opts, resources, metadata)
+	runtimeMounts, err := c.generateRuntimeFiles(ctx, opts, resources)
 	if err != nil {
 		return fmt.Errorf("failed to generate runtime files: %w", err)
 	}
@@ -512,47 +514,29 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 		return fmt.Errorf("failed to generate outer config: %w", err)
 	}
 
-	// Write outer config and eval-config.nix
+	// Write outer config
 	outerPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".outer.nix")
 	if err := os.WriteFile(outerPath, []byte(outerNix), 0644); err != nil {
 		return fmt.Errorf("failed to write outer config: %w", err)
 	}
 
-	evalConfigPath := filepath.Join(c.paths.SandboxesDir, "eval-config.nix")
-	if err := os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644); err != nil {
-		return fmt.Errorf("failed to write eval-config.nix: %w", err)
-	}
-
-	// Phase 5: Build outer /etc
-	etcPath, err := nspawnRT.BuildOuterEtc(ctx, outerPath, evalConfigPath)
-	if err != nil {
-		// Fall back to single-pass flow
-		logging.Warn("outer etc build failed, falling back to single-pass", "error", err)
-		return c.createSinglePass(ctx, opts, resources, ws, secretsPath, identity, metadata)
-	}
-
-	// Save cached etc path in metadata
-	metadata.CachedEtcPath = etcPath
-
 	// Also write the single-pass .nix as fallback for future starts
 	c.writeFallbackConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
 
-	// Phase 6: Save metadata
+	// Phase 5: Save metadata
 	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Phase 7: Create container from etc
-	if err := nspawnRT.CreateFromEtc(ctx, etcPath, true); err != nil {
-		return fmt.Errorf("container creation from cached etc failed: %w", err)
-	}
-
-	return nil
+	// Phase 6: Create container via extra-container with the outer config.
+	// Since the outer config uses `path = <cached-inner-system>`, extra-container
+	// skips inner NixOS evaluation — only the container shell is evaluated (~2-4s).
+	return c.startContainer(ctx, opts.Name, outerPath)
 }
 
 // generateRuntimeFiles creates per-sandbox files that are bind-mounted into
 // the container at runtime (not baked into the NixOS evaluation).
-func (c *Creator) generateRuntimeFiles(ctx context.Context, opts CreateOptions, resources *resourceAllocation, metadata *config.SandboxMetadata) ([]generator.BindMount, error) {
+func (c *Creator) generateRuntimeFiles(ctx context.Context, opts CreateOptions, resources *resourceAllocation) ([]generator.BindMount, error) {
 	_, span := telemetry.Start(ctx, "sandbox.generate-runtime-files")
 	defer span.End()
 
