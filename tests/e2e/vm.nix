@@ -247,37 +247,47 @@ let
 
   vm = vmSystem.config.system.build.vm;
 
-  # Package the test scripts into a nix store path
-  e2eScripts = pkgs.stdenvNoCC.mkDerivation {
-    name = "forage-e2e-scripts";
-    src = lib.fileset.toSource {
-      root = ./.;
-      fileset = lib.fileset.unions [
-        ./driver.sh
-        ./lib
-      ];
-    };
-    phases = [ "installPhase" ];
-    installPhase = ''
-      mkdir -p $out
-      cp -r $src/* $out/
-      chmod +x $out/driver.sh
+  # Build the Go E2E test binary with the e2e build tag.
+  # This produces a standalone binary that boots the VM, runs all test
+  # scenarios via SSH, and reports results using Go's testing framework.
+  e2eTestBin = pkgs.buildGoModule {
+    pname = "forage-e2e-test-bin";
+    version = "0.1.0";
+
+    src = ../../packages/forage-ctl;
+
+    vendorHash = "sha256-VkuXrMbTV/6a7e/xLomQd2WdVas9X/ygnV8dFjutZk4=";
+
+    # Use proxy vendor because `go mod vendor` doesn't include packages
+    # only imported by build-tagged files (e2e tag). proxyVendor uses the
+    # Go module cache instead, making all go.mod dependencies available.
+    proxyVendor = true;
+
+    # Only build the e2e test binary, not the main CLI
+    buildPhase = ''
+      runHook preBuild
+      go test -c -tags=e2e -o $GOPATH/bin/forage-e2e-test ./e2e/
+      runHook postBuild
     '';
+
+    installPhase = ''
+      mkdir -p $out/bin
+      cp $GOPATH/bin/forage-e2e-test $out/bin/
+    '';
+
+    # Skip normal check phase — this is a test binary, not a library
+    doCheck = false;
+
+    env.CGO_ENABLED = "0";
   };
 
-  # Build the test driver wrapper with all dependencies baked in
+  # Wrapper that sets environment variables and runs the Go test binary
   testDriver = pkgs.writeShellApplication {
     name = "forage-e2e-test";
-    runtimeInputs = with pkgs; [
-      openssh
-      coreutils
-      gnugrep
-      psmisc # fuser (kill processes using a port)
-    ];
     text = ''
       export E2E_SSH_KEY="${sshPrivKey}"
       export E2E_VM="${vm}/bin/run-forage-e2e-vm"
-      exec "${e2eScripts}/driver.sh" "$@"
+      exec "${e2eTestBin}/bin/forage-e2e-test" -test.v -test.timeout=900s "$@"
     '';
   };
 
