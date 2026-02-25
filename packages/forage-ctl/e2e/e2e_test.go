@@ -17,10 +17,12 @@ func TestModuleSetup(t *testing.T) {
 	env := GetSharedEnv(t)
 
 	t.Run("forage-ctl installed", func(t *testing.T) {
+		t.Parallel()
 		AssertSuccess(t, env.System, "forage-ctl is available", "which forage-ctl")
 	})
 
 	t.Run("directories", func(t *testing.T) {
+		t.Parallel()
 		dirs := []string{
 			"/var/lib/firefly-forage",
 			"/var/lib/firefly-forage/sandboxes",
@@ -28,13 +30,12 @@ func TestModuleSetup(t *testing.T) {
 			"/etc/firefly-forage/templates",
 		}
 		for _, dir := range dirs {
-			t.Run(dir, func(t *testing.T) {
-				AssertSuccess(t, env.System, dir+" exists", "test -d "+dir)
-			})
+			AssertSuccess(t, env.System, dir+" exists", "test -d "+dir)
 		}
 	})
 
 	t.Run("host config", func(t *testing.T) {
+		t.Parallel()
 		AssertSuccess(t, env.System, "host config exists",
 			"test -f /etc/firefly-forage/config.json")
 		AssertOutputContains(t, env.System, "host config has correct user",
@@ -42,6 +43,7 @@ func TestModuleSetup(t *testing.T) {
 	})
 
 	t.Run("template", func(t *testing.T) {
+		t.Parallel()
 		AssertSuccess(t, env.System, "template JSON exists",
 			"test -f /etc/firefly-forage/templates/test.json")
 		AssertOutputContains(t, env.System, "template has network config",
@@ -49,14 +51,17 @@ func TestModuleSetup(t *testing.T) {
 	})
 
 	t.Run("extra-container available", func(t *testing.T) {
+		t.Parallel()
 		AssertSuccess(t, env.System, "extra-container is available", "which extra-container")
 	})
 
 	t.Run("secrets directory", func(t *testing.T) {
+		t.Parallel()
 		AssertSuccess(t, env.System, "secrets directory exists", "test -d /run/forage-secrets")
 	})
 
 	t.Run("templates command", func(t *testing.T) {
+		t.Parallel()
 		AssertOutputContains(t, env.System, "templates lists test template",
 			"test", "forage-ctl templates")
 		AssertOutputContains(t, env.System, "templates shows agent name",
@@ -87,62 +92,82 @@ func TestSandboxLifecycle(t *testing.T) {
 	containerIP := "10.100.1.2"
 	env.WaitForSandbox(t, containerIP, 60*time.Second)
 
-	// Connect to sandbox
+	// Connect to sandbox (ssh.Client is safe for concurrent use)
 	sb := env.ConnectSandbox(t, "e2e-test", containerIP)
 
-	t.Run("exec/basic connectivity", func(t *testing.T) {
-		AssertSandboxSuccess(t, sb, "can run commands in sandbox", "true")
+	// Phase 1: All read-only checks run in parallel.
+	// The "verify" subtest blocks until every parallel child finishes,
+	// ensuring destructive operations below don't start early.
+	t.Run("verify", func(t *testing.T) {
+		t.Run("connectivity", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxSuccess(t, sb, "can run commands in sandbox", "true")
+		})
+
+		t.Run("workspace", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sb, "workspace has README",
+				"E2E Test Project", "cat /workspace/README.md")
+		})
+
+		t.Run("forage metadata", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sb, "forage.json has sandbox name",
+				"e2e-test", "cat /etc/forage.json")
+		})
+
+		t.Run("packages", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxSuccess(t, sb, "git is available", "which git")
+			AssertSandboxSuccess(t, sb, "jj is available", "which jj")
+			AssertSandboxSuccess(t, sb, "tmux is available", "which tmux")
+		})
+
+		t.Run("vcs", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sb, "git log works",
+				"Initial commit", "cd /workspace && git log --oneline -1")
+			// Note: jj init is skipped here because it mutates workspace state.
+			// It was tested in the original sequential flow but is not safe to
+			// run concurrently with other read-only workspace checks.
+		})
+
+		t.Run("secrets", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sb, "secret file mounted",
+				"test-api-key-e2e", "cat /run/secrets/test-secret")
+			AssertSandboxOutputContains(t, sb, "auth env var set",
+				"test-api-key-e2e", "printenv TEST_KEY")
+		})
+
+		t.Run("network-none", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxFailure(t, sb, "outbound ping blocked",
+				"ping -c 1 -W 2 8.8.8.8")
+		})
+
+		t.Run("audit-log", func(t *testing.T) {
+			t.Parallel()
+			AssertOutputContains(t, env.System, "audit log has create event",
+				"create", "forage-ctl audit-log e2e-test")
+		})
+
+		t.Run("status", func(t *testing.T) {
+			t.Parallel()
+			AssertOutputContains(t, env.System, "status shows container healthy",
+				"Container:", "forage-ctl status e2e-test")
+		})
+
+		t.Run("ps", func(t *testing.T) {
+			t.Parallel()
+			AssertOutputContains(t, env.System, "ps shows sandbox",
+				"e2e-test", "forage-ctl ps")
+		})
 	})
 
-	t.Run("exec/workspace", func(t *testing.T) {
-		AssertSandboxOutputContains(t, sb, "workspace has README",
-			"E2E Test Project", "cat /workspace/README.md")
-	})
+	// Phase 2: Sequential operations that mutate state
 
-	t.Run("exec/forage metadata", func(t *testing.T) {
-		AssertSandboxOutputContains(t, sb, "forage.json has sandbox name",
-			"e2e-test", "cat /etc/forage.json")
-	})
-
-	t.Run("exec/packages", func(t *testing.T) {
-		AssertSandboxSuccess(t, sb, "git is available", "which git")
-		AssertSandboxSuccess(t, sb, "jj is available", "which jj")
-		AssertSandboxSuccess(t, sb, "tmux is available", "which tmux")
-	})
-
-	t.Run("exec/vcs", func(t *testing.T) {
-		AssertSandboxOutputContains(t, sb, "git log works",
-			"Initial commit", "cd /workspace && git log --oneline -1")
-		AssertSandboxSuccess(t, sb, "jj init works",
-			"cd /workspace && jj git init --colocate 2>&1")
-		AssertSandboxSuccess(t, sb, "jj log works after init",
-			"cd /workspace && jj log --no-graph -r @ -T description 2>&1")
-	})
-
-	t.Run("exec/secrets", func(t *testing.T) {
-		// The test template configures test-secret with authEnvVar=TEST_KEY.
-		// Verify the secret file is mounted and the env var is set.
-		AssertSandboxOutputContains(t, sb, "secret file mounted",
-			"test-api-key-e2e", "cat /run/secrets/test-secret")
-		AssertSandboxOutputContains(t, sb, "auth env var set",
-			"test-api-key-e2e", "printenv TEST_KEY")
-	})
-
-	t.Run("exec/network-none", func(t *testing.T) {
-		// The test template uses network=none. Outbound traffic should
-		// be blocked, but SSH management access works (already proven
-		// by all the exec tests above).
-		AssertSandboxFailure(t, sb, "outbound ping blocked",
-			"ping -c 1 -W 2 8.8.8.8")
-	})
-
-	t.Run("audit-log", func(t *testing.T) {
-		// After forage-ctl up, the audit log should contain a create event
-		AssertOutputContains(t, env.System, "audit log has create event",
-			"create", "forage-ctl audit-log e2e-test")
-	})
-
-	t.Run("exec/file sync", func(t *testing.T) {
+	t.Run("file sync", func(t *testing.T) {
 		AssertSandboxSuccess(t, sb, "can create files in workspace",
 			"echo hello-from-sandbox > /workspace/sandbox-created.txt")
 
@@ -153,17 +178,14 @@ func TestSandboxLifecycle(t *testing.T) {
 			"hello-from-sandbox", "cat /tmp/e2e-project/sandbox-created.txt")
 	})
 
-	t.Run("status", func(t *testing.T) {
-		AssertOutputContains(t, env.System, "status shows container healthy",
-			"Container:", "forage-ctl status e2e-test")
+	t.Run("jj init", func(t *testing.T) {
+		AssertSandboxSuccess(t, sb, "jj init works",
+			"cd /workspace && jj git init --colocate 2>&1")
+		AssertSandboxSuccess(t, sb, "jj log works after init",
+			"cd /workspace && jj log --no-graph -r @ -T description 2>&1")
 	})
 
-	t.Run("ps", func(t *testing.T) {
-		AssertOutputContains(t, env.System, "ps shows sandbox",
-			"e2e-test", "forage-ctl ps")
-	})
-
-	// === Destructive operations (must be sequential, after all reads) ===
+	// Phase 3: Destructive operations (stop/start, reset, down)
 
 	t.Run("stop-start", func(t *testing.T) {
 		// Close old sandbox connection before stopping
@@ -270,21 +292,27 @@ func TestMultipleSandboxes(t *testing.T) {
 	sbA := env.ConnectSandbox(t, "e2e-multi-a", ipA)
 	sbB := env.ConnectSandbox(t, "e2e-multi-b", ipB)
 
-	t.Run("sandbox A has correct project", func(t *testing.T) {
-		AssertSandboxOutputContains(t, sbA, "sandbox A has project-a README",
-			"Project A", "cat /workspace/README.md")
-	})
+	// All verification subtests run in parallel
+	t.Run("verify", func(t *testing.T) {
+		t.Run("sandbox A has correct project", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sbA, "sandbox A has project-a README",
+				"Project A", "cat /workspace/README.md")
+		})
 
-	t.Run("sandbox B has correct project", func(t *testing.T) {
-		AssertSandboxOutputContains(t, sbB, "sandbox B has project-b README",
-			"Project B", "cat /workspace/README.md")
-	})
+		t.Run("sandbox B has correct project", func(t *testing.T) {
+			t.Parallel()
+			AssertSandboxOutputContains(t, sbB, "sandbox B has project-b README",
+				"Project B", "cat /workspace/README.md")
+		})
 
-	t.Run("ps shows both", func(t *testing.T) {
-		AssertOutputContains(t, env.System, "ps shows sandbox A",
-			"e2e-multi-a", "forage-ctl ps")
-		AssertOutputContains(t, env.System, "ps shows sandbox B",
-			"e2e-multi-b", "forage-ctl ps")
+		t.Run("ps shows both", func(t *testing.T) {
+			t.Parallel()
+			AssertOutputContains(t, env.System, "ps shows sandbox A",
+				"e2e-multi-a", "forage-ctl ps")
+			AssertOutputContains(t, env.System, "ps shows sandbox B",
+				"e2e-multi-b", "forage-ctl ps")
+		})
 	})
 }
 
