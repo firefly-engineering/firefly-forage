@@ -52,5 +52,9 @@ clean:
 update-deps:
     go get -u ./... && go mod tidy
 
+# Run E2E tests against the current machine (post-deployment sanity check)
+test-e2e-local:
+    E2E_LOCAL=1 go test -tags=e2e -v -timeout=15m ./e2e/
+
 # Run all checks (fmt, lint, test)
 check: fmt lint test

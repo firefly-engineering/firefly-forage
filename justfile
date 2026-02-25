@@ -36,6 +36,10 @@ test-vm:
 test-e2e:
     nix run .#e2e-driver
 
+# Run E2E tests against the current machine (post-deployment sanity check)
+test-e2e-local:
+    E2E_LOCAL=1 go test -tags=e2e -v -timeout=15m ./packages/forage-ctl/e2e/
+
 # Format all code
 fmt:
     nix fmt -- .
@@ -57,8 +61,26 @@ docs:
 docs-serve:
     cd docs && mdbook serve
 
-# Check everything (fmt, lint, test, build)
-check: fmt lint test build
+# Check everything (fmt, lint, test, build, e2e)
+check: fmt lint test build _check-e2e
+
+# Run E2E tests if the system is eligible (Linux + KVM), skip otherwise
+[linux]
+_check-e2e:
+    #!/usr/bin/env bash
+    if [[ ! -e /dev/kvm ]]; then
+        echo "Skipping E2E tests: /dev/kvm not available"
+        exit 0
+    fi
+    just test-e2e
+
+[macos]
+_check-e2e:
+    @echo "Skipping E2E tests: not supported on macOS"
+
+[windows]
+_check-e2e:
+    @echo "Skipping E2E tests: not supported on Windows"
 
 # Clean build artifacts
 clean:
