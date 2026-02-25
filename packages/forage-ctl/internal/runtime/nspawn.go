@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -90,9 +91,13 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 
 	cmd := exec.CommandContext(ctx, "sudo", args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	tracer := newNixOutputTracer(span)
+	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
 
-	if err := cmd.Run(); err != nil {
+	span.AddEvent("subprocess.start")
+	err := cmd.Run()
+	tracer.Flush()
+	if err != nil {
 		return fmt.Errorf("extra-container create failed: %w", err)
 	}
 
