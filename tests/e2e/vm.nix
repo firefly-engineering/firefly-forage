@@ -256,7 +256,7 @@ let
 
     src = ../../packages/forage-ctl;
 
-    vendorHash = "sha256-VkuXrMbTV/6a7e/xLomQd2WdVas9X/ygnV8dFjutZk4=";
+    vendorHash = "sha256-1bHdfu/a6E7gjrU9z+xwi4t+bBrzwdXgADX5aAffHNk=";
 
     # Use proxy vendor because `go mod vendor` doesn't include packages
     # only imported by build-tagged files (e2e tag). proxyVendor uses the

@@ -11,7 +11,7 @@ buildGoModule {
 
   src = ./.;
 
-  vendorHash = "sha256-26Frd6vYbP80CAOlNDF1Q0m0A6gCN7weqxtA52yr/O8=";
+  vendorHash = "sha256-/YcERUMplnV8lyh0SQRiGLXBBIDKXPIkGO5lbV2PSOs=";
 
   # Disable CGO for static build
   env.CGO_ENABLED = "0";
