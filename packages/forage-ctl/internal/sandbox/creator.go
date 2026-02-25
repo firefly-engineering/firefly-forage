@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/network"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/nixcache"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/port"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
@@ -123,21 +126,22 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 		}
 	}
 
-	// Phase 6: Generate and write container config using contribution system
-	configPath, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+	// Phase 6-8: Generate config and create container.
+	// Try two-phase cached path for nspawn; fall back to single-pass.
+	if nspawnRT, ok := c.rt.(*runtime.NspawnRuntime); ok {
+		err = c.createCached(ctx, opts, resources, ws, secretsPath, identity, metadata, nspawnRT)
+	} else {
+		var configPath string
+		configPath, err = c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+		if err == nil {
+			if saveErr := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); saveErr != nil {
+				err = fmt.Errorf("failed to save metadata: %w", saveErr)
+			} else {
+				err = c.startContainer(ctx, opts.Name, configPath)
+			}
+		}
+	}
 	if err != nil {
-		cleanup()
-		return nil, err
-	}
-
-	// Phase 7: Save metadata (before container creation so runtime can resolve container name)
-	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to save metadata: %w", err)
-	}
-
-	// Phase 8: Create and start container
-	if err := c.startContainer(ctx, opts.Name, configPath); err != nil {
 		cleanup()
 		return nil, err
 	}
@@ -326,6 +330,337 @@ func (c *Creator) writeContainerConfig(ctx context.Context, opts CreateOptions, 
 	}
 
 	return configPath, nil
+}
+
+// runtimeConfig is the JSON structure bind-mounted at /run/forage/config.json.
+// The forage-network and forage-hostname services read it at container boot.
+type runtimeConfig struct {
+	SandboxName string `json:"sandboxName"`
+	NetworkSlot int    `json:"networkSlot"`
+	Gateway     string `json:"gateway"`
+}
+
+// createCached implements the two-phase cached creation flow for nspawn.
+// 1. Check cache for inner system store path (keyed on template+host config)
+// 2. If miss: build inner system and cache it
+// 3. Generate runtime files (config.json, forage.json, env vars, nftables)
+// 4. Generate outer config (references cached inner + all bind mounts)
+// 5. Build outer /etc
+// 6. Create container from cached /etc
+func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata, nspawnRT *runtime.NspawnRuntime) error {
+	ctx, span := telemetry.Start(ctx, "sandbox.create-cached")
+	defer span.End()
+
+	cache := nixcache.New(c.paths.StateDir)
+
+	// Compute cache key from template config + host config
+	templateJSON, err := json.Marshal(resources.template)
+	if err != nil {
+		return fmt.Errorf("failed to marshal template for cache key: %w", err)
+	}
+	cacheKey := nixcache.Key(templateJSON, c.hostConfig.NixpkgsPath, c.hostConfig.UID, c.hostConfig.GID, c.hostConfig.ResolvedStateVersion())
+
+	// Phase 1: Get or build inner system
+	systemPath := cache.Get(cacheKey)
+	if systemPath != "" {
+		logging.Debug("nixcache hit", "key", cacheKey[:12], "path", systemPath)
+	} else {
+		logging.Debug("nixcache miss, building inner system", "key", cacheKey[:12])
+
+		// Build contribution sources for the inner config
+		proxyURL := ""
+		if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
+			proxyURL = c.hostConfig.ProxyURL
+		}
+
+		mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
+		contribParams := ContributionSourcesParams{
+			Runtime:       c.rt,
+			Template:      resources.template,
+			Metadata:      metadata,
+			WsBackend:     ws.backend,
+			Mux:           mux,
+			Identity:      identity,
+			WorkspacePath: ws.effectivePath,
+			SourceRepo:    ws.sourceRepo,
+			SecretsPath:   secretsPath,
+			ProxyURL:      proxyURL,
+			SandboxName:   opts.Name,
+			HostConfig:    c.hostConfig,
+		}
+		if len(ws.mounts) > 0 {
+			contribParams.WorkspaceMounts = ws.mounts
+			contribParams.MountBackends = ws.backends
+		}
+		contribResult := buildContributionSources(contribParams)
+		collector := injection.NewCollector()
+		contributions, err := collector.Collect(ctx, contribResult.Sources)
+		if err != nil {
+			return fmt.Errorf("failed to collect contributions: %w", err)
+		}
+
+		var resourceLimits *config.ResourceLimits
+		caps := runtime.GetCapabilities(c.rt)
+		if caps.ResourceLimits && resources.template.ResourceLimits != nil {
+			resourceLimits = resources.template.ResourceLimits
+		}
+
+		innerCfg := &generator.ContainerConfig{
+			Name:            opts.Name,
+			NetworkSlot:     resources.networkSlot,
+			AuthorizedKeys:  c.resolveSSHKeys(opts),
+			Template:        resources.template,
+			UID:             c.hostConfig.UID,
+			GID:             c.hostConfig.GID,
+			Mux:             mux,
+			AgentIdentity:   identity,
+			Runtime:         c.rt.Name(),
+			Username:        c.hostConfig.ResolvedContainerUsername(),
+			WorkspaceDir:    c.hostConfig.ResolvedWorkspacePath(),
+			StateVersion:    c.hostConfig.ResolvedStateVersion(),
+			NixpkgsPath:     c.hostConfig.NixpkgsPath,
+			ResourceLimits:  resourceLimits,
+			Contributions:   contributions,
+			Reproducibility: contribResult.Reproducibility,
+		}
+
+		innerNix, err := generator.GenerateInnerNixConfig(innerCfg)
+		if err != nil {
+			return fmt.Errorf("failed to generate inner config: %w", err)
+		}
+
+		// Write inner config to temp file
+		innerPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".inner.nix")
+		if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
+			return fmt.Errorf("failed to create sandboxes directory: %w", err)
+		}
+		if err := os.WriteFile(innerPath, []byte(innerNix), 0644); err != nil {
+			return fmt.Errorf("failed to write inner config: %w", err)
+		}
+
+		systemPath, err = nspawnRT.BuildInnerSystem(ctx, innerPath)
+		if err != nil {
+			// Fall back to single-pass flow
+			logging.Warn("inner system build failed, falling back to single-pass", "error", err)
+			return c.createSinglePass(ctx, opts, resources, ws, secretsPath, identity, metadata)
+		}
+
+		if err := cache.Put(cacheKey, systemPath); err != nil {
+			logging.Warn("failed to cache inner system", "error", err)
+			// Non-fatal: we still have the store path
+		}
+	}
+
+	// Phase 2: Generate runtime files and stage them as bind mounts
+	runtimeMounts, err := c.generateRuntimeFiles(ctx, opts, resources, metadata)
+	if err != nil {
+		return fmt.Errorf("failed to generate runtime files: %w", err)
+	}
+
+	// Phase 3: Collect all bind mounts (from contributions + runtime files)
+	proxyURL := ""
+	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
+		proxyURL = c.hostConfig.ProxyURL
+	}
+	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
+	contribParams := ContributionSourcesParams{
+		Runtime:       c.rt,
+		Template:      resources.template,
+		Metadata:      metadata,
+		WsBackend:     ws.backend,
+		Mux:           mux,
+		Identity:      identity,
+		WorkspacePath: ws.effectivePath,
+		SourceRepo:    ws.sourceRepo,
+		SecretsPath:   secretsPath,
+		ProxyURL:      proxyURL,
+		SandboxName:   opts.Name,
+		HostConfig:    c.hostConfig,
+	}
+	if len(ws.mounts) > 0 {
+		contribParams.WorkspaceMounts = ws.mounts
+		contribParams.MountBackends = ws.backends
+	}
+	contribResult := buildContributionSources(contribParams)
+	collector := injection.NewCollector()
+	contributions, err := collector.Collect(ctx, contribResult.Sources)
+	if err != nil {
+		return fmt.Errorf("failed to collect contributions: %w", err)
+	}
+
+	// Build the full bind mount list
+	var allMounts []generator.BindMount
+	for _, m := range contributions.Mounts {
+		allMounts = append(allMounts, generator.BindMount{
+			Path:     m.ContainerPath,
+			HostPath: m.HostPath,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+	allMounts = append(allMounts, runtimeMounts...)
+
+	// Phase 4: Generate outer config
+	outerData := &generator.OuterTemplateData{
+		ContainerName: config.ContainerNameForSlot(resources.networkSlot),
+		NetworkSlot:   resources.networkSlot,
+		SystemPath:    systemPath,
+		BindMounts:    allMounts,
+	}
+
+	outerNix, err := generator.GenerateOuterNixConfig(outerData)
+	if err != nil {
+		return fmt.Errorf("failed to generate outer config: %w", err)
+	}
+
+	// Write outer config and eval-config.nix
+	outerPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".outer.nix")
+	if err := os.WriteFile(outerPath, []byte(outerNix), 0644); err != nil {
+		return fmt.Errorf("failed to write outer config: %w", err)
+	}
+
+	evalConfigPath := filepath.Join(c.paths.SandboxesDir, "eval-config.nix")
+	if err := os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644); err != nil {
+		return fmt.Errorf("failed to write eval-config.nix: %w", err)
+	}
+
+	// Phase 5: Build outer /etc
+	etcPath, err := nspawnRT.BuildOuterEtc(ctx, outerPath, evalConfigPath)
+	if err != nil {
+		// Fall back to single-pass flow
+		logging.Warn("outer etc build failed, falling back to single-pass", "error", err)
+		return c.createSinglePass(ctx, opts, resources, ws, secretsPath, identity, metadata)
+	}
+
+	// Save cached etc path in metadata
+	metadata.CachedEtcPath = etcPath
+
+	// Also write the single-pass .nix as fallback for future starts
+	c.writeFallbackConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+
+	// Phase 6: Save metadata
+	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Phase 7: Create container from etc
+	if err := nspawnRT.CreateFromEtc(ctx, etcPath, true); err != nil {
+		return fmt.Errorf("container creation from cached etc failed: %w", err)
+	}
+
+	return nil
+}
+
+// generateRuntimeFiles creates per-sandbox files that are bind-mounted into
+// the container at runtime (not baked into the NixOS evaluation).
+func (c *Creator) generateRuntimeFiles(ctx context.Context, opts CreateOptions, resources *resourceAllocation, metadata *config.SandboxMetadata) ([]generator.BindMount, error) {
+	_, span := telemetry.Start(ctx, "sandbox.generate-runtime-files")
+	defer span.End()
+
+	stagingDir := filepath.Join(c.paths.SandboxesDir, opts.Name+".runtime")
+	if err := os.MkdirAll(stagingDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create runtime staging dir: %w", err)
+	}
+
+	var mounts []generator.BindMount
+
+	// 1. /run/forage/config.json — sandbox name, network slot, gateway IP
+	rtCfg := runtimeConfig{
+		SandboxName: opts.Name,
+		NetworkSlot: resources.networkSlot,
+		Gateway:     fmt.Sprintf("10.100.%d.1", resources.networkSlot),
+	}
+	rtCfgJSON, _ := json.MarshalIndent(rtCfg, "", "  ")
+	rtCfgPath := filepath.Join(stagingDir, "config.json")
+	if err := os.WriteFile(rtCfgPath, rtCfgJSON, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write runtime config: %w", err)
+	}
+	mounts = append(mounts, generator.BindMount{
+		Path:     "/run/forage/config.json",
+		HostPath: rtCfgPath,
+		ReadOnly: true,
+	})
+
+	// 2. /etc/forage.json — in-container metadata
+	forageJSON := map[string]string{
+		"sandboxName":   opts.Name,
+		"containerName": config.ContainerNameForSlot(resources.networkSlot),
+		"runtime":       c.rt.Name(),
+	}
+	forageJSONBytes, _ := json.MarshalIndent(forageJSON, "", "  ")
+	forageJSONPath := filepath.Join(stagingDir, "forage.json")
+	if err := os.WriteFile(forageJSONPath, forageJSONBytes, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write forage.json: %w", err)
+	}
+	mounts = append(mounts, generator.BindMount{
+		Path:     "/etc/forage.json",
+		HostPath: forageJSONPath,
+		ReadOnly: true,
+	})
+
+	// 3. /etc/profile.d/forage-env.sh — per-sandbox env vars
+	proxyURL := ""
+	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
+		proxyURL = c.hostConfig.ProxyURL
+	}
+	if proxyURL != "" {
+		envScript := fmt.Sprintf(`# Per-sandbox environment (generated by forage)
+export SANDBOX_NAME=%q
+export ANTHROPIC_BASE_URL=%q
+`, opts.Name, fmt.Sprintf("http://10.100.%d.1:8080", resources.networkSlot))
+		envScriptPath := filepath.Join(stagingDir, "forage-env.sh")
+		if err := os.WriteFile(envScriptPath, []byte(envScript), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write env script: %w", err)
+		}
+		mounts = append(mounts, generator.BindMount{
+			Path:     "/etc/profile.d/forage-env.sh",
+			HostPath: envScriptPath,
+			ReadOnly: true,
+		})
+	}
+
+	// 4. /etc/forage-nftables.conf — nftables rules for restricted mode
+	if network.Mode(resources.template.Network) == network.ModeRestricted && len(resources.template.AllowedHosts) > 0 {
+		nftCfg := &network.Config{
+			Mode:         network.ModeRestricted,
+			AllowedHosts: resources.template.AllowedHosts,
+			NetworkSlot:  resources.networkSlot,
+		}
+		ruleset := network.GenerateNftablesRuleset(nftCfg)
+		if ruleset != "" {
+			nftPath := filepath.Join(stagingDir, "forage-nftables.conf")
+			if err := os.WriteFile(nftPath, []byte(ruleset), 0644); err != nil {
+				return nil, fmt.Errorf("failed to write nftables rules: %w", err)
+			}
+			mounts = append(mounts, generator.BindMount{
+				Path:     "/etc/forage-nftables.conf",
+				HostPath: nftPath,
+				ReadOnly: true,
+			})
+		}
+	}
+
+	return mounts, nil
+}
+
+// createSinglePass is the fallback to the original single-pass creation flow.
+func (c *Creator) createSinglePass(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) error {
+	configPath, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+	if err != nil {
+		return err
+	}
+	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
+	}
+	return c.startContainer(ctx, opts.Name, configPath)
+}
+
+// writeFallbackConfig writes the single-pass .nix config as fallback for restarts.
+// Errors are logged but not fatal — the cached etc path is the primary mechanism.
+func (c *Creator) writeFallbackConfig(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) {
+	_, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+	if err != nil {
+		logging.Warn("failed to write fallback config", "error", err)
+	}
 }
 
 // startContainer creates and starts the container via the runtime.
