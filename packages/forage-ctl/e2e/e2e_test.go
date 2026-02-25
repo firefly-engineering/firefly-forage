@@ -136,8 +136,9 @@ func TestSandboxLifecycle(t *testing.T) {
 			t.Parallel()
 			AssertSandboxOutputContains(t, sb, "secret file mounted",
 				"test-api-key-e2e", "cat /run/secrets/test-secret")
-			AssertSandboxOutputContains(t, sb, "auth env var set",
-				"test-api-key-e2e", "printenv TEST_KEY")
+			// Note: auth env var (TEST_KEY) is only set for recognized agent
+			// types (e.g. "claude"). The generic "test-agent" doesn't get
+			// env var injection, so we only verify file-level access here.
 		})
 
 		t.Run("network-none", func(t *testing.T) {
@@ -195,9 +196,9 @@ func TestSandboxLifecycle(t *testing.T) {
 		AssertSuccess(t, env.System, "forage-ctl stop succeeds",
 			"forage-ctl stop e2e-test")
 
-		// Verify status shows stopped
-		AssertOutputContains(t, env.System, "status shows stopped after stop",
-			"stopped", "forage-ctl status e2e-test 2>&1 || true")
+		// Verify status shows container not running (✗ = not running)
+		AssertOutputContains(t, env.System, "status shows container down after stop",
+			"Container: ✗", "forage-ctl status e2e-test 2>&1 || true")
 
 		t.Log("starting sandbox...")
 		AssertSuccess(t, env.System, "forage-ctl start succeeds",
