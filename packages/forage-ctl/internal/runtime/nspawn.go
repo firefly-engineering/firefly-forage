@@ -94,17 +94,19 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	return nil
 }
 
-// Start starts an existing container
+// Start starts an existing container by re-creating it from the persisted
+// nix config via extra-container. Plain "machinectl start" does not work for
+// extra-container managed containers after terminate/stop because the
+// ephemeral root filesystem is destroyed when the container shuts down.
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
-	containerName := r.containerName(name)
-	logging.Debug("starting container", "container", containerName)
+	configPath := r.SandboxesDir + "/" + name + ".nix"
+	logging.Debug("starting container via extra-container", "name", name, "config", configPath)
 
-	cmd := exec.CommandContext(ctx, "sudo", "machinectl", "start", containerName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("machinectl start failed: %w", err)
-	}
-
-	return nil
+	return r.Create(ctx, CreateOptions{
+		Name:       name,
+		ConfigPath: configPath,
+		Start:      true,
+	})
 }
 
 // Stop stops a running container
