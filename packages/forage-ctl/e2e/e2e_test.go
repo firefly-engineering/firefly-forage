@@ -274,12 +274,34 @@ func TestMultipleSandboxes(t *testing.T) {
 		env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-a")
 	})
 
+	// Dump cache diagnostics after sandbox A
+	if logSize, err := env.System.Run(env.Ctx(t), "wc -l < /tmp/forage-multi-a.log 2>/dev/null || echo '0'"); err == nil {
+		t.Logf("sandbox A log file lines: %s", logSize)
+	}
+	if logA, err := env.System.Run(env.Ctx(t), "grep -iE 'nixcache|inner.system|falling.back|single.pass|cached.creation' /tmp/forage-multi-a.log 2>/dev/null || echo '(no matching logs)'"); err == nil {
+		t.Logf("sandbox A cache logs:\n%s", logA)
+	}
+	if logTail, err := env.System.Run(env.Ctx(t), "tail -30 /tmp/forage-multi-a.log 2>/dev/null || echo '(log file missing)'"); err == nil {
+		t.Logf("sandbox A log tail:\n%s", logTail)
+	}
+	if cacheFiles, err := env.System.Run(env.Ctx(t), "ls -la /var/lib/firefly-forage/sandboxes/nixcache/ 2>/dev/null || echo '(cache dir missing)'"); err == nil {
+		t.Logf("cache dir after sandbox A:\n%s", cacheFiles)
+	}
+
 	// Start sandbox B
 	t.Log("starting sandbox B...")
 	env.MustRun(t, "forage-ctl up e2e-multi-b -t test --repo /tmp/e2e-project-b --direct > /tmp/forage-multi-b.log 2>&1")
 	t.Cleanup(func() {
 		env.System.ForageCtl(env.Ctx(t), "down", "e2e-multi-b")
 	})
+
+	// Dump cache diagnostics after sandbox B
+	if logB, err := env.System.Run(env.Ctx(t), "grep -iE 'nixcache|inner.system|falling.back|single.pass|cached.creation' /tmp/forage-multi-b.log 2>/dev/null || echo '(no matching logs)'"); err == nil {
+		t.Logf("sandbox B cache logs:\n%s", logB)
+	}
+	if cacheFiles, err := env.System.Run(env.Ctx(t), "ls -la /var/lib/firefly-forage/sandboxes/nixcache/ 2>/dev/null || echo '(cache dir missing)'"); err == nil {
+		t.Logf("cache dir after sandbox B:\n%s", cacheFiles)
+	}
 
 	ipA := "10.100.1.2"
 	ipB := "10.100.2.2"

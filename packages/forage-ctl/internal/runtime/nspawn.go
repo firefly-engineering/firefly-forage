@@ -145,7 +145,7 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 	ctx, span := telemetry.Start(ctx, "nspawn.build-inner-system")
 	defer span.End()
 
-	logging.Debug("building inner system", "config", configPath)
+	logging.Info("nixcache: building inner system", "config", configPath)
 
 	nixpkgsExpr := "<nixpkgs/nixos>"
 	if r.NixpkgsPath != "" {
@@ -154,22 +154,27 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 
 	args := []string{
 		"nix-build", nixpkgsExpr,
-		"-A", "system.build.toplevel",
+		"-A", "config.system.build.toplevel",
 		"--arg", "configuration", configPath,
 		"--no-out-link",
 	}
 
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	tracer := newNixOutputTracer(span)
 	cmd.Stdout = &stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr, tracer)
 
 	span.AddEvent("subprocess.start")
 	err := cmd.Run()
 	tracer.Flush()
 	if err != nil {
-		return "", fmt.Errorf("nix-build inner system failed: %w", err)
+		// Include stderr in error message so fallback log reveals the Nix evaluation error
+		errMsg := strings.TrimSpace(stderr.String())
+		if len(errMsg) > 500 {
+			errMsg = errMsg[len(errMsg)-500:]
+		}
+		return "", fmt.Errorf("nix-build inner system failed: %w\nstderr: %s", err, errMsg)
 	}
 
 	storePath := strings.TrimSpace(stdout.String())
@@ -178,6 +183,7 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 	}
 
 	span.SetAttributes(attribute.String("store.path", storePath))
+	logging.Info("nixcache: inner system built", "path", storePath)
 	return storePath, nil
 }
 

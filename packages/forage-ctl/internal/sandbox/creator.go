@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/audit"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
@@ -351,7 +353,9 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 	ctx, span := telemetry.Start(ctx, "sandbox.create-cached")
 	defer span.End()
 
-	cache := nixcache.New(c.paths.StateDir)
+	logging.Info("nixcache: entering cached creation flow", "sandbox", opts.Name, "template", opts.Template)
+
+	cache := nixcache.New(c.paths.SandboxesDir)
 
 	// Compute cache key from template config + host config
 	templateJSON, err := json.Marshal(resources.template)
@@ -360,13 +364,15 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 	}
 	cacheKey := nixcache.Key(templateJSON, c.hostConfig.NixpkgsPath, c.hostConfig.UID, c.hostConfig.GID, c.hostConfig.ResolvedStateVersion())
 
+	span.SetAttributes(attribute.String("nixcache.key", cacheKey))
+
 	// Phase 1: Get or build inner system
 	systemPath := cache.Get(cacheKey)
 	if systemPath != "" {
-		logging.Info("nixcache hit, skipping inner system build", "key", cacheKey[:12], "path", systemPath)
+		logging.Info("nixcache hit, skipping inner system build", "key", cacheKey, "path", systemPath)
 		span.AddEvent("nixcache.hit")
 	} else {
-		logging.Info("nixcache miss, building inner system", "key", cacheKey[:12])
+		logging.Info("nixcache miss, building inner system", "key", cacheKey)
 		span.AddEvent("nixcache.miss")
 
 		// Build contribution sources for the inner config
@@ -443,13 +449,14 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 		systemPath, err = nspawnRT.BuildInnerSystem(ctx, innerPath)
 		if err != nil {
 			// Fall back to single-pass flow
-			logging.Warn("inner system build failed, falling back to single-pass", "error", err)
+			logging.Warn("nixcache: inner system build failed, falling back to single-pass", "error", err)
 			return c.createSinglePass(ctx, opts, resources, ws, secretsPath, identity, metadata)
 		}
 
 		if err := cache.Put(cacheKey, systemPath); err != nil {
-			logging.Warn("failed to cache inner system", "error", err)
-			// Non-fatal: we still have the store path
+			logging.Warn("failed to cache inner system", "key", cacheKey, "dir", c.paths.StateDir, "error", err)
+		} else {
+			logging.Info("nixcache stored", "key", cacheKey, "path", systemPath)
 		}
 	}
 

@@ -47,18 +47,19 @@ func (c *Cache) Get(key string) string {
 	entryPath := c.entryPath(key)
 	data, err := os.ReadFile(entryPath)
 	if err != nil {
+		logging.Info("nixcache: entry not found", "path", entryPath, "error", err)
 		return ""
 	}
 
 	var entry cacheEntry
 	if err := json.Unmarshal(data, &entry); err != nil {
-		logging.Debug("nixcache: corrupt entry", "key", key, "error", err)
+		logging.Warn("nixcache: corrupt entry", "key", key, "error", err)
 		return ""
 	}
 
 	// Verify the store path still exists (may have been garbage collected)
 	if _, err := os.Stat(entry.StorePath); err != nil {
-		logging.Debug("nixcache: store path gone", "key", key, "path", entry.StorePath)
+		logging.Warn("nixcache: store path gone", "key", key, "path", entry.StorePath, "error", err)
 		_ = os.Remove(entryPath)
 		c.removeGCRoot(key)
 		return ""

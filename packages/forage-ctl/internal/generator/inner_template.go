@@ -6,6 +6,7 @@ package generator
 // injected at runtime via bind mounts and the forage-network service.
 const innerTemplateText = `{ pkgs, ... }:
 {
+  boot.isContainer = true;
   system.stateVersion = "{{.StateVersion}}";
   nixpkgs.config.allowUnfree = true;
   networking.hostName = "{{.TemplateName}}";

@@ -1558,6 +1558,11 @@ func TestGenerateInnerNixConfig(t *testing.T) {
 		t.Fatalf("GenerateInnerNixConfig failed: %v", err)
 	}
 
+	// Inner config must set boot.isContainer = true (required for nix-build as standalone)
+	if !strings.Contains(result, "boot.isContainer = true") {
+		t.Error("Inner config must have boot.isContainer = true")
+	}
+
 	// Inner config should use template name as hostname (not sandbox name)
 	if !strings.Contains(result, `networking.hostName = "claude"`) {
 		t.Error("Inner config should use template name as hostname")
@@ -1710,6 +1715,16 @@ func TestGenerateOuterNixConfig(t *testing.T) {
 	// Should be minimal (no config = { } block)
 	if strings.Contains(result, "config =") {
 		t.Error("Outer config should NOT have an inner config block")
+	}
+
+	// Should use lib.mkForce on path to override extra-container's extraModule
+	if !strings.Contains(result, "lib.mkForce") {
+		t.Error("Outer config should use lib.mkForce on path")
+	}
+
+	// Should accept lib in module arguments
+	if !strings.Contains(result, "{ lib, ... }") {
+		t.Error("Outer config should accept lib in module arguments")
 	}
 }
 

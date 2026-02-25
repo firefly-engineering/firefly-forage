@@ -89,6 +89,42 @@ func TestCache_GetStaleEntry(t *testing.T) {
 	}
 }
 
+func TestCache_PutAndGet_SeparateInstances(t *testing.T) {
+	// Simulate the real flow: Put on one Cache instance, Get on another
+	// (as happens across forage-ctl invocations)
+	cacheDir := t.TempDir()
+
+	storePath := filepath.Join(t.TempDir(), "nix-store-fake")
+	if err := os.MkdirAll(storePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	key := "cross-instance-test"
+
+	// First "run": Put
+	c1 := New(cacheDir)
+	if err := c1.Put(key, storePath); err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+
+	// Verify file exists on disk
+	entryPath := c1.entryPath(key)
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("cache entry file not on disk: %v", err)
+	}
+	t.Logf("cache entry written to: %s", entryPath)
+
+	data, _ := os.ReadFile(entryPath)
+	t.Logf("cache entry contents: %s", data)
+
+	// Second "run": Get with fresh Cache instance
+	c2 := New(cacheDir)
+	got := c2.Get(key)
+	if got != storePath {
+		t.Errorf("Get on second instance: got %q, want %q", got, storePath)
+	}
+}
+
 func TestCache_Invalidate(t *testing.T) {
 	cacheDir := t.TempDir()
 	c := New(cacheDir)

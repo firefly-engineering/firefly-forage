@@ -13,7 +13,12 @@ type OuterTemplateData struct {
 // inner system. It only specifies the container shell (networking, mounts) and
 // references the inner system via its store path. This evaluates in ~0.5s
 // instead of ~12s because no NixOS module evaluation happens.
-const outerTemplateText = `{ ... }:
+//
+// The path uses lib.mkForce because extra-container's extraModule always injects
+// a `config` module into every container, and nixos-containers.nix derives a
+// `path` from that config. Without mkForce, both sources set `path` and Nix
+// reports a conflicting definition error.
+const outerTemplateText = `{ lib, ... }:
 {
   containers.{{.ContainerName}} = {
     autoStart = true;
@@ -21,7 +26,7 @@ const outerTemplateText = `{ ... }:
     privateNetwork = true;
     hostAddress = "10.100.{{.NetworkSlot}}.1";
     localAddress = "10.100.{{.NetworkSlot}}.2";
-    path = {{.SystemPath}};
+    path = lib.mkForce {{.SystemPath}};
 
     bindMounts = {
 {{- range .BindMounts}}
