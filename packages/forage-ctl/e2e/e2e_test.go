@@ -163,12 +163,71 @@ func TestSandboxLifecycle(t *testing.T) {
 			"e2e-test", "forage-ctl ps")
 	})
 
+	// === Destructive operations (must be sequential, after all reads) ===
+
+	t.Run("stop-start", func(t *testing.T) {
+		// Close old sandbox connection before stopping
+		sb.Close()
+
+		t.Log("stopping sandbox...")
+		AssertSuccess(t, env.System, "forage-ctl stop succeeds",
+			"forage-ctl stop e2e-test")
+
+		// Verify status shows stopped
+		AssertOutputContains(t, env.System, "status shows stopped after stop",
+			"stopped", "forage-ctl status e2e-test 2>&1 || true")
+
+		t.Log("starting sandbox...")
+		AssertSuccess(t, env.System, "forage-ctl start succeeds",
+			"forage-ctl start e2e-test")
+
+		// Wait for sandbox to be reachable again
+		env.WaitForSandbox(t, containerIP, 60*time.Second)
+
+		// Reconnect and verify workspace survived the stop/start cycle
+		sbAfter := env.ConnectSandbox(t, "e2e-test", containerIP)
+		AssertSandboxOutputContains(t, sbAfter, "workspace intact after stop/start",
+			"E2E Test Project", "cat /workspace/README.md")
+		sbAfter.Close()
+	})
+
+	t.Run("reset", func(t *testing.T) {
+		// Create a file outside /workspace (ephemeral container state)
+		sbPre := env.ConnectSandbox(t, "e2e-test", containerIP)
+		AssertSandboxSuccess(t, sbPre, "create ephemeral file",
+			"touch /tmp/ephemeral-marker")
+		sbPre.Close()
+
+		t.Log("resetting sandbox...")
+		AssertSuccess(t, env.System, "forage-ctl reset succeeds",
+			"forage-ctl reset e2e-test")
+
+		// Wait for sandbox to be reachable after reset
+		env.WaitForSandbox(t, containerIP, 60*time.Second)
+
+		// Verify ephemeral state is gone but workspace persists
+		sbPost := env.ConnectSandbox(t, "e2e-test", containerIP)
+		AssertSandboxFailure(t, sbPost, "ephemeral file gone after reset",
+			"test -f /tmp/ephemeral-marker")
+		AssertSandboxOutputContains(t, sbPost, "workspace intact after reset",
+			"E2E Test Project", "cat /workspace/README.md")
+		sbPost.Close()
+	})
+
 	t.Run("down", func(t *testing.T) {
 		t.Log("running forage-ctl down...")
 		AssertSuccess(t, env.System, "forage-ctl down succeeds",
 			"forage-ctl down e2e-test")
 		AssertFailure(t, env.System, "sandbox no longer exists after down",
 			"forage-ctl status e2e-test")
+
+		// Verify cleanup: metadata and secrets removed
+		AssertFailure(t, env.System, "metadata file removed",
+			"test -f /var/lib/firefly-forage/sandboxes/e2e-test.json")
+		AssertFailure(t, env.System, "nix config file removed",
+			"test -f /var/lib/firefly-forage/sandboxes/e2e-test.nix")
+		AssertFailure(t, env.System, "secrets directory removed",
+			"test -d /run/forage-secrets/e2e-test")
 	})
 }
 
