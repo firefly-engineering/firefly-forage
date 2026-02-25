@@ -287,3 +287,46 @@ func TestMultipleSandboxes(t *testing.T) {
 			"e2e-multi-b", "forage-ctl ps")
 	})
 }
+
+func TestGarbageCollection(t *testing.T) {
+	env := GetSharedEnv(t)
+	ctx := context.Background()
+
+	// Clean up any stale sandbox
+	env.System.ForageCtl(ctx, "down", "e2e-gc")
+
+	// Create a sandbox
+	env.InitGitRepo(t, "/tmp/e2e-gc-project", map[string]string{
+		"README.md": "# GC Test",
+	})
+
+	t.Log("creating sandbox for gc test...")
+	env.MustRun(t, "forage-ctl up e2e-gc -t test --repo /tmp/e2e-gc-project --direct > /tmp/forage-gc.log 2>&1")
+
+	// Dry run: should report no orphans (sandbox is running)
+	t.Run("dry-run-clean", func(t *testing.T) {
+		AssertOutputContains(t, env.System, "gc dry run reports clean",
+			"No orphaned resources", "forage-ctl gc")
+	})
+
+	// Tear down the sandbox
+	t.Log("tearing down sandbox for gc test...")
+	env.MustRun(t, "forage-ctl down e2e-gc")
+
+	// Create an orphaned metadata file (simulates incomplete cleanup)
+	env.MustRun(t, `echo '{"name":"e2e-orphan"}' > /var/lib/firefly-forage/sandboxes/e2e-orphan.json`)
+
+	// Dry run: should detect the orphan
+	t.Run("dry-run-detects-orphan", func(t *testing.T) {
+		AssertOutputContains(t, env.System, "gc dry run detects orphaned file",
+			"e2e-orphan", "forage-ctl gc")
+	})
+
+	// Force: should clean up the orphan
+	t.Run("force-cleans-orphan", func(t *testing.T) {
+		AssertSuccess(t, env.System, "gc force succeeds",
+			"forage-ctl gc --force")
+		AssertFailure(t, env.System, "orphaned file removed",
+			"test -f /var/lib/firefly-forage/sandboxes/e2e-orphan.json")
+	})
+}
