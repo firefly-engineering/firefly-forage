@@ -135,7 +135,7 @@ func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 		etcPath, err := r.buildAndCacheOuterEtc(ctx, name, outerPath)
 		if err == nil {
 			logging.Debug("starting container via freshly built etc", "name", name, "etcPath", etcPath)
-			if err := r.CreateFromEtc(ctx, etcPath, true); err == nil {
+			if startErr := r.CreateFromEtc(ctx, etcPath, true); startErr == nil {
 				return nil
 			}
 			logging.Warn("outer etc start failed, falling back to full rebuild", "name", name)
@@ -228,7 +228,6 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 	logging.Info("nixcache: inner system built", "path", storePath)
 	return storePath, nil
 }
-
 
 // BuildOuterEtc builds the outer container /etc from an outer config file using
 // our stripped eval-config.nix (without extra-container's extraModule). This

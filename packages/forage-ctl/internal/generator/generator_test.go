@@ -1727,4 +1727,3 @@ func TestGenerateOuterNixConfig(t *testing.T) {
 		t.Error("Outer config should accept lib in module arguments")
 	}
 }
-

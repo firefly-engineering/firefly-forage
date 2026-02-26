@@ -402,7 +402,8 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 		}
 		contribResult := buildContributionSources(contribParams)
 		collector := injection.NewCollector()
-		contributions, err := collector.Collect(ctx, contribResult.Sources)
+		var contributions *injection.Contributions
+		contributions, err = collector.Collect(ctx, contribResult.Sources)
 		if err != nil {
 			return fmt.Errorf("failed to collect contributions: %w", err)
 		}
@@ -432,17 +433,20 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 			Reproducibility: contribResult.Reproducibility,
 		}
 
-		innerNix, err := generator.GenerateInnerNixConfig(innerCfg)
+		var innerNix string
+		innerNix, err = generator.GenerateInnerNixConfig(innerCfg)
 		if err != nil {
 			return fmt.Errorf("failed to generate inner config: %w", err)
 		}
 
 		// Write inner config to temp file
 		innerPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".inner.nix")
-		if err := os.MkdirAll(c.paths.SandboxesDir, 0755); err != nil {
+		err = os.MkdirAll(c.paths.SandboxesDir, 0755)
+		if err != nil {
 			return fmt.Errorf("failed to create sandboxes directory: %w", err)
 		}
-		if err := os.WriteFile(innerPath, []byte(innerNix), 0644); err != nil {
+		err = os.WriteFile(innerPath, []byte(innerNix), 0644)
+		if err != nil {
 			return fmt.Errorf("failed to write inner config: %w", err)
 		}
 
@@ -453,7 +457,8 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 			return c.createSinglePass(ctx, opts, resources, ws, secretsPath, identity, metadata)
 		}
 
-		if err := cache.Put(cacheKey, systemPath); err != nil {
+		err = cache.Put(cacheKey, systemPath)
+		if err != nil {
 			logging.Warn("failed to cache inner system", "key", cacheKey, "dir", c.paths.StateDir, "error", err)
 		} else {
 			logging.Info("nixcache stored", "key", cacheKey, "path", systemPath)
@@ -523,7 +528,8 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 
 	// Write outer config
 	outerPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".outer.nix")
-	if err := os.WriteFile(outerPath, []byte(outerNix), 0644); err != nil {
+	err = os.WriteFile(outerPath, []byte(outerNix), 0644)
+	if err != nil {
 		return fmt.Errorf("failed to write outer config: %w", err)
 	}
 
@@ -532,7 +538,8 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 
 	// Phase 5: Build outer /etc using our stripped eval-config (bypasses extra-container's eval)
 	evalConfigPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".eval-config.nix")
-	if err := os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644); err != nil {
+	err = os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644)
+	if err != nil {
 		return fmt.Errorf("failed to write eval-config.nix: %w", err)
 	}
 

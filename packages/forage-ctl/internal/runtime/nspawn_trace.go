@@ -19,11 +19,11 @@ type nixOutputTracer struct {
 
 // Patterns matched against each stderr line.
 var (
-	reEvaluating   = regexp.MustCompile(`evaluating derivation`)
-	reBuildPlan    = regexp.MustCompile(`these (\d+) derivations will be built`)
-	reBuildDrv     = regexp.MustCompile(`building '(/nix/store/[^']+)'`)
-	reCopyPath     = regexp.MustCompile(`copying path '(/nix/store/[^']+)'`)
-	reFetchPath    = regexp.MustCompile(`fetching path '(/nix/store/[^']+)'`)
+	reEvaluating = regexp.MustCompile(`evaluating derivation`)
+	reBuildPlan  = regexp.MustCompile(`these (\d+) derivations will be built`)
+	reBuildDrv   = regexp.MustCompile(`building '(/nix/store/[^']+)'`)
+	reCopyPath   = regexp.MustCompile(`copying path '(/nix/store/[^']+)'`)
+	reFetchPath  = regexp.MustCompile(`fetching path '(/nix/store/[^']+)'`)
 )
 
 func newNixOutputTracer(span trace.Span) *nixOutputTracer {
