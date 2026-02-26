@@ -606,7 +606,7 @@ func GenerateSkills(metadata *config.SandboxMetadata, template *config.Template,
 	sb.WriteString("- Work within the `/workspace` directory\n")
 	sb.WriteString("- The container filesystem (except /workspace) is ephemeral\n")
 	muxForLegacy := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
-	sb.WriteString(fmt.Sprintf("- %s\n", muxForLegacy.PromptInstructions()))
+	fmt.Fprintf(&sb, "- %s\n", muxForLegacy.PromptInstructions())
 
 	return sb.String()
 }

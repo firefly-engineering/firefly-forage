@@ -55,13 +55,13 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 	// Create host config
 	hostConfig := &config.HostConfig{
-		User:               "testuser",
-		UID:                1000,
-		GID:                100,
-		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
-		Secrets:            map[string]string{"anthropic": secretFile},
-		StateDir:           env.stateDir,
-		NixpkgsRev: "test123",
+		User:           "testuser",
+		UID:            1000,
+		GID:            100,
+		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
+		Secrets:        map[string]string{"anthropic": secretFile},
+		StateDir:       env.stateDir,
+		NixpkgsRev:     "test123",
 	}
 
 	data, _ := json.MarshalIndent(hostConfig, "", "  ")

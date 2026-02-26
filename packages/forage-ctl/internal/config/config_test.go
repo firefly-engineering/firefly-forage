@@ -90,13 +90,13 @@ func TestLoadHostConfig(t *testing.T) {
 
 	// Create a test config file
 	config := HostConfig{
-		User:               "testuser",
-		UID:                1000,
-		GID:                100,
-		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
-		Secrets:            map[string]string{"anthropic": "sk-test"},
-		StateDir:           "/var/lib/forage",
-		NixpkgsRev: "abc123",
+		User:           "testuser",
+		UID:            1000,
+		GID:            100,
+		AuthorizedKeys: []string{"ssh-rsa AAAA..."},
+		Secrets:        map[string]string{"anthropic": "sk-test"},
+		StateDir:       "/var/lib/forage",
+		NixpkgsRev:     "abc123",
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")

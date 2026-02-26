@@ -1239,13 +1239,13 @@ func acquireSandboxLock(sandboxesDir string) (func(), error) {
 		return nil, fmt.Errorf("failed to open lock file: %w", err)
 	}
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil { //nolint:gosec // G115: fd fits in int on all supported platforms
 		_ = f.Close()
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
 
 	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:gosec // G115: fd fits in int on all supported platforms
 		_ = f.Close()
 	}, nil
 }

@@ -59,13 +59,13 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 
 	hostConfig := &config.HostConfig{
-		User:               "testuser",
-		UID:                os.Getuid(),
-		GID:                os.Getgid(),
-		AuthorizedKeys:     []string{"ssh-rsa AAAA... test@test"},
-		Secrets:            map[string]string{"anthropic": secretFile},
-		StateDir:           paths.StateDir,
-		NixpkgsRev: "abc123",
+		User:           "testuser",
+		UID:            os.Getuid(),
+		GID:            os.Getgid(),
+		AuthorizedKeys: []string{"ssh-rsa AAAA... test@test"},
+		Secrets:        map[string]string{"anthropic": secretFile},
+		StateDir:       paths.StateDir,
+		NixpkgsRev:     "abc123",
 	}
 
 	// Write host config

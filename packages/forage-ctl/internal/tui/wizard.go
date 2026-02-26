@@ -435,23 +435,23 @@ func (w *wizardModel) View() string {
 	case stepConfirm:
 		b.WriteString(wizardLabelStyle.Render("Confirm:"))
 		b.WriteString("\n\n")
-		b.WriteString(fmt.Sprintf("  Path:     %s\n", wizardValueStyle.Render(w.selectedPath)))
-		b.WriteString(fmt.Sprintf("  Template: %s\n", wizardValueStyle.Render(w.selectedTemplate)))
-		b.WriteString(fmt.Sprintf("  Name:     %s\n", wizardValueStyle.Render(w.selectedName)))
+		fmt.Fprintf(&b, "  Path:     %s\n", wizardValueStyle.Render(w.selectedPath))
+		fmt.Fprintf(&b, "  Template: %s\n", wizardValueStyle.Render(w.selectedTemplate))
+		fmt.Fprintf(&b, "  Name:     %s\n", wizardValueStyle.Render(w.selectedName))
 		if w.direct {
-			b.WriteString(fmt.Sprintf("  Direct:   %s\n", wizardValueStyle.Render("yes")))
+			fmt.Fprintf(&b, "  Direct:   %s\n", wizardValueStyle.Render("yes"))
 		}
 		if w.noMuxConfig {
-			b.WriteString(fmt.Sprintf("  No mux:   %s\n", wizardValueStyle.Render("yes")))
+			fmt.Fprintf(&b, "  No mux:   %s\n", wizardValueStyle.Render("yes"))
 		}
 		if v := strings.TrimSpace(w.gitUserInput.Value()); v != "" {
-			b.WriteString(fmt.Sprintf("  Git user: %s\n", wizardValueStyle.Render(v)))
+			fmt.Fprintf(&b, "  Git user: %s\n", wizardValueStyle.Render(v))
 		}
 		if v := strings.TrimSpace(w.gitEmailInput.Value()); v != "" {
-			b.WriteString(fmt.Sprintf("  Git email:%s\n", wizardValueStyle.Render(v)))
+			fmt.Fprintf(&b, "  Git email:%s\n", wizardValueStyle.Render(v))
 		}
 		if v := strings.TrimSpace(w.sshKeyInput.Value()); v != "" {
-			b.WriteString(fmt.Sprintf("  SSH key:  %s\n", wizardValueStyle.Render(v)))
+			fmt.Fprintf(&b, "  SSH key:  %s\n", wizardValueStyle.Render(v))
 		}
 		b.WriteString("\n")
 		b.WriteString(wizardDimStyle.Render("Enter to create, n to restart, Esc to go back."))

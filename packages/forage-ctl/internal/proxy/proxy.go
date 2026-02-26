@@ -183,8 +183,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Wrap response writer for logging
 	lw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-	// Forward request
-	p.reverseProxy.ServeHTTP(lw, r)
+	// Forward request to the fixed upstream target configured at startup.
+	p.reverseProxy.ServeHTTP(lw, r) //nolint:gosec // G704: target is a fixed config URL, not user-controlled
 
 	// Audit log
 	if p.auditLog != nil {
