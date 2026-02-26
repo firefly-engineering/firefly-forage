@@ -39,7 +39,7 @@ let
   extraPackages = map builtins.storePath template.extraPackages;
 in
 {
-  # This is the container configuration for extra-container
+  # This is the NixOS container configuration
   containers."forage-${name}" = {
     # Ephemeral = tmpfs root, container state is not persisted
     ephemeral = true;

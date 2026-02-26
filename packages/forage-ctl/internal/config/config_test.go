@@ -96,8 +96,7 @@ func TestLoadHostConfig(t *testing.T) {
 		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
 		Secrets:            map[string]string{"anthropic": "sk-test"},
 		StateDir:           "/var/lib/forage",
-		ExtraContainerPath: "/nix/store/.../extra-container",
-		NixpkgsRev:         "abc123",
+		NixpkgsRev: "abc123",
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")

@@ -16,7 +16,6 @@ The host configuration file. Place at `/etc/firefly-forage/config.json`.
 | `authorizedKeys` | []string | SSH public keys authorized for sandbox access |
 | `secrets` | map[string]string | Named secrets (e.g., API keys) |
 | `stateDir` | string | Directory for sandbox state (default: `/var/lib/firefly-forage`) |
-| `extraContainerPath` | string | Path to extra-container binary |
 | `nixpkgsRev` | string | Nixpkgs revision to use for containers |
 | `proxyUrl` | string | Optional URL for API proxy service |
 

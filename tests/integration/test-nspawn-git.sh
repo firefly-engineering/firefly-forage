@@ -2,11 +2,11 @@
 # Integration test: nspawn backend + git-worktree VCS
 #
 # This test verifies the full sandbox workflow using:
-# - Container backend: systemd-nspawn (via extra-container)
+# - Container backend: systemd-nspawn
 # - VCS mode: git-worktree
 #
 # Prerequisites:
-# - NixOS system with extra-container
+# - NixOS system with systemd
 # - git installed
 # - forage-ctl configured with a 'test' template
 

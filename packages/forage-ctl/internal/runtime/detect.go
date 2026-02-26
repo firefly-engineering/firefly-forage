@@ -80,7 +80,7 @@ func detectLinux() (RuntimeType, error) {
 		return RuntimeDocker, nil
 	}
 
-	return "", fmt.Errorf("no supported container runtime found (tried: extra-container, podman, docker)")
+	return "", fmt.Errorf("no supported container runtime found (tried: nspawn, podman, docker)")
 }
 
 // detectDarwin detects the best runtime for macOS

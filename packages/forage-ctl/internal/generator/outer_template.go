@@ -14,10 +14,9 @@ type OuterTemplateData struct {
 // references the inner system via its store path. This evaluates in ~0.5s
 // instead of ~12s because no NixOS module evaluation happens.
 //
-// The path uses lib.mkForce because extra-container's extraModule always injects
-// a `config` module into every container, and nixos-containers.nix derives a
-// `path` from that config. Without mkForce, both sources set `path` and Nix
-// reports a conflicting definition error.
+// The path uses lib.mkForce because nixos-containers.nix derives `path` from a
+// `config` module when one is present. Without mkForce, if both `config` and
+// `path` are set, Nix reports a conflicting definition error.
 const outerTemplateText = `{ lib, ... }:
 {
   containers.{{.ContainerName}} = {

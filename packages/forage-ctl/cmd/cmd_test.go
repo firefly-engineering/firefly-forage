@@ -61,8 +61,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 		AuthorizedKeys:     []string{"ssh-rsa AAAA..."},
 		Secrets:            map[string]string{"anthropic": secretFile},
 		StateDir:           env.stateDir,
-		ExtraContainerPath: "/fake/extra-container",
-		NixpkgsRev:         "test123",
+		NixpkgsRev: "test123",
 	}
 
 	data, _ := json.MarshalIndent(hostConfig, "", "  ")

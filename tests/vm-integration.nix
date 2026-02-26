@@ -51,7 +51,7 @@ pkgs.testers.runNixOSTest {
         git
       ];
 
-      # Set NIX_PATH so extra-container can find nixpkgs
+      # Set NIX_PATH so nix-build of container configs can find nixpkgs
       nix.nixPath = [ "nixpkgs=${pkgs.path}" ];
 
       virtualisation = {
@@ -99,8 +99,8 @@ pkgs.testers.runNixOSTest {
     # machinectl should work (triggers systemd-machined via socket)
     machine.succeed("machinectl list")
 
-    # extra-container should be available
-    machine.succeed("which extra-container")
+    # Mutable systemd unit directory should exist
+    machine.succeed("test -d /etc/systemd-mutable/system")
 
     # === Secrets tests ===
     print("Testing secrets...")

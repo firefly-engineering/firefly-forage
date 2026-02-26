@@ -535,7 +535,7 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 	// Also write the single-pass .nix as fallback for future starts
 	c.writeFallbackConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
 
-	// Phase 5: Build outer /etc using our stripped eval-config (bypasses extra-container's eval)
+	// Phase 5: Build outer /etc using our stripped eval-config (minimal module set)
 	evalConfigPath := filepath.Join(c.paths.SandboxesDir, opts.Name+".eval-config.nix")
 	err = os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644)
 	if err != nil {
@@ -544,8 +544,8 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 
 	etcPath, err := nspawnRT.BuildOuterEtc(ctx, outerPath, evalConfigPath)
 	if err != nil {
-		// Fall back to extra-container's own eval (slower but works)
-		logging.Warn("outer etc build failed, falling back to extra-container eval", "error", err)
+		// Fall back to full nix-build eval (slower but works)
+		logging.Warn("outer etc build failed, falling back to full nix-build eval", "error", err)
 		if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
 			return fmt.Errorf("failed to save metadata: %w", err)
 		}
@@ -558,7 +558,7 @@ func (c *Creator) createCached(ctx context.Context, opts CreateOptions, resource
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Phase 7: Create container from pre-built /etc (no Nix eval in extra-container)
+	// Phase 7: Install container from pre-built /etc (no Nix eval needed)
 	return nspawnRT.CreateFromEtc(ctx, etcPath, true)
 }
 

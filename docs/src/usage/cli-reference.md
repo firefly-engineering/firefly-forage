@@ -490,7 +490,7 @@ forage-ctl runtime
 Displays the active container runtime and lists available runtimes on the system.
 
 **Supported runtimes:**
-- `nspawn` - NixOS (systemd-nspawn via extra-container)
+- `nspawn` - NixOS (systemd-nspawn)
 - `apple` - macOS 13+ (Apple Virtualization.framework)
 - `podman` - Linux, macOS (rootless preferred)
 - `docker` - Linux, macOS, Windows

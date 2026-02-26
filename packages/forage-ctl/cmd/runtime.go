@@ -14,7 +14,7 @@ var runtimeCmd = &cobra.Command{
 	Long: `Display information about available and active container runtimes.
 
 Firefly Forage supports multiple container runtimes:
-  - nspawn:  systemd-nspawn via extra-container (NixOS only)
+  - nspawn:  systemd-nspawn (NixOS only)
   - apple:   Apple Container (macOS, uses Virtualization.framework)
   - podman:  Podman (rootless containers)
   - docker:  Docker Engine
@@ -57,7 +57,7 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 
 	// Show platform info
 	fmt.Println("Platform support:")
-	fmt.Println("  nspawn  - NixOS (systemd-nspawn via extra-container)")
+	fmt.Println("  nspawn  - NixOS (systemd-nspawn)")
 	fmt.Println("  apple   - macOS 13+ (Apple Virtualization.framework)")
 	fmt.Println("  podman  - Linux, macOS (rootless preferred)")
 	fmt.Println("  docker  - Linux, macOS, Windows")

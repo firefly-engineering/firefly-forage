@@ -53,9 +53,9 @@ func TestModuleSetup(t *testing.T) {
 			`"network"`, "cat /etc/firefly-forage/templates/test.json")
 	})
 
-	t.Run("extra-container available", func(t *testing.T) {
+	t.Run("systemd mutable dir", func(t *testing.T) {
 		t.Parallel()
-		AssertSuccess(t, env.Ctx(t), env.System, "extra-container is available", "which extra-container")
+		AssertSuccess(t, env.Ctx(t), env.System, "mutable services dir exists", "test -d /etc/systemd-mutable/system")
 	})
 
 	t.Run("secrets directory", func(t *testing.T) {

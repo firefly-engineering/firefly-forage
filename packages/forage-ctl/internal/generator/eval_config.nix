@@ -9,7 +9,7 @@
 
 let
   # A minimal module set for evaluating container configs.
-  # This significantly reduces extra-container evaluation overhead (total eval time - container eval time)
+  # This significantly reduces evaluation time compared to a full NixOS eval
   # Compatible with nixpkgs >= 16.09
   baseModules = [
     (nixosPath + "/modules/misc/assertions.nix")

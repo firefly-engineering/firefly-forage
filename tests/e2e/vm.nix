@@ -2,7 +2,7 @@
 #
 # This builds a QEMU VM via NixOS's config.system.build.vm mechanism.
 # The VM boots with the forage module fully configured, SSH access for the
-# test driver, and a pre-built container closure so extra-container's
+# test driver, and a pre-built container closure so the container
 # nix-build is essentially a no-op.
 #
 # Architecture: Host -> QEMU/KVM (this VM) -> systemd-nspawn (forage sandboxes)
@@ -21,7 +21,7 @@ let
   # Pre-build a NixOS container system closure that closely matches what
   # forage-ctl generates (see internal/generator/templates.go). This ensures
   # all required store paths are available in the VM's shared nix store,
-  # making extra-container's nix-build essentially a no-op.
+  # making the container nix-build essentially a no-op.
   #
   # The packages here mirror the container template in templates.go:
   # git, jujutsu, tmux, neovim, ripgrep, fd, plus openssh for the container.
@@ -177,7 +177,7 @@ let
               "flakes"
             ];
             # Limit to 1 build job to reduce memory/IO pressure during
-            # extra-container's nix-build of container config derivations.
+            # nix-build of container config derivations.
             max-jobs = 1;
           };
 
@@ -194,7 +194,7 @@ let
 
           # --- Pre-build container closure ---
           # This ensures all store paths needed by the container are available
-          # in the VM's nix store (shared from host via 9p). When extra-container
+          # in the VM's nix store (shared from host via 9p). When forage-ctl
           # runs nix-build, it becomes essentially a no-op for packages.
           #
           # The prebuiltContainerSystem provides all runtime packages.

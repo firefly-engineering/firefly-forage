@@ -89,7 +89,7 @@ forage-ctl down myproject
 
 - NixOS (tested on 24.11+)
 - systemd-nspawn (included in NixOS)
-- [extra-container](https://github.com/erikarvstedt/extra-container) (managed by the module)
+- systemd (for container management via systemd-nspawn)
 
 ## Status
 

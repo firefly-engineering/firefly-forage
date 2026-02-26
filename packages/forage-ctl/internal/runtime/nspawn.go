@@ -72,7 +72,7 @@ func (r *NspawnRuntime) Name() string {
 }
 
 // Create creates a new container by building the Nix config and installing
-// the resulting systemd units directly (no extra-container dependency).
+// the resulting systemd units directly via symlinks into /etc/systemd-mutable/system.
 func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.create")
 	defer span.End()
@@ -101,7 +101,7 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 // Start starts an existing container. Uses the fastest available path:
 // 1. Cached etc path from metadata → CreateFromEtc (~1s, no eval at all)
 // 2. Outer .nix + our eval-config → BuildOuterEtc + CreateFromEtc (~2s)
-// 3. Full .nix through extra-container (fallback, ~17s)
+// 3. Full .nix through nix-build + install (fallback, ~17s)
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.start")
 	defer span.End()
@@ -136,7 +136,7 @@ func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 		}
 	}
 
-	// Slow path: rebuild from full .nix config through extra-container
+	// Slow path: rebuild from full .nix config through nix-build + install
 	return r.startFallback(ctx, name)
 }
 
@@ -222,7 +222,7 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 }
 
 // BuildOuterEtc builds the outer container /etc from an outer config file using
-// our stripped eval-config.nix (without extra-container's extraModule). This
+// our stripped eval-config.nix (minimal module set). This
 // evaluates in ~0.5s instead of ~13s because no inner NixOS system is evaluated.
 // Returns the /nix/store path of the built etc derivation.
 func (r *NspawnRuntime) BuildOuterEtc(ctx context.Context, outerConfigPath, evalConfigPath string) (string, error) {

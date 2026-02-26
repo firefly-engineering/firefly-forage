@@ -1717,7 +1717,7 @@ func TestGenerateOuterNixConfig(t *testing.T) {
 		t.Error("Outer config should NOT have an inner config block")
 	}
 
-	// Should use lib.mkForce on path to override extra-container's extraModule
+	// Should use lib.mkForce on path to prevent conflicts with nixos-containers.nix
 	if !strings.Contains(result, "lib.mkForce") {
 		t.Error("Outer config should use lib.mkForce on path")
 	}

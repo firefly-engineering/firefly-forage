@@ -1,7 +1,7 @@
 // Package runtime provides a unified interface for container runtimes.
 //
 // Supported runtimes:
-//   - nspawn: NixOS containers via extra-container (Linux)
+//   - nspawn: NixOS containers via systemd-nspawn (Linux)
 //   - docker: Docker containers (Linux, macOS, Windows)
 //   - apple: Apple Container (macOS 13+)
 //

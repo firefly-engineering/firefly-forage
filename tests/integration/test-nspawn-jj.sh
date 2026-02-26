@@ -2,11 +2,11 @@
 # Integration test: nspawn backend + jj VCS
 #
 # This test verifies the full sandbox workflow using:
-# - Container backend: systemd-nspawn (via extra-container)
+# - Container backend: systemd-nspawn
 # - VCS mode: jj (jujutsu)
 #
 # Prerequisites:
-# - NixOS system with extra-container
+# - NixOS system with systemd
 # - jj and git installed
 # - forage-ctl configured with a 'test' template
 
