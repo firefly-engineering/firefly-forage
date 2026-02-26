@@ -6,54 +6,30 @@ on:
   merge_group:
 
 jobs:
-  test:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-
-      - name: Run tests
-        run: nix develop --command bash -c "cd packages/forage-ctl && go test ./..."
+      - name: Check Nix formatting
+        run: nix fmt -- --ci .
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: ./.github/actions/setup-nix
 
       - name: Run linter
         run: nix develop --command bash -c "cd packages/forage-ctl && golangci-lint run"
 
-  format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-
-      - name: Check Nix formatting
-        run: nix fmt -- --ci .
-
   build:
+    needs: [format, lint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: ./.github/actions/setup-nix
 
       - name: Build forage-ctl
         run: nix build .#forage-ctl
@@ -61,22 +37,29 @@ jobs:
       - name: Build docs
         run: nix build .#docs
 
+  test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run tests
+        run: nix develop --command bash -c "cd packages/forage-ctl && go test ./..."
+
   e2e:
+    needs: [test]
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
 
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Run E2E tests
         run: nix run .#e2e-driver -- 2>&1
