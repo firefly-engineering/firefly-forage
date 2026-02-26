@@ -43,11 +43,10 @@ func NewCreator() (*Creator, error) {
 	}
 
 	rt, err := runtime.New(&runtime.Config{
-		Type:               runtime.RuntimeAuto,
-		ContainerPrefix:    config.ContainerPrefix,
-		ExtraContainerPath: hostConfig.ExtraContainerPath,
-		NixpkgsPath:        hostConfig.NixpkgsPath,
-		SandboxesDir:       paths.SandboxesDir,
+		Type:            runtime.RuntimeAuto,
+		ContainerPrefix: config.ContainerPrefix,
+		NixpkgsPath:     hostConfig.NixpkgsPath,
+		SandboxesDir:    paths.SandboxesDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)

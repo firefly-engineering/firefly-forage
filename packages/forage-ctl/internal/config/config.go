@@ -198,9 +198,8 @@ type HostConfig struct {
 	GID                int               `json:"gid"` // Host user's GID
 	AuthorizedKeys     []string          `json:"authorizedKeys"`
 	Secrets            map[string]string `json:"secrets"` // Secret name -> file path containing the secret
-	StateDir           string            `json:"stateDir"`
-	ExtraContainerPath string            `json:"extraContainerPath"`
-	NixpkgsPath        string            `json:"nixpkgsPath"`
+	StateDir    string `json:"stateDir"`
+	NixpkgsPath string `json:"nixpkgsPath"`
 	NixpkgsRev         string            `json:"nixpkgsRev"`
 	ProxyURL           string            `json:"proxyUrl,omitempty"`          // URL of the forage-proxy server
 	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"`     // Host-level default agent identity

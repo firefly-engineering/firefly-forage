@@ -65,8 +65,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		AuthorizedKeys:     []string{"ssh-rsa AAAA... test@test"},
 		Secrets:            map[string]string{"anthropic": secretFile},
 		StateDir:           paths.StateDir,
-		ExtraContainerPath: "/nix/store/fake/extra-container",
-		NixpkgsRev:         "abc123",
+		NixpkgsRev: "abc123",
 	}
 
 	// Write host config
