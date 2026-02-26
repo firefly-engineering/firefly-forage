@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -10,7 +9,6 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/app"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
-	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 var resetCmd = &cobra.Command{
@@ -26,7 +24,6 @@ func init() {
 
 func runReset(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	p := paths()
 
 	metadata, err := loadSandbox(name)
 	if err != nil {
@@ -42,17 +39,9 @@ func runReset(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Restart the container
+	// Restart the container (uses cached etc → outer config → full .nix fallback)
 	logInfo("Starting container...")
-
-	// The container config should still exist in the sandboxes directory
-	configPath := filepath.Join(p.SandboxesDir, name+".nix")
-	logging.Debug("creating container via runtime", "name", name, "config", configPath)
-	if err := app.Default.Create(cmd.Context(), runtime.CreateOptions{
-		Name:       name,
-		ConfigPath: configPath,
-		Start:      true,
-	}); err != nil {
+	if err := app.Default.Start(cmd.Context(), name); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 

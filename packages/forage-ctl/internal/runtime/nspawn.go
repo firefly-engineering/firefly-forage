@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/generator"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
@@ -105,38 +106,79 @@ func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	return nil
 }
 
-// Start starts an existing container. Tries the fast path (outer .nix with
-// cached inner system path) first; falls back to full rebuild from the .nix file.
+// Start starts an existing container. Uses the fastest available path:
+// 1. Cached etc path from metadata → CreateFromEtc (~1s, no eval at all)
+// 2. Outer .nix + our eval-config → BuildOuterEtc + CreateFromEtc (~2s)
+// 3. Full .nix through extra-container (fallback, ~17s)
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.start")
 	defer span.End()
 
-	// Fast path: use outer config that references a cached inner system via path=
-	// (skips inner NixOS evaluation entirely)
-	if r.SandboxesDir != "" {
-		outerPath := r.SandboxesDir + "/" + name + ".outer.nix"
-		if _, err := os.Stat(outerPath); err == nil {
-			logging.Debug("starting container via cached outer config", "name", name, "config", outerPath)
-			if err := r.Create(ctx, CreateOptions{
-				Name:       name,
-				ConfigPath: outerPath,
-				Start:      true,
-			}); err == nil {
+	if r.SandboxesDir == "" {
+		return r.startFallback(ctx, name)
+	}
+
+	// Fast path 1: use cached etc path from metadata (no Nix eval at all)
+	if meta, err := config.LoadSandboxMetadata(r.SandboxesDir, name); err == nil && meta.CachedEtcPath != "" {
+		if _, err := os.Stat(meta.CachedEtcPath); err == nil {
+			logging.Debug("starting container via cached etc", "name", name, "etcPath", meta.CachedEtcPath)
+			if err := r.CreateFromEtc(ctx, meta.CachedEtcPath, true); err == nil {
 				return nil
 			}
-			logging.Warn("cached outer config start failed, falling back to full rebuild", "name", name)
+			logging.Warn("cached etc start failed, trying outer config", "name", name)
 		}
 	}
 
-	// Slow path: rebuild from full .nix config
+	// Fast path 2: build outer etc using our stripped eval-config
+	outerPath := r.SandboxesDir + "/" + name + ".outer.nix"
+	if _, err := os.Stat(outerPath); err == nil {
+		etcPath, err := r.buildAndCacheOuterEtc(ctx, name, outerPath)
+		if err == nil {
+			logging.Debug("starting container via freshly built etc", "name", name, "etcPath", etcPath)
+			if err := r.CreateFromEtc(ctx, etcPath, true); err == nil {
+				return nil
+			}
+			logging.Warn("outer etc start failed, falling back to full rebuild", "name", name)
+		} else {
+			logging.Warn("outer etc build failed, falling back to full rebuild", "name", name, "error", err)
+		}
+	}
+
+	// Slow path: rebuild from full .nix config through extra-container
+	return r.startFallback(ctx, name)
+}
+
+// startFallback starts a container via the full .nix config through extra-container.
+func (r *NspawnRuntime) startFallback(ctx context.Context, name string) error {
 	configPath := r.SandboxesDir + "/" + name + ".nix"
 	logging.Debug("starting container via extra-container", "name", name, "config", configPath)
-
 	return r.Create(ctx, CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
 		Start:      true,
 	})
+}
+
+// buildAndCacheOuterEtc writes the eval-config.nix to the sandbox staging dir,
+// builds outer etc, and saves the etc path in metadata.
+func (r *NspawnRuntime) buildAndCacheOuterEtc(ctx context.Context, name, outerPath string) (string, error) {
+	evalConfigPath := r.SandboxesDir + "/" + name + ".eval-config.nix"
+	if err := os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644); err != nil {
+		return "", fmt.Errorf("failed to write eval-config.nix: %w", err)
+	}
+
+	etcPath, err := r.BuildOuterEtc(ctx, outerPath, evalConfigPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Save cached etc path in metadata for future fast restarts
+	if meta, loadErr := config.LoadSandboxMetadata(r.SandboxesDir, name); loadErr == nil {
+		meta.CachedEtcPath = etcPath
+		_ = config.SaveSandboxMetadata(r.SandboxesDir, meta)
+	}
+
+	return etcPath, nil
 }
 
 // BuildInnerSystem builds the inner NixOS system from a config file and returns
@@ -187,6 +229,92 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 	return storePath, nil
 }
 
+
+// BuildOuterEtc builds the outer container /etc from an outer config file using
+// our stripped eval-config.nix (without extra-container's extraModule). This
+// evaluates in ~0.5s instead of ~13s because no inner NixOS system is evaluated.
+// Returns the /nix/store path of the built etc derivation.
+func (r *NspawnRuntime) BuildOuterEtc(ctx context.Context, outerConfigPath, evalConfigPath string) (string, error) {
+	ctx, span := telemetry.Start(ctx, "nspawn.build-outer-etc")
+	defer span.End()
+
+	logging.Info("building outer /etc", "config", outerConfigPath)
+
+	nixosPath := "<nixpkgs/nixos>"
+	if r.NixpkgsPath != "" {
+		nixosPath = r.NixpkgsPath + "/nixos"
+	}
+
+	// Build the etc derivation using our stripped eval-config.nix
+	nixExpr := fmt.Sprintf(`
+let
+  cfg = import ''%s'';
+in (import %s {
+  nixosPath = %s;
+  systemConfig = cfg;
+}).config.system.build.etc
+`, outerConfigPath, evalConfigPath, nixosPath)
+
+	args := []string{
+		"nix-build", "--no-out-link", "-E", nixExpr,
+	}
+
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	var stdout, stderr bytes.Buffer
+	tracer := newNixOutputTracer(span)
+	cmd.Stdout = &stdout
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr, tracer)
+
+	span.AddEvent("subprocess.start")
+	err := cmd.Run()
+	tracer.Flush()
+	if err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if len(errMsg) > 500 {
+			errMsg = errMsg[len(errMsg)-500:]
+		}
+		return "", fmt.Errorf("nix-build outer etc failed: %w\nstderr: %s", err, errMsg)
+	}
+
+	etcPath := strings.TrimSpace(stdout.String())
+	if etcPath == "" {
+		return "", fmt.Errorf("nix-build outer etc produced empty output")
+	}
+
+	span.SetAttributes(attribute.String("etc.path", etcPath))
+	logging.Info("outer /etc built", "path", etcPath)
+	return etcPath, nil
+}
+
+// CreateFromEtc creates a container directly from a pre-built /etc store path.
+// This bypasses all Nix evaluation in extra-container (~1s instead of ~16s).
+func (r *NspawnRuntime) CreateFromEtc(ctx context.Context, etcPath string, start bool) error {
+	ctx, span := telemetry.Start(ctx, "nspawn.create-from-etc")
+	defer span.End()
+
+	logging.Debug("creating container from pre-built etc", "etcPath", etcPath)
+
+	args := []string{r.ExtraContainerPath, "create"}
+	if start {
+		args = append(args, "--start")
+	}
+	// Pass the store path directly — extra-container reads $path/etc without evaluation
+	args = append(args, etcPath)
+
+	cmd := exec.CommandContext(ctx, "sudo", args...)
+	cmd.Stdout = os.Stdout
+	tracer := newNixOutputTracer(span)
+	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
+
+	span.AddEvent("subprocess.start")
+	err := cmd.Run()
+	tracer.Flush()
+	if err != nil {
+		return fmt.Errorf("extra-container create from etc failed: %w", err)
+	}
+
+	return nil
+}
 
 // Stop stops a running container
 func (r *NspawnRuntime) Stop(ctx context.Context, name string) error {
