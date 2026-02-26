@@ -1,7 +1,6 @@
-# Stripped version of extra-container's eval-config.nix.
-# The only difference: the `extraModule` is removed from the modules list.
-# This means our outer config evaluates in ~0.5s instead of ~13s because
-# no inner NixOS system is evaluated via the extraModule's injected `config`.
+# Minimal NixOS module evaluator for container configurations.
+# Imports only ~7 base modules (instead of 700+) to evaluate
+# container configs in ~0.5s instead of ~13s.
 {
   nixosPath,
   systemConfig,
@@ -106,11 +105,8 @@ let
     };
 
 in
-# Key difference from extra-container's version:
-# modules = [ systemConfig ] instead of [ extraModule systemConfig ]
-# This skips the extraModule that injects a `config` attribute into every
-# container definition, which would trigger a full NixOS module evaluation
-# even when our outer config uses `path = lib.mkForce <cached-path>`.
+# Only include the user's systemConfig — no extra convenience modules
+# that would trigger full NixOS module evaluation.
 import (nixosPath + "/lib/eval-config.nix") {
   inherit baseModules system;
   modules = [ systemConfig ];
