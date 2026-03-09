@@ -132,15 +132,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	if nspawnRT, ok := c.rt.(*runtime.NspawnRuntime); ok {
 		err = c.createCached(ctx, opts, resources, ws, secretsPath, identity, metadata, nspawnRT)
 	} else {
-		var configPath string
-		configPath, err = c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
-		if err == nil {
-			if saveErr := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); saveErr != nil {
-				err = fmt.Errorf("failed to save metadata: %w", saveErr)
-			} else {
-				err = c.startContainer(ctx, opts.Name, configPath)
-			}
-		}
+		err = c.createGeneric(ctx, opts, resources, ws, secretsPath, identity, metadata)
 	}
 	if err != nil {
 		cleanup()
@@ -675,6 +667,73 @@ func (c *Creator) writeFallbackConfig(ctx context.Context, opts CreateOptions, r
 	}
 }
 
+// createGeneric implements the non-nspawn creation flow for Docker, Podman, and Apple backends.
+// It collects contribution bind mounts and passes them to the runtime's Create method.
+func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) error {
+	ctx, span := telemetry.Start(ctx, "sandbox.create-generic")
+	defer span.End()
+
+	// Write the nix config (for reference/debugging, not used by the runtime)
+	_, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
+	if err != nil {
+		return err
+	}
+
+	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Collect contributions to get bind mounts
+	proxyURL := ""
+	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
+		proxyURL = c.hostConfig.ProxyURL
+	}
+	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
+	contribParams := ContributionSourcesParams{
+		Runtime:       c.rt,
+		Template:      resources.template,
+		Metadata:      metadata,
+		WsBackend:     ws.backend,
+		Mux:           mux,
+		Identity:      identity,
+		WorkspacePath: ws.effectivePath,
+		SourceRepo:    ws.sourceRepo,
+		SecretsPath:   secretsPath,
+		ProxyURL:      proxyURL,
+		SandboxName:   opts.Name,
+		HostConfig:    c.hostConfig,
+	}
+	if len(ws.mounts) > 0 {
+		contribParams.WorkspaceMounts = ws.mounts
+		contribParams.MountBackends = ws.backends
+	}
+	contribResult := buildContributionSources(contribParams)
+	collector := injection.NewCollector()
+	contributions, err := collector.Collect(ctx, contribResult.Sources)
+	if err != nil {
+		return fmt.Errorf("failed to collect contributions: %w", err)
+	}
+
+	// Build bind mount map from contributions.
+	// Skip the /nix/store mount — OCI-based runtimes have their own nix store
+	// in the image, and overlaying the host store would break the container.
+	bindMounts := make(map[string]string)
+	for _, m := range contributions.Mounts {
+		if m.ContainerPath == "/nix/store" {
+			continue
+		}
+		bindMounts[m.HostPath] = m.ContainerPath
+	}
+
+	logging.Debug("creating container via runtime", "name", opts.Name, "mounts", len(bindMounts))
+	return c.rt.Create(ctx, runtime.CreateOptions{
+		Name:        opts.Name,
+		Start:       true,
+		BindMounts:  bindMounts,
+		NetworkSlot: resources.networkSlot,
+	})
+}
+
 // startContainer creates and starts the container via the runtime.
 func (c *Creator) startContainer(ctx context.Context, name, configPath string) error {
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
@@ -753,7 +812,13 @@ func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxM
 }
 
 // postCreationSetup performs post-creation setup (SSH wait).
+// Skipped for runtimes that don't support SSH access.
 func (c *Creator) postCreationSetup(ctx context.Context, metadata *config.SandboxMetadata) {
+	caps := runtime.GetCapabilities(c.rt)
+	if !caps.SSHAccess {
+		logging.Debug("skipping SSH wait (runtime does not support SSH)")
+		return
+	}
 	containerIP := metadata.ContainerIP()
 	logging.Debug("waiting for SSH", "host", containerIP, "timeout", health.SSHReadyTimeoutSeconds)
 	c.waitForSSH(ctx, containerIP, health.SSHReadyTimeoutSeconds)
