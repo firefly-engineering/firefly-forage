@@ -8,6 +8,7 @@ import (
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/health"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 var statusCmd = &cobra.Command{
@@ -71,7 +72,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Container: %s\n", boolStatus(result.ContainerRunning))
 	if result.ContainerRunning {
 		fmt.Printf("  Uptime: %s\n", result.Uptime)
-		fmt.Printf("  SSH: %s\n", boolStatus(result.SSHReachable))
+		caps := runtime.GetCapabilities(getRuntime())
+		if caps.SSHAccess {
+			fmt.Printf("  SSH: %s\n", boolStatus(result.SSHReachable))
+		}
 		fmt.Printf("  Mux: %s\n", boolStatus(result.MuxActive))
 		if len(result.MuxWindows) > 0 {
 			fmt.Printf("  Windows: %s\n", strings.Join(result.MuxWindows, ", "))

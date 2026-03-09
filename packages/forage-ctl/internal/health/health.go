@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
@@ -42,14 +43,21 @@ func CheckSSH(host string) bool {
 	return ssh.CheckConnection(host)
 }
 
-// CheckMux checks if the multiplexer session exists
+// CheckMux checks if the multiplexer session exists via SSH
 func CheckMux(host string, mux multiplexer.Multiplexer) bool {
 	args := mux.CheckSessionArgs()
 	_, err := ssh.ExecWithOutput(host, args...)
 	return err == nil
 }
 
-// GetMuxWindows returns the list of multiplexer windows
+// CheckMuxViaExec checks if the multiplexer session exists via runtime exec
+func CheckMuxViaExec(ctx context.Context, sandboxName string, rt runtime.Runtime, mux multiplexer.Multiplexer) bool {
+	args := mux.CheckSessionArgs()
+	result, err := rt.Exec(ctx, sandboxName, args, runtime.ExecOptions{})
+	return err == nil && result.ExitCode == 0
+}
+
+// GetMuxWindows returns the list of multiplexer windows via SSH
 func GetMuxWindows(host string, mux multiplexer.Multiplexer) []string {
 	args := mux.ListWindowsArgs()
 	output, err := ssh.ExecWithOutput(host, args...)
@@ -57,6 +65,16 @@ func GetMuxWindows(host string, mux multiplexer.Multiplexer) []string {
 		return nil
 	}
 	return mux.ParseWindowList(output)
+}
+
+// GetMuxWindowsViaExec returns the list of multiplexer windows via runtime exec
+func GetMuxWindowsViaExec(ctx context.Context, sandboxName string, rt runtime.Runtime, mux multiplexer.Multiplexer) []string {
+	args := mux.ListWindowsArgs()
+	result, err := rt.Exec(ctx, sandboxName, args, runtime.ExecOptions{})
+	if err != nil || result.ExitCode != 0 {
+		return nil
+	}
+	return mux.ParseWindowList(strings.TrimSpace(result.Stdout))
 }
 
 // GetUptime returns the container uptime in human-readable format.
@@ -131,16 +149,23 @@ func Check(ctx context.Context, sandboxName string, host string, rt runtime.Runt
 	// Check uptime
 	result.Uptime = GetUptime(ctx, sandboxName, rt)
 
-	// Check SSH
-	result.SSHReachable = CheckSSH(host)
-	if !result.SSHReachable {
-		return result
-	}
-
-	// Check multiplexer
-	result.MuxActive = CheckMux(host, mux)
-	if result.MuxActive {
-		result.MuxWindows = GetMuxWindows(host, mux)
+	caps := runtime.GetCapabilities(rt)
+	if caps.SSHAccess {
+		// SSH-based health checks
+		result.SSHReachable = CheckSSH(host)
+		if !result.SSHReachable {
+			return result
+		}
+		result.MuxActive = CheckMux(host, mux)
+		if result.MuxActive {
+			result.MuxWindows = GetMuxWindows(host, mux)
+		}
+	} else {
+		// For non-SSH runtimes, check mux via runtime exec
+		result.MuxActive = CheckMuxViaExec(ctx, sandboxName, rt, mux)
+		if result.MuxActive {
+			result.MuxWindows = GetMuxWindowsViaExec(ctx, sandboxName, rt, mux)
+		}
 	}
 
 	return result
@@ -156,11 +181,19 @@ func GetSummary(ctx context.Context, sandboxName string, host string, rt runtime
 	if !running {
 		return StatusStopped
 	}
-	if !CheckSSH(host) {
-		return StatusUnhealthy
-	}
-	if !CheckMux(host, mux) {
-		return StatusNoMux
+
+	caps := runtime.GetCapabilities(rt)
+	if caps.SSHAccess {
+		if !CheckSSH(host) {
+			return StatusUnhealthy
+		}
+		if !CheckMux(host, mux) {
+			return StatusNoMux
+		}
+	} else {
+		if !CheckMuxViaExec(ctx, sandboxName, rt, mux) {
+			return StatusNoMux
+		}
 	}
 	return StatusHealthy
 }
