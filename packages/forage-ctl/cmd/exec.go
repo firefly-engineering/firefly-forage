@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 
@@ -8,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/errors"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
@@ -44,7 +47,23 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return errors.ValidationError("usage: forage-ctl exec <name> -- <command>")
 	}
 
-	// Build SSH command using the builder
+	// Use runtime exec for backends that don't support SSH
+	rt := getRuntime()
+	caps := runtime.GetCapabilities(rt)
+	if !caps.SSHAccess {
+		result, err := rt.Exec(cmd.Context(), name, execArgs, runtime.ExecOptions{})
+		if err != nil {
+			return fmt.Errorf("exec failed: %w", err)
+		}
+		os.Stdout.WriteString(result.Stdout)
+		os.Stderr.WriteString(result.Stderr)
+		if result.ExitCode != 0 {
+			os.Exit(result.ExitCode)
+		}
+		return nil
+	}
+
+	// SSH path for backends that support it
 	sshPath, err := exec.LookPath("ssh")
 	if err != nil {
 		return errors.SSHError("ssh not found", err)
