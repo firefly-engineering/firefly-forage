@@ -63,6 +63,8 @@ func safePath(baseDir, name, suffix string) (string, error) {
 }
 
 const (
+	// Fallback paths when no environment override is set.
+	// Override with FORAGE_CONFIG_DIR, FORAGE_STATE_DIR, FORAGE_SECRETS_DIR.
 	DefaultConfigDir  = "/etc/firefly-forage"
 	DefaultStateDir   = "/var/lib/firefly-forage"
 	DefaultSecretsDir = "/run/forage-secrets"
@@ -509,17 +511,31 @@ type Paths struct {
 	TemplatesDir  string
 }
 
-// DefaultPaths returns the default path configuration
+// DefaultPaths returns the path configuration, respecting environment overrides.
+//
+// Environment variables:
+//   - FORAGE_CONFIG_DIR  → config directory (default: /etc/firefly-forage)
+//   - FORAGE_STATE_DIR   → state directory  (default: /var/lib/firefly-forage)
+//   - FORAGE_SECRETS_DIR → secrets directory (default: /run/forage-secrets)
 func DefaultPaths() *Paths {
-	stateDir := DefaultStateDir
+	configDir := envOrDefault("FORAGE_CONFIG_DIR", DefaultConfigDir)
+	stateDir := envOrDefault("FORAGE_STATE_DIR", DefaultStateDir)
+	secretsDir := envOrDefault("FORAGE_SECRETS_DIR", DefaultSecretsDir)
 	return &Paths{
-		ConfigDir:     DefaultConfigDir,
+		ConfigDir:     configDir,
 		StateDir:      stateDir,
-		SecretsDir:    DefaultSecretsDir,
+		SecretsDir:    secretsDir,
 		SandboxesDir:  filepath.Join(stateDir, "sandboxes"),
 		WorkspacesDir: filepath.Join(stateDir, "workspaces"),
-		TemplatesDir:  filepath.Join(DefaultConfigDir, "templates"),
+		TemplatesDir:  filepath.Join(configDir, "templates"),
 	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // LoadHostConfig loads the host configuration from config.json
