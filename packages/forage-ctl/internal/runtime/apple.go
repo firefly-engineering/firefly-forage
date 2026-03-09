@@ -34,6 +34,8 @@ import (
 	"syscall"
 	"time"
 
+	shellquote "github.com/kballard/go-shellquote"
+
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/config"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
@@ -298,7 +300,11 @@ func (r *AppleRuntime) Exec(ctx context.Context, name string, command []string, 
 	}
 
 	args = append(args, containerName)
-	args = append(args, command...)
+
+	// Wrap in /bin/sh so the container's PATH (nix profile paths) is used.
+	// Without this, commands like "ls" won't be found since nix-based
+	// containers don't place binaries in standard locations.
+	args = append(args, "/bin/sh", "-c", shellquote.Join(command...))
 
 	cmd := exec.CommandContext(ctx, r.BinaryPath, args...)
 
@@ -343,7 +349,7 @@ func (r *AppleRuntime) ExecInteractive(ctx context.Context, name string, command
 	}
 
 	args = append(args, containerName)
-	args = append(args, command...)
+	args = append(args, "/bin/sh", "-c", shellquote.Join(command...))
 
 	return syscall.Exec(r.BinaryPath, args, system.SafeEnviron())
 }
