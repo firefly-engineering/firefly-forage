@@ -31,6 +31,11 @@
         host = import ./modules/host.nix { inherit self nixpkgs; };
       };
 
+      darwinModules = {
+        default = self.darwinModules.host;
+        host = import ./modules/darwin.nix { inherit self; };
+      };
+
       lib = import ./lib { inherit (nixpkgs) lib; };
 
       packages = forAllSystems (
