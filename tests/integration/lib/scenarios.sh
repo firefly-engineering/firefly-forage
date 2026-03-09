@@ -17,6 +17,7 @@ declare -g SCENARIO_BACKEND=""
 declare -g SCENARIO_VCS=""
 declare -g SCENARIO_REPO_DIR=""
 declare -g SCENARIO_SANDBOX_NAME=""
+declare -g SCENARIO_WORKSPACE_DIR=""  # Host-side workspace path (may differ from repo dir)
 declare -g SCENARIO_TEMPLATE="${FORAGE_TEST_TEMPLATE:-test}"
 
 # Run a complete test scenario
@@ -56,6 +57,10 @@ run_scenario() {
     # Create sandbox
     log_info "=== Creating sandbox ==="
     SCENARIO_SANDBOX_NAME=$(create_sandbox "$backend" "$vcs" "$SCENARIO_REPO_DIR" "$SCENARIO_TEMPLATE")
+
+    # Resolve the host workspace path
+    SCENARIO_WORKSPACE_DIR=$(forage-ctl status "$SCENARIO_SANDBOX_NAME" 2>/dev/null | grep '^Workspace:' | sed 's/^Workspace: //')
+    log_info "Workspace: $SCENARIO_WORKSPACE_DIR"
 
     # Start sandbox
     log_info "=== Starting sandbox ==="
@@ -209,14 +214,15 @@ scenario_file_creation_sync() {
     assert_true "File exists in sandbox" \
         "scenario_file_exists sandbox-created.txt"
 
-    # Verify file synced to host repository
-    # (For jj/git-worktree modes, this should be immediate)
-    assert_true "File synced to host repository" \
-        "scenario_repo_file_exists sandbox-created.txt"
+    # Verify file synced to host workspace
+    # For worktree/jj modes, files appear in the workspace dir, not the source repo
+    local check_dir="${SCENARIO_WORKSPACE_DIR:-$SCENARIO_REPO_DIR}"
+    assert_true "File synced to host workspace" \
+        "[[ -f '$check_dir/sandbox-created.txt' ]]"
 
     # Verify content matches
     local host_content
-    host_content=$(scenario_repo_get_file sandbox-created.txt)
+    host_content=$(cat "$check_dir/sandbox-created.txt")
     assert_contains "Content matches" "$host_content" "Hello from sandbox"
 
     log_info "File creation sync test passed"

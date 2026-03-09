@@ -19,8 +19,12 @@ generate_sandbox_name() {
     echo "${prefix}-$(date +%s)-$$"
 }
 
-# Create a sandbox
+# Create and start a sandbox using 'forage-ctl up'
 # Returns the sandbox name
+#
+# Note: Runtime is auto-detected (apple on macOS, nspawn on NixOS, etc.)
+# and workspace mode is inferred from the repo type (git → git-worktree,
+# jj → jj). Use --direct for direct mount.
 create_sandbox() {
     local backend="$1"
     local vcs="$2"
@@ -28,24 +32,21 @@ create_sandbox() {
     local template="${4:-test}"
     local sandbox_name="${5:-$(generate_sandbox_name)}"
 
-    local runtime_flag
-    runtime_flag=$(get_runtime_flag "$backend")
-
-    local workspace_flag
-    workspace_flag=$(get_workspace_mode_flag "$vcs")
-
     log_info "Creating sandbox: $sandbox_name"
-    log_info "  Backend: $backend"
+    log_info "  Backend: $backend (auto-detected)"
     log_info "  VCS: $vcs"
     log_info "  Repository: $repo_dir"
     log_info "  Template: $template"
 
-    if ! forage-ctl create "$sandbox_name" \
+    local extra_flags=()
+    if [[ "$vcs" == "direct" ]]; then
+        extra_flags+=(--direct)
+    fi
+
+    if ! forage-ctl up "$sandbox_name" \
         --template="$template" \
-        "$runtime_flag" \
-        "$workspace_flag" \
-        --source="$repo_dir" \
-        --yes; then
+        --repo="$repo_dir" \
+        "${extra_flags[@]}" >&2; then
         test_fail "Failed to create sandbox: $sandbox_name"
         return 1
     fi
@@ -57,15 +58,15 @@ create_sandbox() {
     echo "$sandbox_name"
 }
 
-# Start a sandbox
+# Start a sandbox (no-op if already started by 'up')
 start_sandbox() {
     local sandbox_name="$1"
 
     log_info "Starting sandbox: $sandbox_name"
 
-    if ! forage-ctl start "$sandbox_name"; then
-        test_fail "Failed to start sandbox: $sandbox_name"
-        return 1
+    if ! forage-ctl start "$sandbox_name" >&2; then
+        # May already be running from 'up'
+        log_warn "Start returned error (may already be running)"
     fi
 
     log_info "Sandbox started: $sandbox_name"
@@ -91,7 +92,7 @@ destroy_sandbox() {
 
     log_info "Destroying sandbox: $sandbox_name"
 
-    if ! forage-ctl destroy "$sandbox_name" --yes 2>/dev/null; then
+    if ! forage-ctl down "$sandbox_name" 2>/dev/null; then
         log_warn "Failed to destroy sandbox: $sandbox_name (may already be destroyed)"
         return 1
     fi
