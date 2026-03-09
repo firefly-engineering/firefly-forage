@@ -725,11 +725,24 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 		bindMounts[m.HostPath] = m.ContainerPath
 	}
 
-	logging.Debug("creating container via runtime", "name", opts.Name, "mounts", len(bindMounts))
+	// Build env var map from contributions.
+	// EnvVar values are Nix expressions (double-quoted strings like `"value"`);
+	// strip the outer quotes for plain key=value usage in OCI runtimes.
+	envVars := make(map[string]string)
+	for _, ev := range contributions.EnvVars {
+		val := ev.Value
+		if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+			val = val[1 : len(val)-1]
+		}
+		envVars[ev.Name] = val
+	}
+
+	logging.Debug("creating container via runtime", "name", opts.Name, "mounts", len(bindMounts), "envVars", len(envVars))
 	return c.rt.Create(ctx, runtime.CreateOptions{
 		Name:        opts.Name,
 		Start:       true,
 		BindMounts:  bindMounts,
+		EnvVars:     envVars,
 		NetworkSlot: resources.networkSlot,
 	})
 }
@@ -847,6 +860,11 @@ func (c *Creator) setupWorkspace(ctx context.Context, opts CreateOptions) (*work
 	absPath, err := filepath.Abs(opts.RepoPath)
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	// Resolve symlinks so that bind mount paths match what tools like
+	// git-worktree write into .git files (e.g., /tmp → /private/tmp on macOS).
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		absPath = resolved
 	}
 
 	if opts.Direct {

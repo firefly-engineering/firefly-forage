@@ -149,10 +149,26 @@ func WorktreeExists(repoPath, worktreePath string) bool {
 	return false
 }
 
-// ContributeMounts returns nil - git worktrees don't need extra mounts.
-// The worktree directory already contains a .git file pointing to the main repo.
+// ContributeMounts returns the source repo's .git directory mount.
+// Git worktrees contain a .git file that references the main repo's
+// .git/worktrees/<name> directory. On runtimes where the host filesystem
+// isn't shared (e.g., OCI containers), we need to mount the .git directory
+// so the worktree can resolve its git metadata.
 func (b *GitBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
-	return nil, nil
+	if req.SourceRepo == "" {
+		return nil, nil
+	}
+
+	gitPath := filepath.Join(req.SourceRepo, ".git")
+	if _, err := os.Stat(gitPath); err != nil {
+		return nil, nil
+	}
+
+	return []injection.Mount{{
+		HostPath:      gitPath,
+		ContainerPath: gitPath,
+		ReadOnly:      req.ReadOnlyWorkspace,
+	}}, nil
 }
 
 // ContributePromptFragments returns git worktree-specific VCS instructions.
