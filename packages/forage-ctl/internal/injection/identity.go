@@ -90,6 +90,26 @@ func (i *IdentityContributor) ContributeTmpfilesRules(ctx context.Context, req *
 	}, nil
 }
 
+// ContributeEnvVars returns git identity environment variables.
+// These ensure git commits use the configured identity regardless of
+// whether a gitconfig file is available in the container.
+func (i *IdentityContributor) ContributeEnvVars(ctx context.Context, req *EnvVarRequest) ([]EnvVar, error) {
+	var vars []EnvVar
+	if i.GitUser != "" {
+		vars = append(vars,
+			EnvVar{Name: "GIT_AUTHOR_NAME", Value: fmt.Sprintf("%q", i.GitUser)},
+			EnvVar{Name: "GIT_COMMITTER_NAME", Value: fmt.Sprintf("%q", i.GitUser)},
+		)
+	}
+	if i.GitEmail != "" {
+		vars = append(vars,
+			EnvVar{Name: "GIT_AUTHOR_EMAIL", Value: fmt.Sprintf("%q", i.GitEmail)},
+			EnvVar{Name: "GIT_COMMITTER_EMAIL", Value: fmt.Sprintf("%q", i.GitEmail)},
+		)
+	}
+	return vars, nil
+}
+
 // ContributePromptFragments returns identity information for prompts.
 func (i *IdentityContributor) ContributePromptFragments(ctx context.Context) ([]PromptFragment, error) {
 	if i.GitUser == "" && i.GitEmail == "" && i.SSHKeyPath == "" {
@@ -124,6 +144,7 @@ func (i *IdentityContributor) ContributePromptFragments(ctx context.Context) ([]
 // Ensure IdentityContributor implements interfaces
 var (
 	_ MountContributor    = (*IdentityContributor)(nil)
+	_ EnvVarContributor   = (*IdentityContributor)(nil)
 	_ TmpfilesContributor = (*IdentityContributor)(nil)
 	_ PromptContributor   = (*IdentityContributor)(nil)
 )

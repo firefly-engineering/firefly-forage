@@ -41,6 +41,7 @@ type CreateOptions struct {
 	Start        bool              // Start immediately after creation
 	BindMounts   map[string]string // host path -> container path
 	ForwardPorts map[int]int       // host port -> container port
+	EnvVars      map[string]string // environment variables
 	NetworkSlot  int               // For private networking
 	ExtraArgs    []string          // Backend-specific arguments
 }

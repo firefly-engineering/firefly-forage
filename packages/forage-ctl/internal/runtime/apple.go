@@ -139,6 +139,11 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		"--label", "forage.container-name="+containerName,
 	)
 
+	// Add environment variables
+	for k, v := range opts.EnvVars {
+		args = append(args, "-e", k+"="+v)
+	}
+
 	// Add extra args
 	args = append(args, opts.ExtraArgs...)
 
