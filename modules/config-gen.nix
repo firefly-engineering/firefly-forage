@@ -10,7 +10,7 @@ let
     optionalAttrs
     ;
 in
-{
+rec {
   # Resolve ~ to a user's home directory
   resolveTilde =
     userHome: path:

@@ -137,6 +137,10 @@
               pkgs.runCommand "vm-integration-unsupported" { } ''
                 echo "VM integration tests are only supported on Linux" > $out
               '';
+
+          # Darwin module evaluation test — verifies darwin.nix produces correct config.
+          # Runs on all platforms (pure Nix evaluation, no VM needed).
+          darwin-eval = import ./tests/darwin-eval.nix { inherit pkgs self; };
         }
       );
     };
