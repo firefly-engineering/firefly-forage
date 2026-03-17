@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:11Z",
+  "description": "Apple backend declares GeneratedFiles: false (apple.go line 439). This prevents injection of:\n- Skills files (.claude/forage-skills.md)\n- Permission configuration\n- Agent identity/certificates\n- Secret mounts\n\nDocker solves this by embedding GeneratedFileMounter (docker.go line 38). Apple needs the same pattern:\n- Embed GeneratedFileMounter in AppleRuntime struct\n- Implement MountGeneratedFile method\n- Stage files before container startup\n- Pass additional --mount args to container create\n- Set capability to true",
+  "id": "ff-qos.2",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 0,
+  "status": "open",
+  "title": "Apple runtime: implement GeneratedFileRuntime interface for file injection",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:11Z"
+}
