@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:32Z",
+  "description": "NixOS has vm-integration.nix for testing the host module. No equivalent exists for darwin.nix.\n\nNeeded:\n- Nix evaluation test that verifies darwin.nix produces correct config\n- Test that config-gen.nix handles both platforms correctly\n- Verify environment.etc entries are generated properly\n- Test activation script produces correct directory structure\n- Consider using nix-darwin's test framework if available",
+  "id": "ff-qos.8",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 3,
+  "status": "open",
+  "title": "Add nix-darwin module evaluation tests",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:32Z"
+}
