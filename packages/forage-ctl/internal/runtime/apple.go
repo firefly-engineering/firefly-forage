@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	goruntime "runtime"
 	"strings"
@@ -41,6 +42,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
+// defaultAppleImage is the default OCI image for Apple Container sandboxes.
+const defaultAppleImage = "nixos/nix:latest"
+
 // AppleRuntime implements the Runtime interface using Apple Container.
 type AppleRuntime struct {
 	// ContainerPrefix is prepended to sandbox names to form container names
@@ -52,6 +56,13 @@ type AppleRuntime struct {
 	// SandboxesDir is the directory containing sandbox metadata files
 	// Used to resolve container names from metadata
 	SandboxesDir string
+
+	// Image overrides the default OCI image (defaultAppleImage).
+	// When empty, defaultAppleImage is used.
+	Image string
+
+	// GeneratedFileMounter handles staging of generated files
+	GeneratedFileMounter
 }
 
 // NewAppleRuntime creates a new Apple Container runtime.
@@ -122,6 +133,22 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		args = []string{subcommand, "--name", containerName}
 	}
 
+	// Mount the host Nix store and daemon socket into the VM so the
+	// container can use the host's Nix daemon for builds.
+	platformCfg := DetectPlatformMountConfig()
+	nixMounts := NewStandardMounts("", "", "")
+	if platformCfg.UseBindMount {
+		// Nix store (read-only)
+		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s,readonly",
+			platformCfg.NixStorePath, platformCfg.NixStorePath))
+		// Nix daemon socket (read-write so the container can issue build requests)
+		if _, err := os.Stat(platformCfg.NixDaemonSocketPath); err == nil {
+			args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s",
+				platformCfg.NixDaemonSocketPath, platformCfg.NixDaemonSocketPath))
+		}
+	}
+	_ = nixMounts // mounts handled inline above; struct kept for future use
+
 	// Add bind mounts
 	for hostPath, containerPath := range opts.BindMounts {
 		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s", hostPath, containerPath))
@@ -150,11 +177,42 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	// Use a NixOS-compatible image.
 	// The nixos/nix image has binaries in the nix store, not at standard paths.
 	// Use /bin/sh -c to ensure the nix profile PATH is sourced.
-	args = append(args, "nixos/nix:latest")
+	args = append(args, r.containerImage())
 	args = append(args, "/bin/sh", "-c", "exec sleep infinity")
 
 	_, err := r.runCmd(ctx, args...)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Validate Nix store is accessible inside the container
+	if opts.Start {
+		if valErr := r.validateNixStore(ctx, opts.Name); valErr != nil {
+			logging.Warn("Nix store may not be accessible in container", "error", valErr)
+		}
+	}
+
+	return nil
+}
+
+// validateNixStore checks that the Nix store is accessible inside the container.
+func (r *AppleRuntime) validateNixStore(ctx context.Context, sandboxName string) error {
+	result, err := r.Exec(ctx, sandboxName, []string{"ls", "/nix/store"}, ExecOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to validate nix store: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("nix store not accessible (exit %d): %s", result.ExitCode, result.Stderr)
+	}
+	return nil
+}
+
+// containerImage returns the OCI image to use for containers.
+func (r *AppleRuntime) containerImage() string {
+	if r.Image != "" {
+		return r.Image
+	}
+	return defaultAppleImage
 }
 
 // Start starts an existing container
@@ -428,6 +486,23 @@ func (r *AppleRuntime) GracefulStop(ctx context.Context, name string, timeout ti
 	return err
 }
 
+// ContainerInfo returns information about the container environment.
+func (r *AppleRuntime) ContainerInfo() SandboxContainerInfo {
+	return DefaultContainerInfo()
+}
+
+// ViewLogs streams container logs via 'container logs'.
+func (r *AppleRuntime) ViewLogs(ctx context.Context, name string, follow bool, lines int) error {
+	containerName := r.containerName(name)
+
+	args := []string{r.BinaryPath, "logs", containerName, "--tail", fmt.Sprintf("%d", lines)}
+	if follow {
+		args = append(args, "--follow")
+	}
+
+	return syscall.Exec(r.BinaryPath, args, system.SafeEnviron())
+}
+
 // Capabilities returns the capabilities of Apple Container runtime.
 // Apple Container supports resource limits (CPU, memory) via --cpus and --memory.
 func (r *AppleRuntime) Capabilities() Capabilities {
@@ -436,13 +511,15 @@ func (r *AppleRuntime) Capabilities() Capabilities {
 		NetworkIsolation: false,
 		EphemeralRoot:    true,
 		SSHAccess:        false,
-		GeneratedFiles:   false,
+		GeneratedFiles:   true,
 		ResourceLimits:   true,
 		GracefulShutdown: true,
 	}
 }
 
-// Ensure AppleRuntime implements Runtime, CapableRuntime, and GracefulStopper
+// Ensure AppleRuntime implements Runtime, GeneratedFileRuntime, CapableRuntime, GracefulStopper, and LogViewer
 var _ Runtime = (*AppleRuntime)(nil)
+var _ GeneratedFileRuntime = (*AppleRuntime)(nil)
 var _ CapableRuntime = (*AppleRuntime)(nil)
 var _ GracefulStopper = (*AppleRuntime)(nil)
+var _ LogViewer = (*AppleRuntime)(nil)
