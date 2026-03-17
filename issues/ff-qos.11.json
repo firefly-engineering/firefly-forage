@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:32Z",
+  "description": "apple.go line 153 hardcodes 'nixos/nix:latest' as the container image. This should be configurable:\n- Allow template-level image override\n- Allow host config to set default image\n- Validate image exists before attempting container creation\n- Consider pinning to a specific tag for reproducibility",
+  "id": "ff-qos.11",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 3,
+  "status": "open",
+  "title": "Apple runtime: configurable OCI image instead of hardcoded nixos/nix:latest",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:32Z"
+}
