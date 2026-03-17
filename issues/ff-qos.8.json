@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "unknown",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-03-17T21:41:32Z",
@@ -8,8 +8,8 @@
   "labels": [],
   "parent": "ff-qos",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Add nix-darwin module evaluation tests",
   "type": "task",
-  "updated_at": "2026-03-17T21:41:32Z"
+  "updated_at": "2026-03-17T22:02:08Z"
 }
