@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:40:41Z",
+  "description": "Epic tracking all work needed to make firefly-forage sandboxing fully functional on macOS using the Apple Container backend (Virtualization.framework). Current state: basic container lifecycle works (create/start/stop/destroy), but critical capabilities are missing — no Nix store integration, no generated file injection, no network isolation, incomplete darwin.nix module, and minimal test coverage.",
+  "id": "ff-qos",
+  "labels": [],
+  "priority": 0,
+  "status": "open",
+  "title": "macOS sandboxing: end-to-end functional capability",
+  "type": "task",
+  "updated_at": "2026-03-17T21:40:41Z"
+}
