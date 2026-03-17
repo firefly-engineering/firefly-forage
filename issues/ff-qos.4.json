@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "ff-qos.1"
+  ],
   "blocks": [],
   "created": "2026-03-17T21:41:11Z",
   "description": "Apple backend declares NetworkIsolation: false (apple.go line 436). This means agents have unrestricted internet access, breaking the security model.\n\nOptions to investigate:\n- Apple Container CLI network mode flags (--network=none, --network=host)\n- In-VM nftables rules (like nspawn backend uses)\n- Virtualization.framework network configuration API\n- Allowlist-based filtering for restricted mode\n\nNeeded for template options: network: none, network: restricted, allowedHosts list.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Apple runtime: network isolation support",
   "type": "task",
-  "updated_at": "2026-03-17T21:41:11Z"
+  "updated_at": "2026-03-17T21:41:35Z"
 }
