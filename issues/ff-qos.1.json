@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "ff-qos.7"
+  ],
   "created": "2026-03-17T21:41:11Z",
   "description": "The Apple Container backend runs Linux VMs via Virtualization.framework. The host macOS Nix store (/nix/store) is not available inside the VM. Without it, builds fail and the sandbox is non-functional for development.\n\nNeeded:\n- Detect Nix installation type on host (Determinate Nix vs nix-darwin vs standard)\n- Configure VM-level mount for /nix/store (read-only bind or volume)  \n- Forward nix-daemon socket so sandbox uses host's nix daemon\n- Validate nix store is accessible at container startup\n- mounts.go has ToAppleArgs() but it's never called from apple.go\n\nReferences: apple.go lines 18-22 (options documented), mounts.go lines 241-246 (darwin detection), DESIGN.md line 796",
   "id": "ff-qos.1",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Apple runtime: Nix store integration in Virtualization.framework VM",
   "type": "task",
-  "updated_at": "2026-03-17T21:41:11Z"
+  "updated_at": "2026-03-17T21:41:35Z"
 }
