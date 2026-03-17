@@ -43,6 +43,10 @@ in
         assertion = cfg.user != "";
         message = "services.firefly-forage.user must be specified";
       }
+      {
+        assertion = builtins.hasAttr cfg.user (config.users.users or { }) || cfg.user != "";
+        message = "services.firefly-forage.user '${cfg.user}' should be a valid system user";
+      }
     ]
     ++ lib.flatten (
       lib.mapAttrsToList (
@@ -63,6 +67,7 @@ in
     # Generate host configuration file and template configurations
     environment.etc = {
       "${configDir}/config.json" = {
+        mode = "0644";
         text = builtins.toJSON (
           configGen.mkHostConfigJSON {
             inherit cfg resolveTilde';
@@ -75,11 +80,17 @@ in
       inherit configDir;
     };
 
-    # Ensure state directory exists via activation script
+    # Ensure state and secrets directories exist via activation script
     system.activationScripts.postActivation.text = ''
       mkdir -p "${cfg.stateDir}" "${cfg.stateDir}/sandboxes" "${cfg.stateDir}/workspaces"
-      chown ${cfg.user} "${cfg.stateDir}" "${cfg.stateDir}/sandboxes" "${cfg.stateDir}/workspaces"
+      chown ${cfg.user}:staff "${cfg.stateDir}" "${cfg.stateDir}/sandboxes" "${cfg.stateDir}/workspaces"
       chmod 750 "${cfg.stateDir}" "${cfg.stateDir}/sandboxes" "${cfg.stateDir}/workspaces"
+
+      # Secrets directory — use a restrictive mode since it holds API keys.
+      # On macOS there is no tmpfs, but /var/lib is acceptable for development.
+      mkdir -p /run/forage-secrets
+      chown root:wheel /run/forage-secrets
+      chmod 700 /run/forage-secrets
     '';
 
     # Health monitor launchd service
