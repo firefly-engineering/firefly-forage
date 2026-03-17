@@ -2,14 +2,15 @@
   "assignee": "unknown",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-03-17T21:57:03Z",
   "created": "2026-03-17T21:41:11Z",
   "description": "darwin.nix (104 lines) is functional but has several gaps compared to host.nix (154 lines):\n\n1. Missing secrets directory creation — agents with secretName will fail\n2. config.json missing extraAttrs (uid, gid, authorizedKeys) — Go CLI may expect these\n3. chown missing group specification (line 81: chown user vs chown user:group)\n4. No explicit file mode on environment.etc config entries\n5. No user existence assertion (both modules should have this)\n6. No documentation of platform-specific config.json field differences\n\nAlso: verify Go CLI (config/config.go) handles missing fields gracefully on darwin.",
   "id": "ff-qos.3",
   "labels": [],
   "parent": "ff-qos",
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "darwin.nix: complete module for feature parity with host.nix",
   "type": "task",
-  "updated_at": "2026-03-17T21:56:26Z"
+  "updated_at": "2026-03-17T21:57:03Z"
 }
