@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -166,6 +167,19 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		"--label", "forage.container-name="+containerName,
 	)
 
+	// Apply resource limits via Apple Container CLI flags
+	if opts.CPUQuota != "" {
+		// Apple Container uses --cpus (float, e.g. "2.0" for 2 cores).
+		// Convert from percentage format (e.g. "200%") to float.
+		cpus := cpuQuotaToFloat(opts.CPUQuota)
+		if cpus != "" {
+			args = append(args, "--cpus", cpus)
+		}
+	}
+	if opts.MemoryMax != "" {
+		args = append(args, "--memory", opts.MemoryMax)
+	}
+
 	// Add environment variables
 	for k, v := range opts.EnvVars {
 		args = append(args, "-e", k+"="+v)
@@ -213,6 +227,17 @@ func (r *AppleRuntime) containerImage() string {
 		return r.Image
 	}
 	return defaultAppleImage
+}
+
+// cpuQuotaToFloat converts a CPU quota string (e.g. "200%" for 2 cores)
+// to a float string (e.g. "2.0") suitable for Apple Container's --cpus flag.
+func cpuQuotaToFloat(quota string) string {
+	s := strings.TrimSuffix(quota, "%")
+	pct, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return ""
+	}
+	return strconv.FormatFloat(pct/100, 'f', 1, 64)
 }
 
 // Start starts an existing container

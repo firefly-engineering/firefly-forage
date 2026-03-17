@@ -44,6 +44,12 @@ type CreateOptions struct {
 	EnvVars      map[string]string // environment variables
 	NetworkSlot  int               // For private networking
 	ExtraArgs    []string          // Backend-specific arguments
+
+	// Resource limits (optional). Runtimes that declare ResourceLimits
+	// capability translate these to backend-specific flags.
+	CPUQuota  string // CPU quota (e.g. "200%" for 2 cores)
+	MemoryMax string // Memory limit (e.g. "4G")
+	TasksMax  int    // Maximum number of tasks/processes
 }
 
 // ExecOptions holds options for executing a command in a container

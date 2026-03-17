@@ -738,13 +738,24 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 	}
 
 	logging.Debug("creating container via runtime", "name", opts.Name, "mounts", len(bindMounts), "envVars", len(envVars))
-	return c.rt.Create(ctx, runtime.CreateOptions{
+	createOpts := runtime.CreateOptions{
 		Name:        opts.Name,
 		Start:       true,
 		BindMounts:  bindMounts,
 		EnvVars:     envVars,
 		NetworkSlot: resources.networkSlot,
-	})
+	}
+
+	// Pass resource limits if configured and runtime supports them
+	caps := runtime.GetCapabilities(c.rt)
+	if caps.ResourceLimits && resources.template.ResourceLimits != nil {
+		rl := resources.template.ResourceLimits
+		createOpts.CPUQuota = rl.CPUQuota
+		createOpts.MemoryMax = rl.MemoryMax
+		createOpts.TasksMax = rl.TasksMax
+	}
+
+	return c.rt.Create(ctx, createOpts)
 }
 
 // startContainer creates and starts the container via the runtime.
