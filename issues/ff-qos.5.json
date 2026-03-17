@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:11Z",
+  "description": "Apple backend declares ResourceLimits: true (apple.go line 440) but Create() never parses or applies them. ExtraArgs from creator.go are built for nspawn syntax and ignored.\n\nNeeded:\n- Map cpuQuota/memoryMax/tasksMax to Apple Container CLI flags\n- Parse resource limits from CreateOptions.ExtraArgs or add dedicated fields\n- Validate limits are applied (inspect output should reflect them)\n- Fix the false capability declaration or implement the feature",
+  "id": "ff-qos.5",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 2,
+  "status": "open",
+  "title": "Apple runtime: implement resource limits (CPU/memory)",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:11Z"
+}
