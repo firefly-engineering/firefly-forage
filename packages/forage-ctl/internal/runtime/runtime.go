@@ -50,6 +50,11 @@ type CreateOptions struct {
 	CPUQuota  string // CPU quota (e.g. "200%" for 2 cores)
 	MemoryMax string // Memory limit (e.g. "4G")
 	TasksMax  int    // Maximum number of tasks/processes
+
+	// Network isolation (optional). Runtimes that declare NetworkIsolation
+	// capability use this to configure the container's network.
+	NetworkMode  string   // "full", "restricted", "none" (empty = full)
+	AllowedHosts []string // Hosts allowed in restricted mode
 }
 
 // ExecOptions holds options for executing a command in a container

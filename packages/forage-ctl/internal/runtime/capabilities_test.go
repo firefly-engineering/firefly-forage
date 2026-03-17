@@ -67,8 +67,8 @@ func TestAppleCapabilities(t *testing.T) {
 	if caps.NixOSConfig {
 		t.Error("apple should not support NixOSConfig")
 	}
-	if caps.NetworkIsolation {
-		t.Error("apple should not support NetworkIsolation")
+	if !caps.NetworkIsolation {
+		t.Error("apple should support NetworkIsolation")
 	}
 	if !caps.EphemeralRoot {
 		t.Error("apple should support EphemeralRoot")

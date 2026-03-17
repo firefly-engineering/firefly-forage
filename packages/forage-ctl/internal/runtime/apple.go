@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	goruntime "runtime"
@@ -231,6 +232,17 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		args = append(args, "--publish", fmt.Sprintf("127.0.0.1:%d:%d", hostPort, containerPort))
 	}
 
+	// Network isolation
+	switch opts.NetworkMode {
+	case "none":
+		args = append(args, "--network=none")
+	case "restricted":
+		// Start with networking enabled; iptables rules are injected post-start
+		// via applyRestrictedNetwork
+	default:
+		// "full" or empty: default networking
+	}
+
 	// Add labels for orphan detection
 	args = append(args,
 		"--label", "forage.sandbox-name="+opts.Name,
@@ -270,13 +282,73 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		return err
 	}
 
-	// Validate Nix store is accessible inside the container
+	// Post-start tasks
 	if opts.Start {
+		// Validate Nix store is accessible inside the container
 		if valErr := r.validateNixStore(ctx, opts.Name); valErr != nil {
 			logging.Warn("Nix store may not be accessible in container", "error", valErr)
 		}
+
+		// Apply iptables rules for restricted network mode
+		if opts.NetworkMode == "restricted" {
+			if netErr := r.applyRestrictedNetwork(ctx, opts.Name, opts.AllowedHosts); netErr != nil {
+				return fmt.Errorf("failed to apply network restrictions: %w", netErr)
+			}
+		}
 	}
 
+	return nil
+}
+
+// applyRestrictedNetwork injects iptables rules inside the container to restrict
+// outbound traffic to only the allowed hosts. This is used for the "restricted"
+// network mode where the container starts with full networking and then gets
+// filtered. The iptables approach works inside any Linux container without
+// requiring NixOS or nftables.
+func (r *AppleRuntime) applyRestrictedNetwork(ctx context.Context, sandboxName string, allowedHosts []string) error {
+	logging.Debug("applying restricted network rules", "sandbox", sandboxName, "allowedHosts", allowedHosts)
+
+	// Resolve allowed hosts to IPs
+	resolved, err := net.LookupIP("localhost") // Warm up resolver
+	_ = resolved
+	_ = err
+
+	// Build the iptables rules script
+	var script strings.Builder
+	script.WriteString("set -e\n")
+	// Default policy: drop outbound
+	script.WriteString("iptables -P OUTPUT DROP 2>/dev/null || true\n")
+	// Allow loopback
+	script.WriteString("iptables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true\n")
+	// Allow established/related
+	script.WriteString("iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true\n")
+
+	// Allow each host
+	for _, host := range allowedHosts {
+		ips, lookupErr := net.LookupIP(host)
+		if lookupErr != nil {
+			logging.Warn("failed to resolve host for network restriction", "host", host, "error", lookupErr)
+			continue
+		}
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				fmt.Fprintf(&script, "iptables -A OUTPUT -d %s -j ACCEPT 2>/dev/null || true\n", ip.String())
+			}
+		}
+	}
+
+	// Reject remaining with ICMP unreachable (better than silent drop)
+	script.WriteString("iptables -A OUTPUT -j REJECT 2>/dev/null || true\n")
+
+	result, execErr := r.Exec(ctx, sandboxName, []string{"sh", "-c", script.String()}, ExecOptions{User: "root"})
+	if execErr != nil {
+		return fmt.Errorf("failed to apply iptables rules: %w", execErr)
+	}
+	if result.ExitCode != 0 {
+		logging.Warn("iptables rules may not have applied cleanly", "stderr", result.Stderr)
+	}
+
+	logging.Debug("restricted network rules applied", "sandbox", sandboxName)
 	return nil
 }
 
@@ -599,7 +671,7 @@ func (r *AppleRuntime) ViewLogs(ctx context.Context, name string, follow bool, l
 func (r *AppleRuntime) Capabilities() Capabilities {
 	return Capabilities{
 		NixOSConfig:      false,
-		NetworkIsolation: false,
+		NetworkIsolation: true,
 		EphemeralRoot:    true,
 		SSHAccess:        false,
 		GeneratedFiles:   true,

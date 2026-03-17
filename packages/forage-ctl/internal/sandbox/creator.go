@@ -755,6 +755,12 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 		createOpts.TasksMax = rl.TasksMax
 	}
 
+	// Pass network isolation if runtime supports it
+	if caps.NetworkIsolation {
+		createOpts.NetworkMode = resources.template.Network
+		createOpts.AllowedHosts = resources.template.AllowedHosts
+	}
+
 	return c.rt.Create(ctx, createOpts)
 }
 
