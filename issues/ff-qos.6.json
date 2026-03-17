@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:11Z",
+  "description": "Apple backend does not implement LogViewer interface. Users cannot debug container issues via forage-ctl logs.\n\nNeeded:\n- Investigate Apple Container CLI log support (container logs \u003cname\u003e?)\n- Implement ViewLogs method on AppleRuntime\n- Fall back to exec + journalctl or /var/log if no native log support",
+  "id": "ff-qos.6",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 2,
+  "status": "open",
+  "title": "Apple runtime: implement LogViewer interface",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:11Z"
+}
