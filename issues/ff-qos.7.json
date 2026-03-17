@@ -5,14 +5,15 @@
     "ff-qos.2"
   ],
   "blocks": [],
+  "closed_at": "2026-03-17T22:10:51Z",
   "created": "2026-03-17T21:41:32Z",
   "description": "Current apple tests (test-apple-git.sh, test-apple-jj.sh) are 21-line wrappers that delegate entirely to shared generic scenarios. No Apple-specific behaviors are tested.\n\nMissing test coverage:\n- Nix store availability in VM\n- Generated file injection (once implemented)\n- Port forwarding validation\n- Environment variable propagation\n- Container inspect JSON parsing correctness\n- Command wrapping in /bin/sh -c (apple.go lines 309-312)\n- Graceful shutdown timeout behavior\n- Label-based orphan detection\n- scenario_bidirectional_sync is commented out as flaky (scenarios.sh line 299)\n\nAdd apple-specific scenarios exercising features unique to the VM-based backend.",
   "id": "ff-qos.7",
   "labels": [],
   "parent": "ff-qos",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Integration tests: apple-specific test scenarios",
   "type": "task",
-  "updated_at": "2026-03-17T22:09:29Z"
+  "updated_at": "2026-03-17T22:10:51Z"
 }
