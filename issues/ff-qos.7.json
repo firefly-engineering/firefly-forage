@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "ff-qos.1"
+    "ff-qos.1",
+    "ff-qos.2"
   ],
   "blocks": [],
   "created": "2026-03-17T21:41:32Z",
