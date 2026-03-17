@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -103,6 +104,39 @@ func (r *AppleRuntime) Name() string {
 	return "apple"
 }
 
+// containerCmdError wraps an Apple Container CLI error with the exit code
+// so callers can branch on exit codes instead of fragile string matching.
+type containerCmdError struct {
+	Subcommand string
+	ExitCode   int
+	Stderr     string
+	Err        error
+}
+
+func (e *containerCmdError) Error() string {
+	return fmt.Sprintf("container %s failed: %s: %v", e.Subcommand, e.Stderr, e.Err)
+}
+
+func (e *containerCmdError) Unwrap() error { return e.Err }
+
+// isNotFound returns true when the CLI indicated the target resource does not exist.
+// It checks the exit code first (non-zero) and falls back to stderr keywords
+// for CLIs that don't use distinct exit codes.
+func isContainerNotFound(err error) bool {
+	var cmdErr *containerCmdError
+	if !errors.As(err, &cmdErr) {
+		return false
+	}
+	// Any non-zero exit + stderr containing a "not found" variant
+	if cmdErr.ExitCode == 0 {
+		return false
+	}
+	lower := strings.ToLower(cmdErr.Stderr)
+	return strings.Contains(lower, "not found") ||
+		strings.Contains(lower, "no such container") ||
+		strings.Contains(lower, "does not exist")
+}
+
 // runCmd executes an Apple Container command
 func (r *AppleRuntime) runCmd(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, r.BinaryPath, args...)
@@ -111,7 +145,16 @@ func (r *AppleRuntime) runCmd(ctx context.Context, args ...string) (string, erro
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("container %s failed: %s: %w", args[0], stderr.String(), err)
+		exitCode := -1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+		return "", &containerCmdError{
+			Subcommand: args[0],
+			ExitCode:   exitCode,
+			Stderr:     stderr.String(),
+			Err:        err,
+		}
 	}
 
 	return stdout.String(), nil
@@ -268,13 +311,8 @@ func (r *AppleRuntime) Destroy(ctx context.Context, name string) error {
 
 	// Remove container (Apple CLI uses 'rm' or 'delete', no -f flag)
 	_, err := r.runCmd(ctx, "rm", containerName)
-	if err != nil {
-		// Ignore "not found" errors
-		if strings.Contains(err.Error(), "not found") ||
-			strings.Contains(err.Error(), "No such container") ||
-			strings.Contains(err.Error(), "does not exist") {
-			return nil
-		}
+	if err != nil && isContainerNotFound(err) {
+		return nil
 	}
 
 	return err
