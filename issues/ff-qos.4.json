@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "unknown",
   "blocked_by": [
     "ff-qos.1"
   ],
@@ -10,8 +10,8 @@
   "labels": [],
   "parent": "ff-qos",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Apple runtime: network isolation support",
   "type": "task",
-  "updated_at": "2026-03-17T21:41:35Z"
+  "updated_at": "2026-03-17T22:06:10Z"
 }
