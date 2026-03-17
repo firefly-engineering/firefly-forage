@@ -27,11 +27,22 @@ func Connect(ctx context.Context, name, sandboxesDir string, rt runtime.Runtime)
 		}
 	}
 
+	caps := runtime.GetCapabilities(rt)
 	containerIP := metadata.ContainerIP()
-	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP)
+	logging.Debug("connecting to sandbox", "name", name, "ip", containerIP, "sshAccess", caps.SSHAccess)
 
 	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer))
-	if attachCmd := mux.AttachCommand(); attachCmd != "" {
+	attachCmd := mux.AttachCommand()
+
+	// For runtimes without SSH, use exec-based attach
+	if !caps.SSHAccess && rt != nil {
+		if attachCmd != "" {
+			return runtime.ExecShellInteractive(ctx, rt, name, attachCmd, runtime.ExecOptions{})
+		}
+		return rt.ExecInteractive(ctx, name, []string{"sh"}, runtime.ExecOptions{})
+	}
+
+	if attachCmd != "" {
 		return ssh.ReplaceWithSession(containerIP, attachCmd)
 	}
 	// For multiplexers without an attach command (e.g. wezterm in SSH context),

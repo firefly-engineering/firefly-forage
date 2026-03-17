@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/multiplexer"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/ssh"
 )
 
@@ -33,8 +34,15 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	noCC, _ := cmd.Flags().GetBool("no-tmux-cc")
 	mux := multiplexer.New(multiplexer.Type(metadata.Multiplexer), multiplexer.WithControlMode(!noCC))
 
+	rt := getRuntime()
+	caps := runtime.GetCapabilities(rt)
+
 	if attachCmd := mux.AttachCommand(); attachCmd != "" {
-		return ssh.ReplaceWithSession(metadata.ContainerIP(), attachCmd)
+		// Use SSH for runtimes that support it, exec-based attach otherwise
+		if caps.SSHAccess {
+			return ssh.ReplaceWithSession(metadata.ContainerIP(), attachCmd)
+		}
+		return runtime.ExecShellInteractive(cmd.Context(), rt, name, attachCmd, runtime.ExecOptions{})
 	}
 
 	// Check if multiplexer supports native connect (e.g., wezterm)
