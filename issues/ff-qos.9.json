@@ -2,14 +2,15 @@
   "assignee": "unknown",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-03-17T22:02:00Z",
   "created": "2026-03-17T21:41:32Z",
   "description": "Apple backend has no validation of prerequisites:\n- container CLI existence and version (need macOS 13+)\n- nixos/nix:latest image availability (hardcoded at apple.go line 153)\n- Nix store accessibility from VM\n- Apple Container daemon health\n\nAdd a Validate() or preflight check that runs before first container creation and provides actionable error messages.",
   "id": "ff-qos.9",
   "labels": [],
   "parent": "ff-qos",
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Apple runtime: validate prerequisites at startup",
   "type": "task",
-  "updated_at": "2026-03-17T22:01:21Z"
+  "updated_at": "2026-03-17T22:02:00Z"
 }
