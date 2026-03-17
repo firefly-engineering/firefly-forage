@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-17T21:41:32Z",
+  "description": "apple.go lines 190-194 use strings.Contains to match error messages like 'not found', 'No such container', 'does not exist'. These will break silently if Apple CLI changes wording.\n\nOptions:\n- Parse exit codes instead of error text\n- Use structured JSON output where available\n- At minimum, add tests that verify error matching against real CLI output",
+  "id": "ff-qos.10",
+  "labels": [],
+  "parent": "ff-qos",
+  "priority": 3,
+  "status": "open",
+  "title": "Apple runtime: replace fragile string-based error matching",
+  "type": "task",
+  "updated_at": "2026-03-17T21:41:32Z"
+}
