@@ -80,11 +80,39 @@ func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error
 		return nil, fmt.Errorf("Apple Container CLI not found. Install with: brew install apple/containerization/container")
 	}
 
-	return &AppleRuntime{
+	rt := &AppleRuntime{
 		ContainerPrefix: containerPrefix,
 		BinaryPath:      binaryPath,
 		SandboxesDir:    sandboxesDir,
-	}, nil
+	}
+
+	// Run preflight checks (warnings only — don't prevent creation)
+	rt.preflight()
+
+	return rt, nil
+}
+
+// preflight validates prerequisites and logs actionable warnings.
+// It does not return errors because missing prerequisites may be
+// resolved before the first container creation.
+func (r *AppleRuntime) preflight() {
+	// Check CLI version / health
+	output, err := r.runCmd(context.Background(), "version")
+	if err != nil {
+		logging.Warn("Apple Container CLI may not be functional", "error", err)
+	} else {
+		logging.Debug("Apple Container CLI version", "output", strings.TrimSpace(output))
+	}
+
+	// Check Nix store is accessible on the host
+	if _, err := os.Stat("/nix/store"); err != nil {
+		logging.Warn("Nix store not found at /nix/store — containers will not have access to Nix packages. Install Nix: https://nixos.org/download")
+	}
+
+	// Check nix-daemon socket
+	if _, err := os.Stat("/nix/var/nix/daemon-socket/socket"); err != nil {
+		logging.Warn("Nix daemon socket not found — container builds may fail. Ensure nix-daemon is running")
+	}
 }
 
 // containerName returns the full container name for a sandbox.
