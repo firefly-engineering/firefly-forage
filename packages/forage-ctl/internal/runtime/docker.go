@@ -150,10 +150,13 @@ func (r *DockerRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	_, err := r.runCmd(ctx, args...)
 	if err != nil {
 		// If the default image failed and no explicit override was set,
-		// fall back to the upstream nixos/nix image. This handles offline
-		// environments or first-run before the GHCR image is available.
+		// build the base image locally from the embedded Dockerfile.
 		if image == DefaultImage && opts.Image == "" {
-			logging.Warn("default image unavailable, falling back to "+FallbackImage, "error", err)
+			logging.Warn("default image unavailable, building locally", "error", err)
+			cmdPath, _ := exec.LookPath(r.Command)
+			if buildErr := BuildFallbackImage(ctx, cmdPath); buildErr != nil {
+				return fmt.Errorf("image pull failed and local build failed: %w", buildErr)
+			}
 			args[imageIdx] = FallbackImage
 			if _, retryErr := r.runCmd(ctx, args...); retryErr != nil {
 				return retryErr

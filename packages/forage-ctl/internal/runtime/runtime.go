@@ -5,8 +5,16 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
+
+	image "github.com/firefly-engineering/firefly-forage/images/forage-base"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 )
 
 // ContainerStatus represents the state of a container
@@ -23,9 +31,33 @@ const (
 	// DefaultImage is the pre-built base image with common packages (tmux, git, jq).
 	DefaultImage = "ghcr.io/firefly-engineering/forage-base:latest"
 
-	// FallbackImage is used when DefaultImage is unavailable (e.g. no registry access).
-	FallbackImage = "nixos/nix:latest"
+	// FallbackImage is the tag used when building the base image locally.
+	FallbackImage = "forage-base:local"
 )
+
+// BuildFallbackImage builds the forage-base image locally using the embedded
+// Dockerfile. Called by runtimes when the pre-built GHCR image is unavailable.
+// The buildCmd is the container CLI binary (e.g. "container", "docker").
+func BuildFallbackImage(ctx context.Context, buildCmd string) error {
+	dir, err := os.MkdirTemp("", "forage-base-build-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp build dir: %w", err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), image.Dockerfile, 0644); err != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", err)
+	}
+
+	logging.Info("building forage-base image locally (this may take a minute)...")
+	cmd := exec.CommandContext(ctx, buildCmd, "build", "-t", FallbackImage, dir)
+	cmd.Stdout = os.Stderr // show build progress
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to build fallback image: %w", err)
+	}
+	return nil
+}
 
 // ContainerInfo holds information about a container
 type ContainerInfo struct {

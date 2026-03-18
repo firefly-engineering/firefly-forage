@@ -832,7 +832,7 @@ func (c *Creator) installPackages(ctx context.Context, name string, packages []i
 	// aren't enabled in nix.conf (e.g. the fallback nixos/nix:latest image).
 	// --profile targets the default profile whose bin/ is already on PATH;
 	// without it, nix writes to a per-user profile that isn't on PATH.
-	script := "nix --extra-experimental-features 'nix-command flakes' profile install --profile /nix/var/nix/profiles/default --no-write-lock-file " + strings.Join(deduped, " ")
+	script := "NIXPKGS_ALLOW_UNFREE=1 nix --extra-experimental-features 'nix-command flakes' profile install --impure --profile /nix/var/nix/profiles/default --no-write-lock-file " + strings.Join(deduped, " ")
 
 	installCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
