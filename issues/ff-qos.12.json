@@ -2,14 +2,15 @@
   "assignee": "unknown",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-03-18T07:58:38Z",
   "created": "2026-03-18T07:58:17Z",
   "description": "Make forage-ctl pick/ssh work for Apple runtime by using exec-based attach instead of SSH.\n\nApple Container uses vmnet with different IPs and has no SSH daemon. The fix:\n- ssh/pick commands detect runtime capabilities and use ExecInteractive when SSHAccess=false\n- Multiplexer session is started post-creation for OCI runtimes (not just nspawn)\n\n```mermaid\ngraph LR\n    1[exec-based attach] --\u003e 2[mux init post-create]\n```",
   "id": "ff-qos.12",
   "labels": [],
   "parent": "ff-qos",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Exec-based connectivity for Apple Container runtime",
   "type": "epic",
-  "updated_at": "2026-03-18T07:58:32Z"
+  "updated_at": "2026-03-18T07:58:38Z"
 }
