@@ -46,7 +46,7 @@ import (
 )
 
 // defaultAppleImage is the default OCI image for Apple Container sandboxes.
-const defaultAppleImage = "ghcr.io/firefly-engineering/forage-base:latest"
+const defaultAppleImage = DefaultImage
 
 // AppleRuntime implements the Runtime interface using Apple Container.
 type AppleRuntime struct {
@@ -290,12 +290,24 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	if opts.Image != "" {
 		image = opts.Image
 	}
+	imageIdx := len(args)
 	args = append(args, image)
 	args = append(args, "/bin/sh", "-c", "exec sleep infinity")
 
 	_, err := r.runCmd(ctx, args...)
 	if err != nil {
-		return err
+		// If the default image failed and no explicit override was set,
+		// fall back to the upstream nixos/nix image. This handles offline
+		// environments or first-run before the GHCR image is available.
+		if image == DefaultImage && opts.Image == "" {
+			logging.Warn("default image unavailable, falling back to "+FallbackImage, "error", err)
+			args[imageIdx] = FallbackImage
+			if _, retryErr := r.runCmd(ctx, args...); retryErr != nil {
+				return retryErr
+			}
+		} else {
+			return err
+		}
 	}
 
 	// Post-start tasks

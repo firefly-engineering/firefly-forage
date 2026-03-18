@@ -828,7 +828,9 @@ func (c *Creator) installPackages(ctx context.Context, name string, packages []i
 	logging.Debug("installing packages in container", "name", name, "packages", deduped)
 
 	// nix profile install can take multiple installables in one invocation.
-	script := "nix profile install --no-write-lock-file " + strings.Join(deduped, " ")
+	// --extra-experimental-features is needed for images where nix-command/flakes
+	// aren't enabled in nix.conf (e.g. the fallback nixos/nix:latest image).
+	script := "nix --extra-experimental-features 'nix-command flakes' profile install --no-write-lock-file " + strings.Join(deduped, " ")
 
 	installCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -852,7 +854,7 @@ func (c *Creator) listInstalledPackages(ctx context.Context, name string) map[st
 	listCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	result, err := runtime.ExecShell(listCtx, c.rt, name, "nix profile list --json", runtime.ExecOptions{})
+	result, err := runtime.ExecShell(listCtx, c.rt, name, "nix --extra-experimental-features 'nix-command flakes' profile list --json", runtime.ExecOptions{})
 	if err != nil || result.ExitCode != 0 {
 		return nil
 	}

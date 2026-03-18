@@ -16,7 +16,7 @@ import (
 )
 
 // defaultDockerImage is the default OCI image for Docker/Podman sandboxes.
-const defaultDockerImage = "ghcr.io/firefly-engineering/forage-base:latest"
+const defaultDockerImage = DefaultImage
 
 // DockerRuntime implements the Runtime interface using Docker or Podman.
 // It auto-detects which container engine is available.
@@ -144,11 +144,23 @@ func (r *DockerRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	if opts.Image != "" {
 		image = opts.Image
 	}
+	imageIdx := len(args)
 	args = append(args, image, "sleep", "infinity")
 
 	_, err := r.runCmd(ctx, args...)
 	if err != nil {
-		return err
+		// If the default image failed and no explicit override was set,
+		// fall back to the upstream nixos/nix image. This handles offline
+		// environments or first-run before the GHCR image is available.
+		if image == DefaultImage && opts.Image == "" {
+			logging.Warn("default image unavailable, falling back to "+FallbackImage, "error", err)
+			args[imageIdx] = FallbackImage
+			if _, retryErr := r.runCmd(ctx, args...); retryErr != nil {
+				return retryErr
+			}
+		} else {
+			return err
+		}
 	}
 
 	if opts.Start {

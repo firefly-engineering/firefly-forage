@@ -19,6 +19,14 @@ const (
 	StatusUnknown  ContainerStatus = "unknown"
 )
 
+const (
+	// DefaultImage is the pre-built base image with common packages (tmux, git, jq).
+	DefaultImage = "ghcr.io/firefly-engineering/forage-base:latest"
+
+	// FallbackImage is used when DefaultImage is unavailable (e.g. no registry access).
+	FallbackImage = "nixos/nix:latest"
+)
+
 // ContainerInfo holds information about a container
 type ContainerInfo struct {
 	Name      string
