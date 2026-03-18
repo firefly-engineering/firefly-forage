@@ -77,6 +77,12 @@ func (b *JJBackend) Remove(repoPath, name, workspacePath string) error {
 	return nil
 }
 
+// ContributePackages returns the packages needed for jj inside the container.
+// The nixpkgs package is "jujutsu" (not "jj", which is an unrelated JSON tool).
+func (b *JJBackend) ContributePackages(ctx context.Context) ([]injection.Package, error) {
+	return []injection.Package{{Name: "jujutsu"}}, nil
+}
+
 // ContributeMounts returns mounts for jj workspace mode.
 // Mounts both .jj and .git directories since jj uses git as its storage backend.
 func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
@@ -193,7 +199,8 @@ func (b *JJBackend) ListSnapshots(repoPath, name string) ([]SnapshotInfo, error)
 
 // Ensure JJBackend implements contribution interfaces
 var (
-	_ injection.MountContributor  = (*JJBackend)(nil)
-	_ injection.PromptContributor = (*JJBackend)(nil)
-	_ Snapshotter                 = (*JJBackend)(nil)
+	_ injection.PackageContributor = (*JJBackend)(nil)
+	_ injection.MountContributor   = (*JJBackend)(nil)
+	_ injection.PromptContributor  = (*JJBackend)(nil)
+	_ Snapshotter                  = (*JJBackend)(nil)
 )

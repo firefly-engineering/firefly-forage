@@ -5,7 +5,7 @@ FROM nixos/nix:latest
 RUN mkdir -p /etc/nix && \
     echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
 
-RUN nix profile install --no-write-lock-file \
+RUN nix profile install --profile /nix/var/nix/profiles/default --no-write-lock-file \
     nixpkgs#tmux \
     nixpkgs#git \
     nixpkgs#jq \
