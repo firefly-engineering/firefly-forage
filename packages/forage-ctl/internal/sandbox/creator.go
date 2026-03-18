@@ -785,22 +785,34 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 
 // installPackages installs contributed packages inside an OCI container via nix.
 // The nspawn path declares these in environment.systemPackages; the OCI path
-// must install them post-start since the nixos/nix image is bare.
+// must install them post-start since the base image may not have them.
 func (c *Creator) installPackages(ctx context.Context, name string, packages []injection.Package) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
+	// Query which packages are already installed in the container's nix profile.
+	installed := c.listInstalledPackages(ctx, name)
+
 	// Build nix installable references from package names.
 	// Bare names (e.g. "tmux") become "nixpkgs#tmux".
 	// Flake references (containing # or /) are used as-is.
+	// Packages already installed in the image are skipped.
 	var installables []string
 	for _, pkg := range packages {
+		if installed[pkg.Name] {
+			logging.Debug("skipping already-installed package", "package", pkg.Name)
+			continue
+		}
 		ref := pkg.Name
 		if !strings.Contains(ref, "#") && !strings.Contains(ref, "/") {
 			ref = "nixpkgs#" + ref
 		}
 		installables = append(installables, ref)
+	}
+
+	if len(installables) == 0 {
+		return nil
 	}
 
 	// Deduplicate
@@ -830,6 +842,38 @@ func (c *Creator) installPackages(ctx context.Context, name string, packages []i
 	}
 
 	return nil
+}
+
+// listInstalledPackages queries the container's nix profile for already-installed
+// packages and returns a set of their names. This allows installPackages to skip
+// packages that ship in the base image, regardless of which image is used.
+// Returns an empty map on any error (fail-open: we'll just reinstall).
+func (c *Creator) listInstalledPackages(ctx context.Context, name string) map[string]bool {
+	listCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	result, err := runtime.ExecShell(listCtx, c.rt, name, "nix profile list --json", runtime.ExecOptions{})
+	if err != nil || result.ExitCode != 0 {
+		return nil
+	}
+
+	// Parse {"elements": {"tmux": {...}, "git": {...}}, "version": N}
+	var profile struct {
+		Elements map[string]json.RawMessage `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &profile); err != nil {
+		return nil
+	}
+
+	installed := make(map[string]bool, len(profile.Elements))
+	for pkg := range profile.Elements {
+		installed[pkg] = true
+	}
+
+	if len(installed) > 0 {
+		logging.Debug("detected pre-installed packages", "packages", installed)
+	}
+	return installed
 }
 
 // startMuxSession execs the multiplexer init script inside an OCI container.
