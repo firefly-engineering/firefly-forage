@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-18T07:58:24Z",
+  "description": "createGeneric: exec multiplexer InitScript after container start for non-NixOS runtimes",
+  "id": "ff-qos.12.2",
+  "labels": [],
+  "parent": "ff-qos.12",
+  "priority": 2,
+  "status": "open",
+  "title": "Start mux session post-creation for OCI runtimes",
+  "type": "task",
+  "updated_at": "2026-03-18T07:58:24Z"
+}
