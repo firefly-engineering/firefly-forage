@@ -2,9 +2,10 @@
   description = "Firefly Forage - Isolated sandboxes for AI coding agents";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nix-pins.url = "github:firefly-engineering/nix-pins";
+    nixpkgs.follows = "nix-pins/nixpkgs";
     toolbox.url = "github:firefly-engineering/toolbox";
-    toolbox.inputs.nixpkgs.follows = "nixpkgs";
+    toolbox.inputs.nix-pins.follows = "nix-pins";
   };
 
   outputs =
@@ -12,6 +13,7 @@
       self,
       nixpkgs,
       toolbox,
+      ...
     }:
     let
       supportedSystems = [
@@ -95,14 +97,13 @@
 
                 # Testing dependencies
                 git
-                jujutsu
 
                 # Task runner
                 just
               ]
               ++ (with toolbox.packages.${system}; [
-                beads-rust-default
-                beads-viewer-default
+                beadwork-default
+                jj-default
               ]);
           };
 
