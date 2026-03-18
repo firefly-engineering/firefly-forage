@@ -32,6 +32,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -224,8 +225,8 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 
 	// Add bind mounts.
 	// Apple Container only supports directory mounts, not individual files.
-	// Skip file mounts (they are typically generated files that can be
-	// injected via exec post-start, or whose parent directory is already mounted).
+	// File mounts are collected and injected post-start via exec cp.
+	var fileMounts map[string]string
 	for hostPath, containerPath := range opts.BindMounts {
 		info, err := os.Stat(hostPath)
 		if err != nil {
@@ -233,7 +234,11 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 			continue
 		}
 		if !info.IsDir() {
-			logging.Debug("skipping file mount (Apple Container only supports directories)", "host", hostPath, "container", containerPath)
+			if fileMounts == nil {
+				fileMounts = make(map[string]string)
+			}
+			fileMounts[hostPath] = containerPath
+			logging.Debug("deferring file mount to post-start copy", "host", hostPath, "container", containerPath)
 			continue
 		}
 		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s", hostPath, containerPath))
@@ -297,10 +302,12 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	_, err := r.runCmd(ctx, args...)
 	if err != nil {
 		// If the default image failed and no explicit override was set,
-		// fall back to the upstream nixos/nix image. This handles offline
-		// environments or first-run before the GHCR image is available.
+		// build the base image locally from the embedded Dockerfile.
 		if image == DefaultImage && opts.Image == "" {
-			logging.Warn("default image unavailable, falling back to "+FallbackImage, "error", err)
+			logging.Warn("default image unavailable, building locally", "error", err)
+			if buildErr := BuildFallbackImage(ctx, r.BinaryPath); buildErr != nil {
+				return fmt.Errorf("image pull failed and local build failed: %w", buildErr)
+			}
 			args[imageIdx] = FallbackImage
 			if _, retryErr := r.runCmd(ctx, args...); retryErr != nil {
 				return retryErr
@@ -312,6 +319,11 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 
 	// Post-start tasks
 	if opts.Start {
+		// Copy deferred file mounts into the container
+		if len(fileMounts) > 0 {
+			r.injectFileMounts(ctx, opts.Name, fileMounts)
+		}
+
 		// Validate Nix store is accessible inside the container
 		if valErr := r.validateNixStore(ctx, opts.Name); valErr != nil {
 			logging.Warn("Nix store may not be accessible in container", "error", valErr)
@@ -326,6 +338,35 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	}
 
 	return nil
+}
+
+// injectFileMounts copies host files into the container via exec.
+// Apple Container doesn't support file bind mounts, so we read the file
+// on the host and write it inside the container post-start.
+func (r *AppleRuntime) injectFileMounts(ctx context.Context, sandboxName string, mounts map[string]string) {
+	containerName := r.containerName(sandboxName)
+
+	for hostPath, containerPath := range mounts {
+		data, err := os.ReadFile(hostPath)
+		if err != nil {
+			logging.Warn("failed to read file for injection", "host", hostPath, "error", err)
+			continue
+		}
+
+		// Run the copy command directly via the container CLI, bypassing
+		// the Exec method's /bin/sh wrapping to avoid double-escaping.
+		dir := filepath.Dir(containerPath)
+		script := fmt.Sprintf("mkdir -p '%s' && cat > '%s'", dir, containerPath)
+		cmd := exec.CommandContext(ctx, r.BinaryPath, "exec", "-i", containerName, "/bin/sh", "-c", script)
+		cmd.Stdin = bytes.NewReader(data)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			logging.Warn("failed to inject file into container", "container", containerPath, "error", err, "stderr", stderr.String())
+			continue
+		}
+		logging.Debug("injected file mount", "host", hostPath, "container", containerPath, "size", len(data))
+	}
 }
 
 // applyRestrictedNetwork injects iptables rules inside the container to restrict
