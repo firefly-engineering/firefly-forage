@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -761,7 +762,104 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 		createOpts.AllowedHosts = resources.template.AllowedHosts
 	}
 
-	return c.rt.Create(ctx, createOpts)
+	if err := c.rt.Create(ctx, createOpts); err != nil {
+		return err
+	}
+
+	// For OCI runtimes, install contributed packages and start the mux session.
+	// The nspawn path bakes packages into the NixOS config and starts tmux via
+	// the forage-init systemd service; the OCI path must do both post-start.
+	if !caps.NixOSConfig {
+		if pkgErr := c.installPackages(ctx, opts.Name, contributions.Packages); pkgErr != nil {
+			logging.Warn("failed to install packages", "error", pkgErr)
+		}
+		if muxErr := c.startMuxSession(ctx, opts.Name, mux, resources.template); muxErr != nil {
+			logging.Warn("failed to start multiplexer session", "error", muxErr)
+		}
+	}
+
+	return nil
+}
+
+// installPackages installs contributed packages inside an OCI container via nix.
+// The nspawn path declares these in environment.systemPackages; the OCI path
+// must install them post-start since the nixos/nix image is bare.
+func (c *Creator) installPackages(ctx context.Context, name string, packages []injection.Package) error {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	// Build nix installable references from package names.
+	// Bare names (e.g. "tmux") become "nixpkgs#tmux".
+	// Flake references (containing # or /) are used as-is.
+	var installables []string
+	for _, pkg := range packages {
+		ref := pkg.Name
+		if !strings.Contains(ref, "#") && !strings.Contains(ref, "/") {
+			ref = "nixpkgs#" + ref
+		}
+		installables = append(installables, ref)
+	}
+
+	// Deduplicate
+	seen := make(map[string]bool)
+	var deduped []string
+	for _, ref := range installables {
+		if !seen[ref] {
+			seen[ref] = true
+			deduped = append(deduped, ref)
+		}
+	}
+
+	logging.Debug("installing packages in container", "name", name, "packages", deduped)
+
+	// nix profile install can take multiple installables in one invocation.
+	script := "nix profile install --no-write-lock-file " + strings.Join(deduped, " ")
+
+	installCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	result, err := runtime.ExecShell(installCtx, c.rt, name, script, runtime.ExecOptions{})
+	if err != nil {
+		return fmt.Errorf("nix profile install failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("nix profile install exited %d: %s", result.ExitCode, result.Stderr)
+	}
+
+	return nil
+}
+
+// startMuxSession execs the multiplexer init script inside an OCI container.
+// This is the OCI equivalent of the forage-init systemd service in nspawn.
+// It uses a timeout to avoid blocking creation if tmux is unavailable.
+func (c *Creator) startMuxSession(ctx context.Context, name string, mux multiplexer.Multiplexer, tmpl *config.Template) error {
+	var windows []multiplexer.Window
+	if len(tmpl.TmuxWindows) > 0 {
+		for _, w := range tmpl.TmuxWindows {
+			windows = append(windows, multiplexer.Window{Name: w.Name, Command: w.Command})
+		}
+	} else {
+		windows = []multiplexer.Window{{Name: "main"}}
+	}
+	initScript := mux.InitScript(windows)
+
+	// Use a timeout so a missing tmux binary doesn't hang creation.
+	execCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Pass the init script as a single element — the runtime's Exec already
+	// wraps commands in /bin/sh -c, so we avoid double-wrapping.
+	// Don't specify User because OCI images may not have the "agent" user;
+	// the container's default user (root) can start tmux fine.
+	result, err := runtime.ExecShell(execCtx, c.rt, name, initScript, runtime.ExecOptions{})
+	if err != nil {
+		return fmt.Errorf("exec failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("init exited %d: %s", result.ExitCode, result.Stderr)
+	}
+	return nil
 }
 
 // startContainer creates and starts the container via the runtime.
@@ -798,7 +896,7 @@ func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxM
 		result.TemplateCommandsRun++
 		logging.Debug("running init command", "command", cmd, "container", containerName)
 
-		execResult, err := c.rt.Exec(ctx, containerName, []string{"sh", "-c", cmd}, execOpts)
+		execResult, err := runtime.ExecShell(ctx, c.rt, containerName, cmd, execOpts)
 		if err != nil {
 			warning := fmt.Sprintf("init command %q: %v", cmd, err)
 			logging.Warn(warning)

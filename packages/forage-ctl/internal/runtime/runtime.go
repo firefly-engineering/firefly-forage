@@ -139,6 +139,19 @@ func GetCapabilities(rt Runtime) Capabilities {
 	}
 }
 
+// ExecShell executes a shell script or expression inside a container.
+// Use this instead of manually constructing ["sh", "-c", script] arrays.
+func ExecShell(ctx context.Context, rt Runtime, name, script string, opts ExecOptions) (*ExecResult, error) {
+	return rt.Exec(ctx, name, []string{"sh", "-c", script}, opts)
+}
+
+// ExecShellInteractive replaces the current process with an interactive
+// shell expression inside a container.
+// Use this instead of manually constructing ["sh", "-c", script] arrays.
+func ExecShellInteractive(ctx context.Context, rt Runtime, name, script string, opts ExecOptions) error {
+	return rt.ExecInteractive(ctx, name, []string{"sh", "-c", script}, opts)
+}
+
 // LogViewer is an optional interface for runtimes that support viewing
 // container logs. If not implemented, callers should display an error
 // indicating that log viewing is not supported by the current runtime.

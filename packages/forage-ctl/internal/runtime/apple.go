@@ -82,9 +82,10 @@ func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error
 	}
 
 	rt := &AppleRuntime{
-		ContainerPrefix: containerPrefix,
-		BinaryPath:      binaryPath,
-		SandboxesDir:    sandboxesDir,
+		ContainerPrefix:      containerPrefix,
+		BinaryPath:           binaryPath,
+		SandboxesDir:         sandboxesDir,
+		GeneratedFileMounter: GeneratedFileMounter{StagingDir: sandboxesDir},
 	}
 
 	// Run preflight checks (warnings only — don't prevent creation)
@@ -97,8 +98,9 @@ func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error
 // It does not return errors because missing prerequisites may be
 // resolved before the first container creation.
 func (r *AppleRuntime) preflight() {
-	// Check CLI version / health
-	output, err := r.runCmd(context.Background(), "version")
+	// Check CLI version / health.
+	// Apple Container CLI uses "system version" (not "version" which is a plugin).
+	output, err := r.runCmd(context.Background(), "system", "version")
 	if err != nil {
 		logging.Warn("Apple Container CLI may not be functional", "error", err)
 	} else {
@@ -206,24 +208,32 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 		args = []string{subcommand, "--name", containerName}
 	}
 
-	// Mount the host Nix store and daemon socket into the VM so the
-	// container can use the host's Nix daemon for builds.
+	// Note: We do NOT mount the host /nix/store into OCI containers.
+	// The nixos/nix image has its own nix store, and overlaying the host
+	// store would break symlinks (e.g., /bin/sh → /nix/store/...).
+	// The sandbox creator already skips /nix/store mounts for non-nspawn
+	// runtimes. We only forward the nix-daemon socket so the container
+	// can issue build requests to the host daemon.
 	platformCfg := DetectPlatformMountConfig()
-	nixMounts := NewStandardMounts("", "", "")
-	if platformCfg.UseBindMount {
-		// Nix store (read-only)
-		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s,readonly",
-			platformCfg.NixStorePath, platformCfg.NixStorePath))
-		// Nix daemon socket (read-write so the container can issue build requests)
-		if _, err := os.Stat(platformCfg.NixDaemonSocketPath); err == nil {
-			args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s",
-				platformCfg.NixDaemonSocketPath, platformCfg.NixDaemonSocketPath))
-		}
+	if _, err := os.Stat(platformCfg.NixDaemonSocketPath); err == nil {
+		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s",
+			platformCfg.NixDaemonSocketPath, platformCfg.NixDaemonSocketPath))
 	}
-	_ = nixMounts // mounts handled inline above; struct kept for future use
 
-	// Add bind mounts
+	// Add bind mounts.
+	// Apple Container only supports directory mounts, not individual files.
+	// Skip file mounts (they are typically generated files that can be
+	// injected via exec post-start, or whose parent directory is already mounted).
 	for hostPath, containerPath := range opts.BindMounts {
+		info, err := os.Stat(hostPath)
+		if err != nil {
+			logging.Debug("skipping mount (source not found)", "host", hostPath, "container", containerPath)
+			continue
+		}
+		if !info.IsDir() {
+			logging.Debug("skipping file mount (Apple Container only supports directories)", "host", hostPath, "container", containerPath)
+			continue
+		}
 		args = append(args, "--mount", fmt.Sprintf("type=bind,source=%s,target=%s", hostPath, containerPath))
 	}
 
@@ -510,7 +520,7 @@ func (r *AppleRuntime) Exec(ctx context.Context, name string, command []string, 
 	args := []string{"exec"}
 
 	if opts.Interactive {
-		args = append(args, "-it")
+		args = append(args, "-i", "-t")
 	}
 
 	if opts.User != "" {
@@ -564,7 +574,7 @@ func (r *AppleRuntime) Exec(ctx context.Context, name string, command []string, 
 func (r *AppleRuntime) ExecInteractive(ctx context.Context, name string, command []string, opts ExecOptions) error {
 	containerName := r.containerName(name)
 
-	args := []string{r.BinaryPath, "exec", "-it"}
+	args := []string{r.BinaryPath, "exec", "-i", "-t"}
 
 	if opts.User != "" {
 		args = append(args, "-u", opts.User)
@@ -575,6 +585,7 @@ func (r *AppleRuntime) ExecInteractive(ctx context.Context, name string, command
 	}
 
 	args = append(args, containerName)
+
 	args = append(args, "/bin/sh", "-c", shellquote.Join(command...))
 
 	return syscall.Exec(r.BinaryPath, args, system.SafeEnviron())
@@ -658,9 +669,9 @@ func (r *AppleRuntime) ContainerInfo() SandboxContainerInfo {
 func (r *AppleRuntime) ViewLogs(ctx context.Context, name string, follow bool, lines int) error {
 	containerName := r.containerName(name)
 
-	args := []string{r.BinaryPath, "logs", containerName, "--tail", fmt.Sprintf("%d", lines)}
+	args := []string{r.BinaryPath, "logs", "-n", fmt.Sprintf("%d", lines), containerName}
 	if follow {
-		args = append(args, "--follow")
+		args = append(args, "-f")
 	}
 
 	return syscall.Exec(r.BinaryPath, args, system.SafeEnviron())
