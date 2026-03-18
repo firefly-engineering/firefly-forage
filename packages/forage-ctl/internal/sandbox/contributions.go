@@ -198,6 +198,7 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 		SandboxName: sandboxName,
 		SecretsPath: secretsPath,
 		ProxyURL:    proxyURL,
+		SourceRepo:  sourceRepo,
 	}
 
 	genFileReq := &injection.GeneratedFileRequest{
