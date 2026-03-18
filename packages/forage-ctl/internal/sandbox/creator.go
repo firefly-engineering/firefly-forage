@@ -48,6 +48,7 @@ func NewCreator() (*Creator, error) {
 		ContainerPrefix: config.ContainerPrefix,
 		NixpkgsPath:     hostConfig.NixpkgsPath,
 		SandboxesDir:    paths.SandboxesDir,
+		Image:           hostConfig.ContainerImage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
@@ -745,6 +746,7 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 		BindMounts:  bindMounts,
 		EnvVars:     envVars,
 		NetworkSlot: resources.networkSlot,
+		Image:       resources.template.Image,
 	}
 
 	// Pass resource limits if configured and runtime supports them

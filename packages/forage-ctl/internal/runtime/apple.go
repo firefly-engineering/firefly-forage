@@ -46,7 +46,7 @@ import (
 )
 
 // defaultAppleImage is the default OCI image for Apple Container sandboxes.
-const defaultAppleImage = "nixos/nix:latest"
+const defaultAppleImage = "ghcr.io/firefly-engineering/forage-base:latest"
 
 // AppleRuntime implements the Runtime interface using Apple Container.
 type AppleRuntime struct {
@@ -69,7 +69,8 @@ type AppleRuntime struct {
 }
 
 // NewAppleRuntime creates a new Apple Container runtime.
-func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error) {
+// The image parameter overrides the default OCI image; pass "" for the default.
+func NewAppleRuntime(containerPrefix, sandboxesDir, image string) (*AppleRuntime, error) {
 	// Apple Container only works on macOS
 	if goruntime.GOOS != "darwin" {
 		return nil, fmt.Errorf("Apple Container is only available on macOS")
@@ -85,6 +86,7 @@ func NewAppleRuntime(containerPrefix, sandboxesDir string) (*AppleRuntime, error
 		ContainerPrefix:      containerPrefix,
 		BinaryPath:           binaryPath,
 		SandboxesDir:         sandboxesDir,
+		Image:                image,
 		GeneratedFileMounter: GeneratedFileMounter{StagingDir: sandboxesDir},
 	}
 
@@ -284,7 +286,11 @@ func (r *AppleRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	// Use a NixOS-compatible image.
 	// The nixos/nix image has binaries in the nix store, not at standard paths.
 	// Use /bin/sh -c to ensure the nix profile PATH is sourced.
-	args = append(args, r.containerImage())
+	image := r.containerImage()
+	if opts.Image != "" {
+		image = opts.Image
+	}
+	args = append(args, image)
 	args = append(args, "/bin/sh", "-c", "exec sleep infinity")
 
 	_, err := r.runCmd(ctx, args...)

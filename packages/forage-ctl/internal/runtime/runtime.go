@@ -55,6 +55,10 @@ type CreateOptions struct {
 	// capability use this to configure the container's network.
 	NetworkMode  string   // "full", "restricted", "none" (empty = full)
 	AllowedHosts []string // Hosts allowed in restricted mode
+
+	// Image overrides the OCI image for this specific container creation.
+	// Takes priority over the runtime's configured image.
+	Image string
 }
 
 // ExecOptions holds options for executing a command in a container

@@ -205,6 +205,7 @@ type HostConfig struct {
 	NixpkgsRev        string            `json:"nixpkgsRev"`
 	ProxyURL          string            `json:"proxyUrl,omitempty"`          // URL of the forage-proxy server
 	AgentIdentity     *AgentIdentity    `json:"agentIdentity,omitempty"`     // Host-level default agent identity
+	ContainerImage    string            `json:"containerImage,omitempty"`    // Override default container image for OCI runtimes
 	ContainerUsername string            `json:"containerUsername,omitempty"` // Container username (default: "agent")
 	WorkspacePath     string            `json:"workspacePath,omitempty"`     // Container workspace path (default: "/workspace")
 	StateVersion      string            `json:"stateVersion,omitempty"`      // NixOS state version (default: "24.11")
@@ -325,6 +326,7 @@ type Template struct {
 	AgentIdentity     *AgentIdentity             `json:"agentIdentity,omitempty"`     // Template-level default agent identity
 	TmuxWindows       []TmuxWindow               `json:"tmuxWindows,omitempty"`       // Explicit tmux window layout
 	Multiplexer       string                     `json:"multiplexer,omitempty"`       // "tmux" (default) or "wezterm"
+	Image             string                     `json:"image,omitempty"`             // Override default container image for this template
 	ReadOnlyWorkspace bool                       `json:"readOnlyWorkspace,omitempty"` // Mount workspace as read-only
 	ResourceLimits    *ResourceLimits            `json:"resourceLimits,omitempty"`    // Container resource limits
 	InitCommands      []string                   `json:"initCommands,omitempty"`      // Commands to run after container creation

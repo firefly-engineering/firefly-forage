@@ -35,6 +35,10 @@ type Config struct {
 	// SandboxesDir is the directory containing sandbox metadata files
 	// Used by all runtimes to resolve container names from metadata
 	SandboxesDir string
+
+	// Image overrides the default OCI image for Apple/Docker runtimes.
+	// When empty, the runtime's built-in default is used.
+	Image string
 }
 
 // DefaultConfig returns the default runtime configuration
@@ -144,10 +148,10 @@ func New(cfg *Config) (Runtime, error) {
 		return NewNspawnRuntime(cfg.ContainerPrefix, cfg.SandboxesDir, cfg.NixpkgsPath), nil
 
 	case RuntimeDocker, RuntimePodman:
-		return NewDockerRuntime(cfg.ContainerPrefix, cfg.SandboxesDir)
+		return NewDockerRuntime(cfg.ContainerPrefix, cfg.SandboxesDir, cfg.Image)
 
 	case RuntimeApple:
-		return NewAppleRuntime(cfg.ContainerPrefix, cfg.SandboxesDir)
+		return NewAppleRuntime(cfg.ContainerPrefix, cfg.SandboxesDir, cfg.Image)
 
 	default:
 		return nil, fmt.Errorf("unknown runtime type: %s", runtimeType)
