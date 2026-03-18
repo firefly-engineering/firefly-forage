@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-03-18T07:58:24Z",
+  "description": "ssh.go and connect.go: check runtime capabilities, use ExecInteractive when SSHAccess=false",
+  "id": "ff-qos.12.1",
+  "labels": [],
+  "parent": "ff-qos.12",
+  "priority": 2,
+  "status": "open",
+  "title": "Exec-based attach for non-SSH runtimes",
+  "type": "task",
+  "updated_at": "2026-03-18T07:58:24Z"
+}
