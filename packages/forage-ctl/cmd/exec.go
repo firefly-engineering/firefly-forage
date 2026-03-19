@@ -51,12 +51,12 @@ func runExec(cmd *cobra.Command, args []string) error {
 	rt := getRuntime()
 	caps := runtime.GetCapabilities(rt)
 	if !caps.SSHAccess {
-		result, err := rt.Exec(cmd.Context(), name, execArgs, runtime.ExecOptions{})
-		if err != nil {
-			return fmt.Errorf("exec failed: %w", err)
+		result, execErr := rt.Exec(cmd.Context(), name, execArgs, runtime.ExecOptions{})
+		if execErr != nil {
+			return fmt.Errorf("exec failed: %w", execErr)
 		}
-		os.Stdout.WriteString(result.Stdout)
-		os.Stderr.WriteString(result.Stderr)
+		_, _ = os.Stdout.WriteString(result.Stdout)
+		_, _ = os.Stderr.WriteString(result.Stderr)
 		if result.ExitCode != 0 {
 			os.Exit(result.ExitCode)
 		}

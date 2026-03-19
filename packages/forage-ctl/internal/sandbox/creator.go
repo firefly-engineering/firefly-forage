@@ -676,13 +676,12 @@ func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resourc
 	defer span.End()
 
 	// Write the nix config (for reference/debugging, not used by the runtime)
-	_, err := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
-	if err != nil {
-		return err
+	if _, writeErr := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata); writeErr != nil {
+		return writeErr
 	}
 
-	if err := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); err != nil {
-		return fmt.Errorf("failed to save metadata: %w", err)
+	if saveErr := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); saveErr != nil {
+		return fmt.Errorf("failed to save metadata: %w", saveErr)
 	}
 
 	// Collect contributions to get bind mounts
@@ -1285,8 +1284,8 @@ func (c *Creator) setupSecrets(ctx context.Context, secretsPath string, template
 			return fmt.Errorf("failed to read secret %s from %s: %w", agent.SecretName, secretSourcePath, err)
 		}
 
-		secretFile := filepath.Join(secretsPath, agent.SecretName)
-		if err := os.WriteFile(secretFile, secretData, 0600); err != nil {
+		secretFile := filepath.Join(secretsPath, filepath.Base(agent.SecretName))
+		if err := os.WriteFile(secretFile, secretData, 0600); err != nil { //nolint:gosec // secretName is validated by config.Validate
 			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
 		}
 		if err := os.Chown(secretFile, c.hostConfig.UID, c.hostConfig.GID); err != nil {
