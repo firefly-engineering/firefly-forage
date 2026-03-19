@@ -49,14 +49,13 @@ Agents can only persistently modify files in `/workspace`.
 
 Even with `network = "none"`, containers can communicate with the nix daemon socket.
 
-### Auth Obfuscation
+### Credential Isolation
 
-API keys are:
-- Stored in files, not environment variables
-- Read at runtime by wrapper scripts
-- Set only for the agent process
+**API key mode**: keys are stored in host-side files, copied into a per-sandbox secrets directory, and bind-mounted read-only. Wrapper scripts read the file and export the env var only for the agent process.
 
-This makes casual credential discovery harder, but doesn't prevent a determined agent from reading `/run/secrets/`.
+**OAuth mode**: tokens are injected via `CLAUDE_CODE_OAUTH_TOKEN` environment variable. The token is either a long-lived token from the forage-ctl token store (`<stateDir>/tokens/claude-oauth.json`, mode `0600`) or a short-lived token extracted from the host keychain at sandbox creation time. Neither the host keychain nor the token store file is mounted into the container.
+
+In both cases, a determined agent could discover the credential by inspecting its own environment or process memory. The isolation prevents *accidental* leakage, not *intentional* exfiltration. See [Authentication](../usage/authentication.md) for the full workflow.
 
 ## Mitigations
 

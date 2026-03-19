@@ -160,6 +160,9 @@ func buildContributionSources(params ContributionSourcesParams) ContributionSour
 				ContainerConfigDir:    agentCfg.ContainerConfigDir,
 				HostConfigDirReadOnly: agentCfg.HostConfigDirReadOnly,
 			}
+			if hostConfig != nil {
+				cfg.StateDir = hostConfig.StateDir
+			}
 			if agentCfg.Permissions != nil {
 				cfg.Permissions = &agent.Permissions{
 					SkipAll: agentCfg.Permissions.SkipAll,

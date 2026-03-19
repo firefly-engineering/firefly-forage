@@ -4,11 +4,30 @@ Forage is configured through your NixOS configuration. This page covers all avai
 
 ## Minimal Configuration
 
+**With Claude Max/Pro subscription (OAuth):**
+
 ```nix
 services.firefly-forage = {
   enable = true;
   user = "myuser";
-  authorizedKeys = [ "ssh-ed25519 AAAA..." ];
+
+  templates.claude = {
+    agents.claude = {
+      package = pkgs.claude-code;
+      hostConfigDir = "~/.claude";
+    };
+  };
+};
+```
+
+Then store a long-lived token — see [Authentication](../usage/authentication.md) for the full setup.
+
+**With API key:**
+
+```nix
+services.firefly-forage = {
+  enable = true;
+  user = "myuser";
 
   secrets = {
     anthropic = "/run/secrets/anthropic-api-key";
@@ -165,14 +184,12 @@ services.firefly-forage.templates.multi = {
 
 #### Host Config Directory Mounting
 
-Mount host configuration directories into sandboxes for persistent authentication. This is useful for agents like Claude Code that store credentials in `~/.claude/`:
+Mount host configuration directories into sandboxes for persistent agent configuration. For Claude Code, this provides settings, project history, and skills. Authentication is handled separately — see [Authentication](../usage/authentication.md).
 
 ```nix
 services.firefly-forage.templates.claude = {
   agents.claude = {
     package = pkgs.claude-code;
-    secretName = "anthropic";
-    authEnvVar = "ANTHROPIC_API_KEY";
     hostConfigDir = "~/.claude";  # mounts to /home/agent/.claude
   };
 };

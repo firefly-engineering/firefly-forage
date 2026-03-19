@@ -8,20 +8,27 @@ import (
 	"path/filepath"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/injection"
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/runtime"
 )
 
 // ClaudeAgent implements Agent for Claude Code.
 type ClaudeAgent struct {
-	config  *Config
-	runtime runtime.GeneratedFileRuntime
+	config     *Config
+	runtime    runtime.GeneratedFileRuntime
+	tokenStore *TokenStore
 }
 
 // NewClaudeAgent creates a new ClaudeAgent.
 func NewClaudeAgent(cfg *Config, rt runtime.GeneratedFileRuntime) *ClaudeAgent {
+	var ts *TokenStore
+	if cfg.StateDir != "" {
+		ts = NewTokenStore(cfg.StateDir)
+	}
 	return &ClaudeAgent{
-		config:  cfg,
-		runtime: rt,
+		config:     cfg,
+		runtime:    rt,
+		tokenStore: ts,
 	}
 }
 
@@ -101,6 +108,27 @@ func (a *ClaudeAgent) ContributeEnvVars(ctx context.Context, req *injection.EnvV
 			Name:  a.config.AuthEnvVar,
 			Value: fmt.Sprintf(`"$(cat /run/secrets/%s 2>/dev/null || echo '')"`, a.config.SecretName),
 		})
+		return envVars, nil
+	}
+
+	// If using hostConfigDir (OAuth flow) with no explicit secret, inject
+	// the OAuth token so the container (which can't access the host
+	// keychain) can authenticate.
+	//
+	// Priority:
+	//   1. Long-lived token from token store (forage-ctl claude token store)
+	//   2. Short-lived token from host keychain (macOS only, ~8h expiry)
+	if a.config.HostConfigDir != "" && a.config.SecretName == "" {
+		token, warning := a.resolveOAuthToken()
+		if token != "" {
+			envVars = append(envVars, injection.EnvVar{
+				Name:  "CLAUDE_CODE_OAUTH_TOKEN",
+				Value: fmt.Sprintf(`"%s"`, token),
+			})
+		}
+		if warning != "" {
+			logging.Warn(warning)
+		}
 	}
 
 	return envVars, nil
@@ -165,6 +193,35 @@ func (a *ClaudeAgent) generatePermissions() ([]byte, error) {
 	}
 
 	return json.Marshal(settings)
+}
+
+// resolveOAuthToken returns an OAuth token and an optional warning.
+// It checks the token store first, then falls back to the host keychain.
+func (a *ClaudeAgent) resolveOAuthToken() (token string, warning string) {
+	// 1. Try the long-lived token from the store
+	if a.tokenStore != nil {
+		token, reason := a.tokenStore.Token()
+		if token != "" {
+			if reason != "" {
+				// Token valid but expiring soon
+				return token, "Claude OAuth token is expiring soon — run 'claude setup-token' and 'forage-ctl claude token store <token>' to renew"
+			}
+			logging.Debug("using stored long-lived Claude OAuth token")
+			return token, ""
+		}
+		if reason != "no token stored" {
+			// Token exists but is expired
+			return "", "Claude OAuth token has expired — run 'claude setup-token' and 'forage-ctl claude token store <token>' to renew"
+		}
+	}
+
+	// 2. Fall back to short-lived token from host keychain
+	if keychainToken := readOAuthToken(); keychainToken != "" {
+		logging.Debug("using short-lived OAuth token from host keychain (store a long-lived token with 'forage-ctl claude token store' for better reliability)")
+		return keychainToken, ""
+	}
+
+	return "", "no Claude OAuth token available — run 'claude setup-token' and 'forage-ctl claude token store <token>'"
 }
 
 // claudeToolFamilies lists all Claude Code tool families for skipAll mode.
