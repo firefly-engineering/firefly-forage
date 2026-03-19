@@ -46,10 +46,30 @@
         let
           pkgs = pkgsFor system;
           isLinux = pkgs.stdenv.isLinux;
-          e2e = import ./tests/e2e/vm.nix { inherit pkgs self; };
+
+          # Shared Go module source — used by forage-ctl and e2e tests.
+          # The Go workspace has a `replace` directive pointing to ../../images/forage-base,
+          # so the source must include both directories rooted at the repo root.
+          goSrc = pkgs.lib.fileset.toSource {
+            root = ./.;
+            fileset = pkgs.lib.fileset.unions [
+              ./packages/forage-ctl
+              ./images/forage-base
+            ];
+          };
+          goModRoot = "packages/forage-ctl";
+
+          e2e = import ./tests/e2e/vm.nix {
+            inherit
+              pkgs
+              self
+              goSrc
+              goModRoot
+              ;
+          };
         in
         {
-          forage-ctl = pkgs.callPackage ./packages/forage-ctl { };
+          forage-ctl = pkgs.callPackage ./packages/forage-ctl { inherit goSrc goModRoot; };
           docs = pkgs.stdenvNoCC.mkDerivation {
             pname = "firefly-forage-docs";
             version = "0.1.0";

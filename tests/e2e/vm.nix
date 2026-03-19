@@ -11,7 +11,12 @@
 #   nix build .#packages.x86_64-linux.e2e-vm    # Build the VM
 #   nix build .#packages.x86_64-linux.e2e-driver # Build the test driver
 #   just test-e2e                                 # Build + run
-{ pkgs, self }:
+{
+  pkgs,
+  self,
+  goSrc,
+  goModRoot,
+}:
 let
   inherit (pkgs) lib;
 
@@ -254,7 +259,8 @@ let
     pname = "forage-e2e-test-bin";
     version = "0.1.0";
 
-    src = ../../packages/forage-ctl;
+    src = goSrc;
+    modRoot = goModRoot;
 
     vendorHash = "sha256-1bHdfu/a6E7gjrU9z+xwi4t+bBrzwdXgADX5aAffHNk=";
 

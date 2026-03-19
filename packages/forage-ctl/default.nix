@@ -3,21 +3,16 @@
   buildGoModule,
   git,
   jujutsu,
+  goSrc,
+  goModRoot,
 }:
 
 buildGoModule {
   pname = "forage-ctl";
   version = "0.1.0";
 
-  # Use repo root so Go module replacements (../../images/forage-base) resolve.
-  src = lib.fileset.toSource {
-    root = ../..;
-    fileset = lib.fileset.unions [
-      ../../packages/forage-ctl
-      ../../images/forage-base
-    ];
-  };
-  modRoot = "packages/forage-ctl";
+  src = goSrc;
+  modRoot = goModRoot;
 
   vendorHash = "sha256-bMqCHxnDAHqzMlUVnRS8pjo6+XYfiD6WIRNwk0iEMwA=";
 
