@@ -6,6 +6,7 @@
     nixpkgs.follows = "nix-pins/nixpkgs";
     toolbox.url = "github:firefly-engineering/toolbox";
     toolbox.inputs.nix-pins.follows = "nix-pins";
+    toolbox.inputs.devenv.follows = "";
   };
 
   outputs =

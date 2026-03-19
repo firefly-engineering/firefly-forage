@@ -1,42 +1,5 @@
 {
   "nodes": {
-    "cachix": {
-      "inputs": {
-        "devenv": [
-          "toolbox",
-          "devenv"
-        ],
-        "flake-compat": [
-          "toolbox",
-          "devenv",
-          "flake-compat"
-        ],
-        "git-hooks": [
-          "toolbox",
-          "devenv",
-          "git-hooks"
-        ],
-        "nixpkgs": [
-          "toolbox",
-          "devenv",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1767714506,
-        "narHash": "sha256-WaTs0t1CxhgxbIuvQ97OFhDTVUGd1HA+KzLZUZBhe0s=",
-        "owner": "cachix",
-        "repo": "cachix",
-        "rev": "894c649f0daaa38bbcfb21de64be47dfa7cd0ec9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "cachix",
-        "ref": "latest",
-        "repo": "cachix",
-        "type": "github"
-      }
-    },
     "crane": {
       "locked": {
         "lastModified": 1758758545,
@@ -86,50 +49,6 @@
         "owner": "NixOS",
         "ref": "nixpkgs-25.11-darwin",
         "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "devenv": {
-      "inputs": {
-        "cachix": "cachix",
-        "crate2nix": [
-          "toolbox"
-        ],
-        "flake-compat": [
-          "toolbox",
-          "nix-pins",
-          "flake-compat"
-        ],
-        "flake-parts": [
-          "toolbox",
-          "nix-pins",
-          "flake-parts"
-        ],
-        "git-hooks": "git-hooks",
-        "nix": [
-          "toolbox"
-        ],
-        "nixd": [
-          "toolbox"
-        ],
-        "nixpkgs": [
-          "toolbox",
-          "nix-pins",
-          "nixpkgs"
-        ],
-        "rust-overlay": "rust-overlay"
-      },
-      "locked": {
-        "lastModified": 1773841680,
-        "narHash": "sha256-xHUVs3cYLaDte+KZ5NW3M8ipfaSCu10EaN1F4mj2bdw=",
-        "owner": "cachix",
-        "repo": "devenv",
-        "rev": "d24be53dad77d9bd9502c90435350e24d9b78b96",
-        "type": "github"
-      },
-      "original": {
-        "owner": "cachix",
-        "repo": "devenv",
         "type": "github"
       }
     },
@@ -282,39 +201,6 @@
       "original": {
         "owner": "numtide",
         "repo": "flake-utils",
-        "type": "github"
-      }
-    },
-    "git-hooks": {
-      "inputs": {
-        "flake-compat": [
-          "toolbox",
-          "devenv",
-          "flake-compat"
-        ],
-        "gitignore": [
-          "toolbox",
-          "nix-pins",
-          "pre-commit-hooks-nix",
-          "gitignore"
-        ],
-        "nixpkgs": [
-          "toolbox",
-          "devenv",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1772893680,
-        "narHash": "sha256-JDqZMgxUTCq85ObSaFw0HhE+lvdOre1lx9iI6vYyOEs=",
-        "owner": "cachix",
-        "repo": "git-hooks.nix",
-        "rev": "8baab586afc9c9b57645a734c820e4ac0a604af9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "cachix",
-        "repo": "git-hooks.nix",
         "type": "github"
       }
     },
@@ -602,28 +488,6 @@
         "type": "github"
       }
     },
-    "rust-overlay": {
-      "inputs": {
-        "nixpkgs": [
-          "toolbox",
-          "devenv",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1773630837,
-        "narHash": "sha256-zJhgAGnbVKeBMJOb9ctZm4BGS/Rnrz+5lfSXTVah4HQ=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "f600ea449c7b5bb596fa1cf21c871cc5b9e31316",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
     "sops-nix": {
       "inputs": {
         "nixpkgs": [
@@ -689,7 +553,7 @@
     },
     "toolbox": {
       "inputs": {
-        "devenv": "devenv",
+        "devenv": [],
         "devenv-root": "devenv-root",
         "nix-pins": [
           "nix-pins"
