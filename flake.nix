@@ -98,6 +98,15 @@
                 beads-viewer-default
               ]);
           };
+
+          # Minimal shell for CI — avoids pulling in toolbox (jj, beadwork, rust)
+          ci = pkgs.mkShell {
+            packages = with pkgs; [
+              go
+              golangci-lint
+              git
+            ];
+          };
         }
       );
 
