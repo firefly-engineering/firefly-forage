@@ -702,11 +702,11 @@
         "teller": "teller"
       },
       "locked": {
-        "lastModified": 1773847874,
-        "narHash": "sha256-RD0thywduyrckQqvq6l3o4SLEzPnSi6Dp+uxAi7a5vk=",
+        "lastModified": 1773864293,
+        "narHash": "sha256-OTxZVAuHwRavonP1JFzHVdkJLiwJd0h2+X9r0g5T4pg=",
         "owner": "firefly-engineering",
         "repo": "toolbox",
-        "rev": "294ac67c2c111829138769aae6e409d44dedf59a",
+        "rev": "27b7d92b31bca19d54b2cc71016667e3f0c49e0a",
         "type": "github"
       },
       "original": {
