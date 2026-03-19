@@ -17,7 +17,9 @@ let
   # We only need enough structure to evaluate our module —
   # not the full nix-darwin framework.
   evalModule =
-    { extraConfig ? { } }:
+    {
+      extraConfig ? { },
+    }:
     lib.evalModules {
       modules = [
         # Provide the minimal module interface that darwin.nix expects
@@ -126,8 +128,12 @@ pkgs.runCommand "darwin-eval-test" { } ''
   check "description is set" "${builtins.toJSON (templateJSON.description == "Test Claude template")}"
   check "network mode is full" "${builtins.toJSON (templateJSON.network == "full")}"
   check "agent claude exists" "${builtins.toJSON (templateJSON.agents ? claude)}"
-  check "agent secretName is test-secret" "${builtins.toJSON (templateJSON.agents.claude.secretName == "test-secret")}"
-  check "agent authEnvVar is ANTHROPIC_API_KEY" "${builtins.toJSON (templateJSON.agents.claude.authEnvVar == "ANTHROPIC_API_KEY")}"
+  check "agent secretName is test-secret" "${
+    builtins.toJSON (templateJSON.agents.claude.secretName == "test-secret")
+  }"
+  check "agent authEnvVar is ANTHROPIC_API_KEY" "${
+    builtins.toJSON (templateJSON.agents.claude.authEnvVar == "ANTHROPIC_API_KEY")
+  }"
 
   echo ""
   echo "--- Activation scripts ---"
