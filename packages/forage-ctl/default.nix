@@ -9,9 +9,17 @@ buildGoModule {
   pname = "forage-ctl";
   version = "0.1.0";
 
-  src = ./.;
+  # Use repo root so Go module replacements (../../images/forage-base) resolve.
+  src = lib.fileset.toSource {
+    root = ../..;
+    fileset = lib.fileset.unions [
+      ../../packages/forage-ctl
+      ../../images/forage-base
+    ];
+  };
+  modRoot = "packages/forage-ctl";
 
-  vendorHash = "sha256-w7ZYgeX0K4hcCLlAAqdzhS7UnlO6yTGjJyt7bhh9Gyw=";
+  vendorHash = "sha256-bMqCHxnDAHqzMlUVnRS8pjo6+XYfiD6WIRNwk0iEMwA=";
 
   # Disable CGO for static build
   env.CGO_ENABLED = "0";

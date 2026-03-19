@@ -36,10 +36,6 @@ let
                       type = lib.types.str;
                       default = "";
                     };
-                    mode = lib.mkOption {
-                      type = lib.types.str;
-                      default = "0444";
-                    };
                   };
                 }
               );
@@ -132,10 +128,6 @@ pkgs.runCommand "darwin-eval-test" { } ''
   check "agent claude exists" "${builtins.toJSON (templateJSON.agents ? claude)}"
   check "agent secretName is test-secret" "${builtins.toJSON (templateJSON.agents.claude.secretName == "test-secret")}"
   check "agent authEnvVar is ANTHROPIC_API_KEY" "${builtins.toJSON (templateJSON.agents.claude.authEnvVar == "ANTHROPIC_API_KEY")}"
-
-  echo ""
-  echo "--- config.json mode ---"
-  check "config.json has mode 0644" "${builtins.toJSON (cfg.environment.etc."firefly-forage/config.json".mode == "0644")}"
 
   echo ""
   echo "--- Activation scripts ---"

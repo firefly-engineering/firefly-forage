@@ -67,7 +67,6 @@ in
     # Generate host configuration file and template configurations
     environment.etc = {
       "${configDir}/config.json" = {
-        mode = "0644";
         text = builtins.toJSON (
           configGen.mkHostConfigJSON {
             inherit cfg resolveTilde';
