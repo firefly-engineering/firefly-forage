@@ -10,6 +10,7 @@
 
 # Usage
 
+- [Authentication](./usage/authentication.md)
 - [CLI Reference](./usage/cli-reference.md)
 - [Workspace Mounts](./usage/workspace-mounts.md)
 - [JJ Workspaces](./usage/jj-workspaces.md)

@@ -10,6 +10,12 @@ import (
 )
 
 func TestDefaultPaths(t *testing.T) {
+	// Clear env vars so we get the compiled defaults.
+	// t.Setenv("", ...) sets to empty string, which envOrDefault treats as unset.
+	for _, k := range []string{"FORAGE_CONFIG_DIR", "FORAGE_STATE_DIR", "FORAGE_SECRETS_DIR"} {
+		t.Setenv(k, "")
+	}
+
 	paths := DefaultPaths()
 
 	if paths.ConfigDir != DefaultConfigDir {
@@ -29,6 +35,33 @@ func TestDefaultPaths(t *testing.T) {
 	}
 	if paths.TemplatesDir != filepath.Join(DefaultConfigDir, "templates") {
 		t.Errorf("TemplatesDir = %q, want %q", paths.TemplatesDir, filepath.Join(DefaultConfigDir, "templates"))
+	}
+}
+
+func TestDefaultPathsEnvOverride(t *testing.T) {
+	t.Setenv("FORAGE_CONFIG_DIR", "/tmp/forage-config")
+	t.Setenv("FORAGE_STATE_DIR", "/tmp/forage-state")
+	t.Setenv("FORAGE_SECRETS_DIR", "/tmp/forage-secrets")
+
+	paths := DefaultPaths()
+
+	if paths.ConfigDir != "/tmp/forage-config" {
+		t.Errorf("ConfigDir = %q, want /tmp/forage-config", paths.ConfigDir)
+	}
+	if paths.StateDir != "/tmp/forage-state" {
+		t.Errorf("StateDir = %q, want /tmp/forage-state", paths.StateDir)
+	}
+	if paths.SecretsDir != "/tmp/forage-secrets" {
+		t.Errorf("SecretsDir = %q, want /tmp/forage-secrets", paths.SecretsDir)
+	}
+	if paths.SandboxesDir != "/tmp/forage-state/sandboxes" {
+		t.Errorf("SandboxesDir = %q, want /tmp/forage-state/sandboxes", paths.SandboxesDir)
+	}
+	if paths.WorkspacesDir != "/tmp/forage-state/workspaces" {
+		t.Errorf("WorkspacesDir = %q, want /tmp/forage-state/workspaces", paths.WorkspacesDir)
+	}
+	if paths.TemplatesDir != "/tmp/forage-config/templates" {
+		t.Errorf("TemplatesDir = %q, want /tmp/forage-config/templates", paths.TemplatesDir)
 	}
 }
 

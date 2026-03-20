@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,6 +48,7 @@ func NewCreator() (*Creator, error) {
 		ContainerPrefix: config.ContainerPrefix,
 		NixpkgsPath:     hostConfig.NixpkgsPath,
 		SandboxesDir:    paths.SandboxesDir,
+		Image:           hostConfig.ContainerImage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
@@ -132,15 +134,7 @@ func (c *Creator) Create(ctx context.Context, opts CreateOptions) (*CreateResult
 	if nspawnRT, ok := c.rt.(*runtime.NspawnRuntime); ok {
 		err = c.createCached(ctx, opts, resources, ws, secretsPath, identity, metadata, nspawnRT)
 	} else {
-		var configPath string
-		configPath, err = c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata)
-		if err == nil {
-			if saveErr := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); saveErr != nil {
-				err = fmt.Errorf("failed to save metadata: %w", saveErr)
-			} else {
-				err = c.startContainer(ctx, opts.Name, configPath)
-			}
-		}
+		err = c.createGeneric(ctx, opts, resources, ws, secretsPath, identity, metadata)
 	}
 	if err != nil {
 		cleanup()
@@ -675,6 +669,248 @@ func (c *Creator) writeFallbackConfig(ctx context.Context, opts CreateOptions, r
 	}
 }
 
+// createGeneric implements the non-nspawn creation flow for Docker, Podman, and Apple backends.
+// It collects contribution bind mounts and passes them to the runtime's Create method.
+func (c *Creator) createGeneric(ctx context.Context, opts CreateOptions, resources *resourceAllocation, ws *workspaceSetup, secretsPath string, identity *config.AgentIdentity, metadata *config.SandboxMetadata) error {
+	ctx, span := telemetry.Start(ctx, "sandbox.create-generic")
+	defer span.End()
+
+	// Write the nix config (for reference/debugging, not used by the runtime)
+	if _, writeErr := c.writeContainerConfig(ctx, opts, resources, ws, secretsPath, identity, metadata); writeErr != nil {
+		return writeErr
+	}
+
+	if saveErr := config.SaveSandboxMetadata(c.paths.SandboxesDir, metadata); saveErr != nil {
+		return fmt.Errorf("failed to save metadata: %w", saveErr)
+	}
+
+	// Collect contributions to get bind mounts
+	proxyURL := ""
+	if resources.template.UseProxy && c.hostConfig.ProxyURL != "" {
+		proxyURL = c.hostConfig.ProxyURL
+	}
+	mux := multiplexer.New(multiplexer.Type(resources.template.Multiplexer))
+	contribParams := ContributionSourcesParams{
+		Runtime:       c.rt,
+		Template:      resources.template,
+		Metadata:      metadata,
+		WsBackend:     ws.backend,
+		Mux:           mux,
+		Identity:      identity,
+		WorkspacePath: ws.effectivePath,
+		SourceRepo:    ws.sourceRepo,
+		SecretsPath:   secretsPath,
+		ProxyURL:      proxyURL,
+		SandboxName:   opts.Name,
+		HostConfig:    c.hostConfig,
+	}
+	if len(ws.mounts) > 0 {
+		contribParams.WorkspaceMounts = ws.mounts
+		contribParams.MountBackends = ws.backends
+	}
+	contribResult := buildContributionSources(contribParams)
+	collector := injection.NewCollector()
+	contributions, err := collector.Collect(ctx, contribResult.Sources)
+	if err != nil {
+		return fmt.Errorf("failed to collect contributions: %w", err)
+	}
+
+	// Build bind mount map from contributions.
+	// Skip the /nix/store mount — OCI-based runtimes have their own nix store
+	// in the image, and overlaying the host store would break the container.
+	bindMounts := make(map[string]string)
+	for _, m := range contributions.Mounts {
+		if m.ContainerPath == "/nix/store" {
+			continue
+		}
+		bindMounts[m.HostPath] = m.ContainerPath
+	}
+
+	// Build env var map from contributions.
+	// EnvVar values are Nix expressions (double-quoted strings like `"value"`);
+	// strip the outer quotes for plain key=value usage in OCI runtimes.
+	envVars := make(map[string]string)
+	for _, ev := range contributions.EnvVars {
+		val := ev.Value
+		if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+			val = val[1 : len(val)-1]
+		}
+		envVars[ev.Name] = val
+	}
+
+	logging.Debug("creating container via runtime", "name", opts.Name, "mounts", len(bindMounts), "envVars", len(envVars))
+	createOpts := runtime.CreateOptions{
+		Name:        opts.Name,
+		Start:       true,
+		BindMounts:  bindMounts,
+		EnvVars:     envVars,
+		NetworkSlot: resources.networkSlot,
+		Image:       resources.template.Image,
+	}
+
+	// Pass resource limits if configured and runtime supports them
+	caps := runtime.GetCapabilities(c.rt)
+	if caps.ResourceLimits && resources.template.ResourceLimits != nil {
+		rl := resources.template.ResourceLimits
+		createOpts.CPUQuota = rl.CPUQuota
+		createOpts.MemoryMax = rl.MemoryMax
+		createOpts.TasksMax = rl.TasksMax
+	}
+
+	// Pass network isolation if runtime supports it
+	if caps.NetworkIsolation {
+		createOpts.NetworkMode = resources.template.Network
+		createOpts.AllowedHosts = resources.template.AllowedHosts
+	}
+
+	if err := c.rt.Create(ctx, createOpts); err != nil {
+		return err
+	}
+
+	// For OCI runtimes, install contributed packages and start the mux session.
+	// The nspawn path bakes packages into the NixOS config and starts tmux via
+	// the forage-init systemd service; the OCI path must do both post-start.
+	if !caps.NixOSConfig {
+		if pkgErr := c.installPackages(ctx, opts.Name, contributions.Packages); pkgErr != nil {
+			logging.Warn("failed to install packages", "error", pkgErr)
+		}
+		if muxErr := c.startMuxSession(ctx, opts.Name, mux, resources.template); muxErr != nil {
+			logging.Warn("failed to start multiplexer session", "error", muxErr)
+		}
+	}
+
+	return nil
+}
+
+// installPackages installs contributed packages inside an OCI container via nix.
+// The nspawn path declares these in environment.systemPackages; the OCI path
+// must install them post-start since the base image may not have them.
+func (c *Creator) installPackages(ctx context.Context, name string, packages []injection.Package) error {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	// Query which packages are already installed in the container's nix profile.
+	installed := c.listInstalledPackages(ctx, name)
+
+	// Build nix installable references from package names.
+	// Bare names (e.g. "tmux") become "nixpkgs#tmux".
+	// Flake references (containing # or /) are used as-is.
+	// Packages already installed in the image are skipped.
+	var installables []string
+	for _, pkg := range packages {
+		if installed[pkg.Name] {
+			logging.Debug("skipping already-installed package", "package", pkg.Name)
+			continue
+		}
+		ref := pkg.Name
+		if !strings.Contains(ref, "#") && !strings.Contains(ref, "/") {
+			ref = "nixpkgs#" + ref
+		}
+		installables = append(installables, ref)
+	}
+
+	if len(installables) == 0 {
+		return nil
+	}
+
+	// Deduplicate
+	seen := make(map[string]bool)
+	var deduped []string
+	for _, ref := range installables {
+		if !seen[ref] {
+			seen[ref] = true
+			deduped = append(deduped, ref)
+		}
+	}
+
+	logging.Debug("installing packages in container", "name", name, "packages", deduped)
+
+	// nix profile install can take multiple installables in one invocation.
+	// --extra-experimental-features is needed for images where nix-command/flakes
+	// aren't enabled in nix.conf (e.g. the fallback nixos/nix:latest image).
+	// --profile targets the default profile whose bin/ is already on PATH;
+	// without it, nix writes to a per-user profile that isn't on PATH.
+	script := "NIXPKGS_ALLOW_UNFREE=1 nix --extra-experimental-features 'nix-command flakes' profile install --impure --profile /nix/var/nix/profiles/default --no-write-lock-file " + strings.Join(deduped, " ")
+
+	installCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	result, err := runtime.ExecShell(installCtx, c.rt, name, script, runtime.ExecOptions{})
+	if err != nil {
+		return fmt.Errorf("nix profile install failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("nix profile install exited %d: %s", result.ExitCode, result.Stderr)
+	}
+
+	return nil
+}
+
+// listInstalledPackages queries the container's nix profile for already-installed
+// packages and returns a set of their names. This allows installPackages to skip
+// packages that ship in the base image, regardless of which image is used.
+// Returns an empty map on any error (fail-open: we'll just reinstall).
+func (c *Creator) listInstalledPackages(ctx context.Context, name string) map[string]bool {
+	listCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	result, err := runtime.ExecShell(listCtx, c.rt, name, "nix --extra-experimental-features 'nix-command flakes' profile list --profile /nix/var/nix/profiles/default --json", runtime.ExecOptions{})
+	if err != nil || result.ExitCode != 0 {
+		return nil
+	}
+
+	// Parse {"elements": {"tmux": {...}, "git": {...}}, "version": N}
+	var profile struct {
+		Elements map[string]json.RawMessage `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &profile); err != nil {
+		return nil
+	}
+
+	installed := make(map[string]bool, len(profile.Elements))
+	for pkg := range profile.Elements {
+		installed[pkg] = true
+	}
+
+	if len(installed) > 0 {
+		logging.Debug("detected pre-installed packages", "packages", installed)
+	}
+	return installed
+}
+
+// startMuxSession execs the multiplexer init script inside an OCI container.
+// This is the OCI equivalent of the forage-init systemd service in nspawn.
+// It uses a timeout to avoid blocking creation if tmux is unavailable.
+func (c *Creator) startMuxSession(ctx context.Context, name string, mux multiplexer.Multiplexer, tmpl *config.Template) error {
+	var windows []multiplexer.Window
+	if len(tmpl.TmuxWindows) > 0 {
+		for _, w := range tmpl.TmuxWindows {
+			windows = append(windows, multiplexer.Window{Name: w.Name, Command: w.Command})
+		}
+	} else {
+		windows = []multiplexer.Window{{Name: "main"}}
+	}
+	initScript := mux.InitScript(windows)
+
+	// Use a timeout so a missing tmux binary doesn't hang creation.
+	execCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Pass the init script as a single element — the runtime's Exec already
+	// wraps commands in /bin/sh -c, so we avoid double-wrapping.
+	// Don't specify User because OCI images may not have the "agent" user;
+	// the container's default user (root) can start tmux fine.
+	result, err := runtime.ExecShell(execCtx, c.rt, name, initScript, runtime.ExecOptions{})
+	if err != nil {
+		return fmt.Errorf("exec failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("init exited %d: %s", result.ExitCode, result.Stderr)
+	}
+	return nil
+}
+
 // startContainer creates and starts the container via the runtime.
 func (c *Creator) startContainer(ctx context.Context, name, configPath string) error {
 	logging.Debug("creating container via runtime", "name", name, "config", configPath)
@@ -709,7 +945,7 @@ func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxM
 		result.TemplateCommandsRun++
 		logging.Debug("running init command", "command", cmd, "container", containerName)
 
-		execResult, err := c.rt.Exec(ctx, containerName, []string{"sh", "-c", cmd}, execOpts)
+		execResult, err := runtime.ExecShell(ctx, c.rt, containerName, cmd, execOpts)
 		if err != nil {
 			warning := fmt.Sprintf("init command %q: %v", cmd, err)
 			logging.Warn(warning)
@@ -753,7 +989,13 @@ func (c *Creator) runInitCommands(ctx context.Context, metadata *config.SandboxM
 }
 
 // postCreationSetup performs post-creation setup (SSH wait).
+// Skipped for runtimes that don't support SSH access.
 func (c *Creator) postCreationSetup(ctx context.Context, metadata *config.SandboxMetadata) {
+	caps := runtime.GetCapabilities(c.rt)
+	if !caps.SSHAccess {
+		logging.Debug("skipping SSH wait (runtime does not support SSH)")
+		return
+	}
 	containerIP := metadata.ContainerIP()
 	logging.Debug("waiting for SSH", "host", containerIP, "timeout", health.SSHReadyTimeoutSeconds)
 	c.waitForSSH(ctx, containerIP, health.SSHReadyTimeoutSeconds)
@@ -782,6 +1024,11 @@ func (c *Creator) setupWorkspace(ctx context.Context, opts CreateOptions) (*work
 	absPath, err := filepath.Abs(opts.RepoPath)
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	// Resolve symlinks so that bind mount paths match what tools like
+	// git-worktree write into .git files (e.g., /tmp → /private/tmp on macOS).
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		absPath = resolved
 	}
 
 	if opts.Direct {
@@ -1037,8 +1284,8 @@ func (c *Creator) setupSecrets(ctx context.Context, secretsPath string, template
 			return fmt.Errorf("failed to read secret %s from %s: %w", agent.SecretName, secretSourcePath, err)
 		}
 
-		secretFile := filepath.Join(secretsPath, agent.SecretName)
-		if err := os.WriteFile(secretFile, secretData, 0600); err != nil {
+		secretFile := filepath.Join(secretsPath, filepath.Base(agent.SecretName))
+		if err := os.WriteFile(secretFile, secretData, 0600); err != nil { //nolint:gosec // secretName is validated by config.Validate
 			return fmt.Errorf("failed to write secret %s: %w", agent.SecretName, err)
 		}
 		if err := os.Chown(secretFile, c.hostConfig.UID, c.hostConfig.GID); err != nil {

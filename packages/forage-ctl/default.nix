@@ -3,15 +3,18 @@
   buildGoModule,
   git,
   jujutsu,
+  goSrc,
+  goModRoot,
 }:
 
 buildGoModule {
   pname = "forage-ctl";
   version = "0.1.0";
 
-  src = ./.;
+  src = goSrc;
+  modRoot = goModRoot;
 
-  vendorHash = "sha256-w7ZYgeX0K4hcCLlAAqdzhS7UnlO6yTGjJyt7bhh9Gyw=";
+  vendorHash = "sha256-bMqCHxnDAHqzMlUVnRS8pjo6+XYfiD6WIRNwk0iEMwA=";
 
   # Disable CGO for static build
   env.CGO_ENABLED = "0";

@@ -69,6 +69,7 @@ let
         system.nixos-init.package = optionValue pkgs.hello;
         system.requiredKernelConfig = dummy;
         system.stateVersion = optionValue "22.05";
+        time.timeZone = optionValue null;
         systemd.oomd = dummy;
         systemd.user.generators = optionValue { };
         ids.gids.keys = dummy;

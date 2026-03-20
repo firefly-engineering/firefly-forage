@@ -30,7 +30,7 @@ func runTemplates(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(templates) == 0 {
-		logInfo("No templates found. Configure templates in your NixOS configuration.")
+		logInfo("No templates found. Configure templates in your system configuration.")
 		return nil
 	}
 

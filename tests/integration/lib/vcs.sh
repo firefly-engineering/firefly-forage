@@ -10,11 +10,12 @@ source "${SCRIPT_DIR}/common.sh"
 
 # Ensure git is configured for commits
 ensure_git_config() {
-    if [[ -z "$(git config --global user.email 2>/dev/null || true)" ]]; then
-        git config --global user.email "test@forage-integration.local"
+    # Only set if not already configured (via any source: global, system, etc.)
+    if [[ -z "$(git config user.email 2>/dev/null || true)" ]]; then
+        git config --global user.email "test@forage-integration.local" 2>/dev/null || true
     fi
-    if [[ -z "$(git config --global user.name 2>/dev/null || true)" ]]; then
-        git config --global user.name "Forage Integration Test"
+    if [[ -z "$(git config user.name 2>/dev/null || true)" ]]; then
+        git config --global user.name "Forage Integration Test" 2>/dev/null || true
     fi
 }
 

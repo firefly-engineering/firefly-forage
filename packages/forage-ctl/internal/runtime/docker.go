@@ -15,6 +15,9 @@ import (
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/system"
 )
 
+// defaultDockerImage is the default OCI image for Docker/Podman sandboxes.
+const defaultDockerImage = DefaultImage
+
 // DockerRuntime implements the Runtime interface using Docker or Podman.
 // It auto-detects which container engine is available.
 type DockerRuntime struct {
@@ -34,13 +37,18 @@ type DockerRuntime struct {
 	// Used to resolve container names from metadata
 	SandboxesDir string
 
+	// Image overrides the default OCI image (defaultDockerImage).
+	// When empty, defaultDockerImage is used.
+	Image string
+
 	// GeneratedFileMounter handles staging of generated files
 	GeneratedFileMounter
 }
 
 // NewDockerRuntime creates a new Docker/Podman runtime.
 // It auto-detects which command is available.
-func NewDockerRuntime(containerPrefix, sandboxesDir string) (*DockerRuntime, error) {
+// The image parameter overrides the default OCI image; pass "" for the default.
+func NewDockerRuntime(containerPrefix, sandboxesDir, image string) (*DockerRuntime, error) {
 	// Try podman first (preferred for rootless)
 	if _, err := exec.LookPath("podman"); err == nil {
 		return &DockerRuntime{
@@ -48,6 +56,7 @@ func NewDockerRuntime(containerPrefix, sandboxesDir string) (*DockerRuntime, err
 			ContainerPrefix: containerPrefix,
 			UseRootless:     true,
 			SandboxesDir:    sandboxesDir,
+			Image:           image,
 		}, nil
 	}
 
@@ -58,10 +67,19 @@ func NewDockerRuntime(containerPrefix, sandboxesDir string) (*DockerRuntime, err
 			ContainerPrefix: containerPrefix,
 			UseRootless:     false,
 			SandboxesDir:    sandboxesDir,
+			Image:           image,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("neither podman nor docker found in PATH")
+}
+
+// containerImage returns the OCI image to use for containers.
+func (r *DockerRuntime) containerImage() string {
+	if r.Image != "" {
+		return r.Image
+	}
+	return defaultDockerImage
 }
 
 // containerName returns the full container name for a sandbox.
@@ -122,13 +140,30 @@ func (r *DockerRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	// Add extra args
 	args = append(args, opts.ExtraArgs...)
 
-	// Use a NixOS-based image - this will need to be built/configured
-	// For now, use nixos/nix as a base
-	args = append(args, "nixos/nix", "sleep", "infinity")
+	image := r.containerImage()
+	if opts.Image != "" {
+		image = opts.Image
+	}
+	imageIdx := len(args)
+	args = append(args, image, "sleep", "infinity")
 
 	_, err := r.runCmd(ctx, args...)
 	if err != nil {
-		return err
+		// If the default image failed and no explicit override was set,
+		// build the base image locally from the embedded Dockerfile.
+		if image == DefaultImage && opts.Image == "" {
+			logging.Warn("default image unavailable, building locally", "error", err)
+			cmdPath, _ := exec.LookPath(r.Command)
+			if buildErr := BuildFallbackImage(ctx, cmdPath); buildErr != nil {
+				return fmt.Errorf("image pull failed and local build failed: %w", buildErr)
+			}
+			args[imageIdx] = FallbackImage
+			if _, retryErr := r.runCmd(ctx, args...); retryErr != nil {
+				return retryErr
+			}
+		} else {
+			return err
+		}
 	}
 
 	if opts.Start {

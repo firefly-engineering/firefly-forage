@@ -5,8 +5,16 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
+
+	image "github.com/firefly-engineering/firefly-forage/images/forage-base"
+
+	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/logging"
 )
 
 // ContainerStatus represents the state of a container
@@ -18,6 +26,38 @@ const (
 	StatusNotFound ContainerStatus = "not-found"
 	StatusUnknown  ContainerStatus = "unknown"
 )
+
+const (
+	// DefaultImage is the pre-built base image with common packages (tmux, git, jq).
+	DefaultImage = "ghcr.io/firefly-engineering/forage-base:latest"
+
+	// FallbackImage is the tag used when building the base image locally.
+	FallbackImage = "forage-base:local"
+)
+
+// BuildFallbackImage builds the forage-base image locally using the embedded
+// Dockerfile. Called by runtimes when the pre-built GHCR image is unavailable.
+// The buildCmd is the container CLI binary (e.g. "container", "docker").
+func BuildFallbackImage(ctx context.Context, buildCmd string) error {
+	dir, err := os.MkdirTemp("", "forage-base-build-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp build dir: %w", err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), image.Dockerfile, 0644); err != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", err)
+	}
+
+	logging.Info("building forage-base image locally (this may take a minute)...")
+	cmd := exec.CommandContext(ctx, buildCmd, "build", "-t", FallbackImage, dir)
+	cmd.Stdout = os.Stderr // show build progress
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to build fallback image: %w", err)
+	}
+	return nil
+}
 
 // ContainerInfo holds information about a container
 type ContainerInfo struct {
@@ -41,8 +81,24 @@ type CreateOptions struct {
 	Start        bool              // Start immediately after creation
 	BindMounts   map[string]string // host path -> container path
 	ForwardPorts map[int]int       // host port -> container port
+	EnvVars      map[string]string // environment variables
 	NetworkSlot  int               // For private networking
 	ExtraArgs    []string          // Backend-specific arguments
+
+	// Resource limits (optional). Runtimes that declare ResourceLimits
+	// capability translate these to backend-specific flags.
+	CPUQuota  string // CPU quota (e.g. "200%" for 2 cores)
+	MemoryMax string // Memory limit (e.g. "4G")
+	TasksMax  int    // Maximum number of tasks/processes
+
+	// Network isolation (optional). Runtimes that declare NetworkIsolation
+	// capability use this to configure the container's network.
+	NetworkMode  string   // "full", "restricted", "none" (empty = full)
+	AllowedHosts []string // Hosts allowed in restricted mode
+
+	// Image overrides the OCI image for this specific container creation.
+	// Takes priority over the runtime's configured image.
+	Image string
 }
 
 // ExecOptions holds options for executing a command in a container
@@ -125,6 +181,19 @@ func GetCapabilities(rt Runtime) Capabilities {
 		ResourceLimits:   true,
 		GracefulShutdown: true,
 	}
+}
+
+// ExecShell executes a shell script or expression inside a container.
+// Use this instead of manually constructing ["sh", "-c", script] arrays.
+func ExecShell(ctx context.Context, rt Runtime, name, script string, opts ExecOptions) (*ExecResult, error) {
+	return rt.Exec(ctx, name, []string{"sh", "-c", script}, opts)
+}
+
+// ExecShellInteractive replaces the current process with an interactive
+// shell expression inside a container.
+// Use this instead of manually constructing ["sh", "-c", script] arrays.
+func ExecShellInteractive(ctx context.Context, rt Runtime, name, script string, opts ExecOptions) error {
+	return rt.ExecInteractive(ctx, name, []string{"sh", "-c", script}, opts)
 }
 
 // LogViewer is an optional interface for runtimes that support viewing

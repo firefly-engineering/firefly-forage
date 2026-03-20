@@ -139,5 +139,5 @@ func (f *osFileSystem) CopyFile(src, dst string) error {
 		return err
 	}
 
-	return os.WriteFile(dst, data, srcInfo.Mode())
+	return os.WriteFile(dst, data, srcInfo.Mode()) //nolint:gosec // dst is from trusted internal callers
 }

@@ -77,6 +77,12 @@ func (b *JJBackend) Remove(repoPath, name, workspacePath string) error {
 	return nil
 }
 
+// ContributePackages returns the packages needed for jj inside the container.
+// The nixpkgs package is "jujutsu" (not "jj", which is an unrelated JSON tool).
+func (b *JJBackend) ContributePackages(ctx context.Context) ([]injection.Package, error) {
+	return []injection.Package{{Name: "jujutsu"}}, nil
+}
+
 // ContributeMounts returns mounts for jj workspace mode.
 // Mounts both .jj and .git directories since jj uses git as its storage backend.
 func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRequest) ([]injection.Mount, error) {
@@ -106,6 +112,22 @@ func (b *JJBackend) ContributeMounts(ctx context.Context, req *injection.MountRe
 	}
 
 	return mounts, nil
+}
+
+// ContributeEnvVars sets GIT_DIR so the git CLI can find the repository
+// inside containers. jj mounts .git at the host absolute path, but the
+// container workspace is at a different location, so git can't discover
+// the repo by walking up from the working directory.
+func (b *JJBackend) ContributeEnvVars(ctx context.Context, req *injection.EnvVarRequest) ([]injection.EnvVar, error) {
+	if req.SourceRepo == "" {
+		return nil, nil
+	}
+	gitDir := filepath.Join(req.SourceRepo, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return nil, nil
+	}
+	// Value is a Nix expression (double-quoted string); the OCI path strips the quotes.
+	return []injection.EnvVar{{Name: "GIT_DIR", Value: `"` + gitDir + `"`}}, nil
 }
 
 // ContributePromptFragments returns jj-specific VCS instructions.
@@ -193,7 +215,9 @@ func (b *JJBackend) ListSnapshots(repoPath, name string) ([]SnapshotInfo, error)
 
 // Ensure JJBackend implements contribution interfaces
 var (
-	_ injection.MountContributor  = (*JJBackend)(nil)
-	_ injection.PromptContributor = (*JJBackend)(nil)
-	_ Snapshotter                 = (*JJBackend)(nil)
+	_ injection.PackageContributor = (*JJBackend)(nil)
+	_ injection.MountContributor   = (*JJBackend)(nil)
+	_ injection.EnvVarContributor  = (*JJBackend)(nil)
+	_ injection.PromptContributor  = (*JJBackend)(nil)
+	_ Snapshotter                  = (*JJBackend)(nil)
 )

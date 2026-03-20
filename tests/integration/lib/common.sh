@@ -26,25 +26,25 @@ TEST_FAILED=0
 TEST_SKIPPED=0
 CLEANUP_ITEMS=()
 
-# Logging functions
+# Logging functions (all write to stderr to avoid polluting captured output)
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $*"
+    echo -e "${BLUE}[INFO]${NC} $*" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[PASS]${NC} $*"
+    echo -e "${GREEN}[PASS]${NC} $*" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $*"
+    echo -e "${YELLOW}[WARN]${NC} $*" >&2
 }
 
 log_error() {
-    echo -e "${RED}[FAIL]${NC} $*"
+    echo -e "${RED}[FAIL]${NC} $*" >&2
 }
 
 log_skip() {
-    echo -e "${YELLOW}[SKIP]${NC} $*"
+    echo -e "${YELLOW}[SKIP]${NC} $*" >&2
 }
 
 # Test lifecycle functions
@@ -54,10 +54,10 @@ test_start() {
     TEST_FAILED=0
     TEST_SKIPPED=0
     CLEANUP_ITEMS=()
-    echo ""
-    echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}TEST: ${name}${NC}"
-    echo -e "${BLUE}========================================${NC}"
+    echo "" >&2
+    echo -e "${BLUE}========================================${NC}" >&2
+    echo -e "${BLUE}TEST: ${name}${NC}" >&2
+    echo -e "${BLUE}========================================${NC}" >&2
 }
 
 test_skip() {

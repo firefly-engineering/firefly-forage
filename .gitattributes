@@ -1,0 +1,3 @@
+# flake.lock is machine-generated JSON that cannot be merged by git.
+# Always take the branch version on conflict — regenerate after merge if needed.
+flake.lock merge=binary

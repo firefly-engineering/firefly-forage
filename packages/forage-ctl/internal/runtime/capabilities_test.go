@@ -60,6 +60,33 @@ func TestDockerCapabilities(t *testing.T) {
 	}
 }
 
+func TestAppleCapabilities(t *testing.T) {
+	rt := &AppleRuntime{BinaryPath: "container"}
+	caps := rt.Capabilities()
+
+	if caps.NixOSConfig {
+		t.Error("apple should not support NixOSConfig")
+	}
+	if !caps.NetworkIsolation {
+		t.Error("apple should support NetworkIsolation")
+	}
+	if !caps.EphemeralRoot {
+		t.Error("apple should support EphemeralRoot")
+	}
+	if caps.SSHAccess {
+		t.Error("apple should not support SSHAccess")
+	}
+	if !caps.GeneratedFiles {
+		t.Error("apple should support GeneratedFiles")
+	}
+	if !caps.ResourceLimits {
+		t.Error("apple should support ResourceLimits")
+	}
+	if !caps.GracefulShutdown {
+		t.Error("apple should support GracefulShutdown")
+	}
+}
+
 func TestGetCapabilities_WithCapableRuntime(t *testing.T) {
 	rt := &NspawnRuntime{}
 	caps := GetCapabilities(rt)

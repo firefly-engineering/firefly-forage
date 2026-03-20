@@ -30,6 +30,7 @@ type Config struct {
 	ContainerConfigDir    string
 	HostConfigDirReadOnly bool
 	Permissions           *Permissions
+	StateDir              string // host state directory (for token store, etc.)
 }
 
 // Permissions defines what tool families an agent can use.

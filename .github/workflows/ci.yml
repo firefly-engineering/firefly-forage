@@ -52,7 +52,6 @@ jobs:
         run: nix develop .#ci --command bash -c "cd packages/forage-ctl && go test ./..."
 
   e2e:
-    needs: [test]
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30

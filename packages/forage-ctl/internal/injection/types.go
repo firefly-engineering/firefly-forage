@@ -70,6 +70,7 @@ type EnvVarRequest struct {
 	SandboxName string
 	SecretsPath string
 	ProxyURL    string
+	SourceRepo  string // source repository path (empty for direct mode)
 }
 
 // GeneratedFileRequest provides context for generating files.
