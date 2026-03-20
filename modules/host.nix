@@ -97,23 +97,28 @@ in
         externalInterface = cfg.externalInterface;
       };
 
-    # Generate host configuration file and template configurations
-    environment.etc = {
-      "firefly-forage/config.json" = {
-        mode = "0644";
-        text = builtins.toJSON (
-          configGen.mkHostConfigJSON {
-            inherit cfg resolveTilde';
-            extraAttrs = {
-              uid = config.users.users.${cfg.user}.uid;
-              gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
-              authorizedKeys = cfg.authorizedKeys;
-              nixpkgsPath = "${nixpkgs}";
-              # Nixpkgs revision for registry pinning
-              nixpkgsRev = nixpkgs.rev or "unknown";
-            };
-          }
-        );
+      # Generate host configuration file and template configurations
+      environment.etc = {
+        "firefly-forage/config.json" = {
+          mode = "0644";
+          text = builtins.toJSON (
+            configGen.mkHostConfigJSON {
+              inherit cfg resolveTilde';
+              extraAttrs = {
+                uid = config.users.users.${cfg.user}.uid;
+                gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
+                authorizedKeys = cfg.authorizedKeys;
+                nixpkgsPath = "${nixpkgs}";
+                # Nixpkgs revision for registry pinning
+                nixpkgsRev = nixpkgs.rev or "unknown";
+              };
+            }
+          );
+        };
+      }
+      // configGen.mkTemplateEtcEntries {
+        inherit cfg resolveTilde';
+        configDir = "firefly-forage";
       };
 
       # Health monitor systemd service
