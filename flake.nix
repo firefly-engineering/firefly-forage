@@ -3,8 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    extra-container.url = "github:erikarvstedt/extra-container";
-    extra-container.inputs.nixpkgs.follows = "nixpkgs";
     toolbox.url = "github:firefly-engineering/toolbox";
     toolbox.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -13,7 +11,6 @@
     {
       self,
       nixpkgs,
-      extra-container,
       toolbox,
     }:
     let
@@ -29,7 +26,7 @@
     {
       nixosModules = {
         default = self.nixosModules.host;
-        host = import ./modules/host.nix { inherit self extra-container nixpkgs; };
+        host = import ./modules/host.nix { inherit self nixpkgs; };
       };
 
       lib = import ./lib { inherit (nixpkgs) lib; };
@@ -100,6 +97,15 @@
                 beads-rust-default
                 beads-viewer-default
               ]);
+          };
+
+          # Minimal shell for CI — avoids pulling in toolbox (jj, beadwork, rust)
+          ci = pkgs.mkShell {
+            packages = with pkgs; [
+              go
+              golangci-lint
+              git
+            ];
           };
         }
       );

@@ -119,7 +119,7 @@ services.firefly-forage.portRange = {
 ✗ Failed to create container
 ```
 
-**Cause:** extra-container or systemd-nspawn failed.
+**Cause:** systemd-nspawn container creation failed.
 
 **Solution:** Check system logs:
 ```bash

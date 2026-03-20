@@ -47,14 +47,10 @@ The NixOS module (`services.firefly-forage`) configures:
 
 The CLI tool that:
 
-- Creates/destroys containers using extra-container
+- Creates/destroys containers via systemd-nspawn
 - Manages SSH port allocation
 - Handles JJ workspace lifecycle
 - Injects skill files
-
-### extra-container
-
-[extra-container](https://github.com/erikarvstedt/extra-container) manages the systemd-nspawn containers. It allows creating NixOS containers without modifying the host's `/etc/nixos` configuration.
 
 ### Containers
 
@@ -78,7 +74,7 @@ forage-ctl up myproject -t claude -w ~/project
        ├─► Copy secrets to /run/forage-secrets/myproject/
        ├─► Inject skills to ~/project/.claude/forage-skills.md
        ├─► Generate container Nix configuration
-       ├─► Call extra-container create --start
+       ├─► Install container units into /etc/systemd-mutable/system
        └─► Wait for SSH to become available
 ```
 

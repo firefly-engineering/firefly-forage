@@ -7,6 +7,7 @@ on:
 
 jobs:
   format:
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,15 +17,17 @@ jobs:
         run: nix fmt -- --ci .
 
   lint:
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-nix
 
       - name: Run linter
-        run: nix develop --command bash -c "cd packages/forage-ctl && golangci-lint run"
+        run: nix develop .#ci --command bash -c "cd packages/forage-ctl && golangci-lint run"
 
   build:
+    if: github.event_name != 'merge_group'
     needs: [format, lint]
     runs-on: ubuntu-latest
     steps:
@@ -38,6 +41,7 @@ jobs:
         run: nix build .#docs
 
   test:
+    if: github.event_name != 'merge_group'
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +49,7 @@ jobs:
       - uses: ./.github/actions/setup-nix
 
       - name: Run tests
-        run: nix develop --command bash -c "cd packages/forage-ctl && go test ./..."
+        run: nix develop .#ci --command bash -c "cd packages/forage-ctl && go test ./..."
 
   e2e:
     needs: [test]

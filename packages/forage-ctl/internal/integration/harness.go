@@ -4,7 +4,7 @@
 // Integration tests are skipped unless the FORAGE_INTEGRATION_TESTS
 // environment variable is set. These tests require:
 // - NixOS with systemd-nspawn support
-// - sudo access for extra-container
+// - sudo access for systemd container management
 // - Available ports in the configured range
 package integration
 

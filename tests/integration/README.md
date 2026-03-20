@@ -51,7 +51,7 @@ Tests automatically skip if prerequisites are not met:
 
 - **forage-ctl**: Must be installed and in PATH
 - **Backend-specific**:
-  - `nspawn`: NixOS with `extra-container` and `machinectl`
+  - `nspawn`: NixOS with `machinectl`
   - `docker`: Docker daemon running
   - `podman`: Podman installed
   - `apple`: macOS with Apple's `container` CLI

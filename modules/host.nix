@@ -1,6 +1,5 @@
 {
   self,
-  extra-container,
   nixpkgs,
 }:
 {
@@ -43,23 +42,6 @@ let
       baseName = baseNameOf hostPath;
     in
     "/home/${cfg.containerUsername}/${baseName}";
-
-  # Workaround: extra-container's eval-config.nix uses a minimal module set
-  # that doesn't include nixos-init.nix, but the latest nixpkgs-unstable's
-  # systemd.nix now references config.system.nixos-init.package.
-  # Patch the extra-container package to add a dummy option for it.
-  # https://github.com/erikarvstedt/extra-container/issues/XX
-  patchedExtraContainer =
-    extra-container.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
-      (old: {
-        buildCommand = old.buildCommand + ''
-          substituteInPlace $out/share/extra-container/eval-config.nix \
-            --replace-warn \
-              'system.requiredKernelConfig = dummy;' \
-              'system.nixos-init.package = optionValue pkgs.hello;
-                system.requiredKernelConfig = dummy;'
-        '';
-      });
 
   # Agent definition type
   agentType = types.submodule {
@@ -424,237 +406,243 @@ in
     };
   };
 
-  # Import extra-container module at the module level
-  imports = [ extra-container.nixosModules.default ];
+  config = lib.mkMerge [
+    {
+      # Allow dynamically-installed systemd units (container service files)
+      # to be picked up by systemd from the mutable directory.
+      boot.extraSystemdUnitPaths = [ "/etc/systemd-mutable/system" ];
 
-  config = mkIf cfg.enable {
-    # Validate configuration
-    assertions = [
-      {
-        assertion = cfg.user != "";
-        message = "services.firefly-forage.user must be specified";
-      }
-      {
-        assertion = lib.hasPrefix "/run/" "/run/forage-secrets";
-        message = "Secrets directory must be under /run (tmpfs) to prevent secrets from persisting on disk";
-      }
-    ]
-    ++ lib.flatten (
-      lib.mapAttrsToList (
-        templateName: template:
-        lib.mapAttrsToList (
-          agentName: agent:
-          # Only validate secret reference if secretName is specified
-          lib.optional (agent.secretName != null) {
-            assertion = cfg.secrets ? ${agent.secretName};
-            message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
-          }
-        ) template.agents
-      ) cfg.templates
-    );
-
-    # Ensure state directory exists
-    # The configured user needs access to sandboxes and workspaces directories
-    systemd.tmpfiles.rules = [
-      "d ${cfg.stateDir} 0750 ${cfg.user} root -"
-      "d ${cfg.stateDir}/sandboxes 0750 ${cfg.user} root -"
-      "d ${cfg.stateDir}/workspaces 0750 ${cfg.user} root -"
-      # Secrets directory is under /run (tmpfs on NixOS) so secrets
-      # are never persisted to disk. Do not move this outside /run.
-      "d /run/forage-secrets 0700 root root -"
-    ];
-
-    # Install forage-ctl
-    environment.systemPackages = [
-      self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
-    ];
-
-    # Enable NAT for container networking (only if externalInterface is set)
-    networking.nat = mkIf (cfg.externalInterface != null) {
-      enable = true;
-      internalInterfaces = [ "ve-+" ];
-      externalInterface = cfg.externalInterface;
-    };
-
-    # Generate host configuration file and template configurations
-    environment.etc = {
-      "firefly-forage/config.json" = {
-        mode = "0644";
-        text = builtins.toJSON (
-          {
-            user = cfg.user;
-            uid = config.users.users.${cfg.user}.uid;
-            gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
-            authorizedKeys = cfg.authorizedKeys;
-            secrets = cfg.secrets;
-            stateDir = cfg.stateDir;
-            # Path to extra-container command (patched for nixos-init compat)
-            extraContainerPath = "${patchedExtraContainer}/bin/extra-container";
-            # Nixpkgs path for extra-container --nixpkgs-path
-            nixpkgsPath = "${nixpkgs}";
-            # Nixpkgs revision for registry pinning
-            nixpkgsRev = nixpkgs.rev or "unknown";
-          }
-          // lib.optionalAttrs (cfg.containerUsername != "agent") {
-            containerUsername = cfg.containerUsername;
-          }
-          // lib.optionalAttrs (cfg.workspacePath != "/workspace") {
-            workspacePath = cfg.workspacePath;
-          }
-          //
-            lib.optionalAttrs
-              (
-                cfg.agentIdentity.gitUser != null
-                || cfg.agentIdentity.gitEmail != null
-                || cfg.agentIdentity.sshKeyPath != null
-              )
-              {
-                agentIdentity = lib.filterAttrs (_: v: v != null) {
-                  gitUser = cfg.agentIdentity.gitUser;
-                  gitEmail = cfg.agentIdentity.gitEmail;
-                  sshKeyPath =
-                    if cfg.agentIdentity.sshKeyPath != null then
-                      resolveTilde (toString cfg.agentIdentity.sshKeyPath)
-                    else
-                      null;
-                };
-              }
-        );
-      };
+      # Ensure the mutable services directory exists at boot.
+      systemd.tmpfiles.rules = [
+        "d /etc/systemd-mutable/system 0755 root root -"
+      ];
     }
-    // mapAttrs (
-      name: template:
-      let
-        # Merge explicit workspace.mounts with useBeads-injected mount
-        beadsMount =
-          if template.workspace.useBeads.enable then
-            {
-              beads = {
-                containerPath = template.workspace.useBeads.containerPath;
-                repo = template.workspace.useBeads.repo;
-                mode = "jj";
-                branch = template.workspace.useBeads.branch;
-                readOnly = false;
-                hostPath = null;
-              };
+    (mkIf cfg.enable {
+      # Validate configuration
+      assertions = [
+        {
+          assertion = cfg.user != "";
+          message = "services.firefly-forage.user must be specified";
+        }
+        {
+          assertion = lib.hasPrefix "/run/" "/run/forage-secrets";
+          message = "Secrets directory must be under /run (tmpfs) to prevent secrets from persisting on disk";
+        }
+      ]
+      ++ lib.flatten (
+        lib.mapAttrsToList (
+          templateName: template:
+          lib.mapAttrsToList (
+            agentName: agent:
+            # Only validate secret reference if secretName is specified
+            lib.optional (agent.secretName != null) {
+              assertion = cfg.secrets ? ${agent.secretName};
+              message = "Template '${templateName}' agent '${agentName}' references secret '${agent.secretName}' which is not defined in services.firefly-forage.secrets";
             }
-          else
-            { };
-        allMounts = template.workspace.mounts // beadsMount;
+          ) template.agents
+        ) cfg.templates
+      );
 
-        # Merge useBeads package into extraPackages
-        beadsPackages =
-          if template.workspace.useBeads.enable && template.workspace.useBeads.package != null then
-            [ template.workspace.useBeads.package ]
-          else
-            [ ];
-        allExtraPackages = template.extraPackages ++ beadsPackages;
-      in
-      {
-        target = "firefly-forage/templates/${name}.json";
-        text = builtins.toJSON (
-          {
-            inherit name;
-            inherit (template)
-              description
-              network
-              allowedHosts
-              readOnlyWorkspace
-              ;
-            agents = mapAttrs (
-              agentName: agent:
-              let
-                resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
-                resolvedContainerConfigDir =
-                  if agent.containerConfigDir != null then
-                    agent.containerConfigDir
-                  else if resolvedHostConfigDir != null then
-                    deriveContainerPath resolvedHostConfigDir
-                  else
-                    null;
-              in
+      # Ensure state directory exists
+      # The configured user needs access to sandboxes and workspaces directories
+      systemd.tmpfiles.rules = [
+        "d ${cfg.stateDir} 0750 ${cfg.user} root -"
+        "d ${cfg.stateDir}/sandboxes 0750 ${cfg.user} root -"
+        "d ${cfg.stateDir}/workspaces 0750 ${cfg.user} root -"
+        # Secrets directory is under /run (tmpfs on NixOS) so secrets
+        # are never persisted to disk. Do not move this outside /run.
+        "d /run/forage-secrets 0700 root root -"
+      ];
+
+      # Install forage-ctl
+      environment.systemPackages = [
+        self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
+      ];
+
+      # Enable NAT for container networking (only if externalInterface is set)
+      networking.nat = mkIf (cfg.externalInterface != null) {
+        enable = true;
+        internalInterfaces = [ "ve-+" ];
+        externalInterface = cfg.externalInterface;
+      };
+
+      # Generate host configuration file and template configurations
+      environment.etc = {
+        "firefly-forage/config.json" = {
+          mode = "0644";
+          text = builtins.toJSON (
+            {
+              user = cfg.user;
+              uid = config.users.users.${cfg.user}.uid;
+              gid = config.users.groups.${config.users.users.${cfg.user}.group}.gid;
+              authorizedKeys = cfg.authorizedKeys;
+              secrets = cfg.secrets;
+              stateDir = cfg.stateDir;
+              nixpkgsPath = "${nixpkgs}";
+              # Nixpkgs revision for registry pinning
+              nixpkgsRev = nixpkgs.rev or "unknown";
+            }
+            // lib.optionalAttrs (cfg.containerUsername != "agent") {
+              containerUsername = cfg.containerUsername;
+            }
+            // lib.optionalAttrs (cfg.workspacePath != "/workspace") {
+              workspacePath = cfg.workspacePath;
+            }
+            //
+              lib.optionalAttrs
+                (
+                  cfg.agentIdentity.gitUser != null
+                  || cfg.agentIdentity.gitEmail != null
+                  || cfg.agentIdentity.sshKeyPath != null
+                )
+                {
+                  agentIdentity = lib.filterAttrs (_: v: v != null) {
+                    gitUser = cfg.agentIdentity.gitUser;
+                    gitEmail = cfg.agentIdentity.gitEmail;
+                    sshKeyPath =
+                      if cfg.agentIdentity.sshKeyPath != null then
+                        resolveTilde (toString cfg.agentIdentity.sshKeyPath)
+                      else
+                        null;
+                  };
+                }
+          );
+        };
+      }
+      // mapAttrs (
+        name: template:
+        let
+          # Merge explicit workspace.mounts with useBeads-injected mount
+          beadsMount =
+            if template.workspace.useBeads.enable then
               {
-                inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
-                packagePath = agent.package.pname;
-                hostConfigDir = resolvedHostConfigDir;
-                containerConfigDir = resolvedContainerConfigDir;
-                permissions =
-                  if agent.permissions != null then
-                    {
-                      inherit (agent.permissions) skipAll allow deny;
-                    }
-                  else
-                    null;
-              }
-            ) template.agents;
-            extraPackages = map (p: p.pname) allExtraPackages;
-          }
-          // lib.optionalAttrs (allMounts != { }) {
-            workspaceMounts = mapAttrs (
-              mountName: mount:
-              lib.filterAttrs (_: v: v != null) {
-                inherit (mount) containerPath readOnly;
-                hostPath = if mount.hostPath != null then resolveTilde mount.hostPath else null;
-                repo = mount.repo;
-                mode = mount.mode;
-                branch = mount.branch;
-              }
-            ) allMounts;
-          }
-          //
-            lib.optionalAttrs
-              (
-                template.resourceLimits.cpuQuota != null
-                || template.resourceLimits.memoryMax != null
-                || template.resourceLimits.tasksMax != null
-              )
-              {
-                resourceLimits = lib.filterAttrs (_: v: v != null) {
-                  cpuQuota = template.resourceLimits.cpuQuota;
-                  memoryMax = template.resourceLimits.memoryMax;
-                  tasksMax = template.resourceLimits.tasksMax;
+                beads = {
+                  containerPath = template.workspace.useBeads.containerPath;
+                  repo = template.workspace.useBeads.repo;
+                  mode = "jj";
+                  branch = template.workspace.useBeads.branch;
+                  readOnly = false;
+                  hostPath = null;
                 };
               }
-          // lib.optionalAttrs (template.initCommands != [ ]) {
-            inherit (template) initCommands;
-          }
-          //
-            lib.optionalAttrs
-              (
-                template.agentIdentity.gitUser != null
-                || template.agentIdentity.gitEmail != null
-                || template.agentIdentity.sshKeyPath != null
-              )
-              {
-                agentIdentity = lib.filterAttrs (_: v: v != null) {
-                  gitUser = template.agentIdentity.gitUser;
-                  gitEmail = template.agentIdentity.gitEmail;
-                  sshKeyPath =
-                    if template.agentIdentity.sshKeyPath != null then
-                      resolveTilde (toString template.agentIdentity.sshKeyPath)
+            else
+              { };
+          allMounts = template.workspace.mounts // beadsMount;
+
+          # Merge useBeads package into extraPackages
+          beadsPackages =
+            if template.workspace.useBeads.enable && template.workspace.useBeads.package != null then
+              [ template.workspace.useBeads.package ]
+            else
+              [ ];
+          allExtraPackages = template.extraPackages ++ beadsPackages;
+        in
+        {
+          target = "firefly-forage/templates/${name}.json";
+          text = builtins.toJSON (
+            {
+              inherit name;
+              inherit (template)
+                description
+                network
+                allowedHosts
+                readOnlyWorkspace
+                ;
+              agents = mapAttrs (
+                agentName: agent:
+                let
+                  resolvedHostConfigDir = resolveTilde agent.hostConfigDir;
+                  resolvedContainerConfigDir =
+                    if agent.containerConfigDir != null then
+                      agent.containerConfigDir
+                    else if resolvedHostConfigDir != null then
+                      deriveContainerPath resolvedHostConfigDir
                     else
                       null;
-                };
-              }
-        );
-      }
-    ) cfg.templates;
+                in
+                {
+                  inherit (agent) secretName authEnvVar hostConfigDirReadOnly;
+                  packagePath = agent.package.pname;
+                  hostConfigDir = resolvedHostConfigDir;
+                  containerConfigDir = resolvedContainerConfigDir;
+                  permissions =
+                    if agent.permissions != null then
+                      {
+                        inherit (agent.permissions) skipAll allow deny;
+                      }
+                    else
+                      null;
+                }
+              ) template.agents;
+              extraPackages = map (p: p.pname) allExtraPackages;
+            }
+            // lib.optionalAttrs (allMounts != { }) {
+              workspaceMounts = mapAttrs (
+                mountName: mount:
+                lib.filterAttrs (_: v: v != null) {
+                  inherit (mount) containerPath readOnly;
+                  hostPath = if mount.hostPath != null then resolveTilde mount.hostPath else null;
+                  repo = mount.repo;
+                  mode = mount.mode;
+                  branch = mount.branch;
+                }
+              ) allMounts;
+            }
+            //
+              lib.optionalAttrs
+                (
+                  template.resourceLimits.cpuQuota != null
+                  || template.resourceLimits.memoryMax != null
+                  || template.resourceLimits.tasksMax != null
+                )
+                {
+                  resourceLimits = lib.filterAttrs (_: v: v != null) {
+                    cpuQuota = template.resourceLimits.cpuQuota;
+                    memoryMax = template.resourceLimits.memoryMax;
+                    tasksMax = template.resourceLimits.tasksMax;
+                  };
+                }
+            // lib.optionalAttrs (template.initCommands != [ ]) {
+              inherit (template) initCommands;
+            }
+            //
+              lib.optionalAttrs
+                (
+                  template.agentIdentity.gitUser != null
+                  || template.agentIdentity.gitEmail != null
+                  || template.agentIdentity.sshKeyPath != null
+                )
+                {
+                  agentIdentity = lib.filterAttrs (_: v: v != null) {
+                    gitUser = template.agentIdentity.gitUser;
+                    gitEmail = template.agentIdentity.gitEmail;
+                    sshKeyPath =
+                      if template.agentIdentity.sshKeyPath != null then
+                        resolveTilde (toString template.agentIdentity.sshKeyPath)
+                      else
+                        null;
+                  };
+                }
+          );
+        }
+      ) cfg.templates;
 
-    # Health monitor systemd service
-    systemd.services.forage-monitor = mkIf cfg.monitor.enable {
-      description = "Firefly Forage Health Monitor";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
-      serviceConfig = {
-        ExecStart = "${
-          self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
-        }/bin/forage-ctl monitor --interval ${cfg.monitor.interval}${
-          if cfg.monitor.autoRestart then " --auto-restart" else ""
-        }";
-        Restart = "on-failure";
-        RestartSec = "10s";
-        User = cfg.user;
+      # Health monitor systemd service
+      systemd.services.forage-monitor = mkIf cfg.monitor.enable {
+        description = "Firefly Forage Health Monitor";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "network.target" ];
+        serviceConfig = {
+          ExecStart = "${
+            self.packages.${pkgs.stdenv.hostPlatform.system}.forage-ctl
+          }/bin/forage-ctl monitor --interval ${cfg.monitor.interval}${
+            if cfg.monitor.autoRestart then " --auto-restart" else ""
+          }";
+          Restart = "on-failure";
+          RestartSec = "10s";
+          User = cfg.user;
+        };
       };
-    };
-  };
+    })
+  ];
 }

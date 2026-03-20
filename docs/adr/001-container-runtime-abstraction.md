@@ -33,7 +33,7 @@ type Runtime interface {
 ```
 
 Implementations:
-- `NspawnRuntime`: NixOS containers via extra-container (Linux)
+- `NspawnRuntime`: NixOS containers via systemd-nspawn (Linux)
 - `DockerRuntime`: Docker/Podman containers (universal fallback)
 - `AppleRuntime`: Apple Container framework (macOS 13+)
 - `MockRuntime`: For testing

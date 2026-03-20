@@ -1,7 +1,7 @@
 // Package generator provides Nix configuration generation for containers.
 //
 // This package generates the Nix expressions that define sandbox containers
-// for use with extra-container. Generated configurations include network
+// for systemd-nspawn. Generated configurations include network
 // settings, bind mounts, SSH access, and agent-specific packages.
 //
 // # Container Configuration

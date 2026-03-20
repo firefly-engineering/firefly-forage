@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// nixOutputTracer is an io.Writer that intercepts nix/extra-container stderr
+// nixOutputTracer is an io.Writer that intercepts nix-build stderr
 // output line-by-line, emitting OTel span events for known progress patterns
 // while forwarding all bytes to an underlying writer.
 type nixOutputTracer struct {

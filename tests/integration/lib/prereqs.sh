@@ -41,11 +41,8 @@ check_backend() {
 }
 
 check_nspawn_backend() {
-    # nspawn requires NixOS with extra-container
+    # nspawn requires NixOS with systemd
     if [[ ! -f /etc/NIXOS ]]; then
-        return 1
-    fi
-    if ! command_exists extra-container; then
         return 1
     fi
     if ! command_exists machinectl; then

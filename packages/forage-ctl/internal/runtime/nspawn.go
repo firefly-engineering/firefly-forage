@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -23,11 +24,9 @@ import (
 )
 
 // NspawnRuntime implements the Runtime interface using systemd-nspawn
-// via extra-container for NixOS systems.
+// for NixOS systems. Container lifecycle (install, start, destroy) is
+// managed directly via systemd and symlinks into /etc/systemd-mutable/system.
 type NspawnRuntime struct {
-	// ExtraContainerPath is the path to the extra-container binary
-	ExtraContainerPath string
-
 	// ContainerPrefix is prepended to sandbox names to form container names
 	ContainerPrefix string
 
@@ -36,8 +35,7 @@ type NspawnRuntime struct {
 	SandboxesDir string
 
 	// NixpkgsPath is the Nix store path to nixpkgs source.
-	// Passed as --nixpkgs-path to extra-container create so the container
-	// uses the same nixpkgs as the NixOS module, not the host's NIX_PATH.
+	// Used for nix-build of container configurations.
 	NixpkgsPath string
 
 	// GeneratedFileMounter handles staging of generated files
@@ -45,12 +43,11 @@ type NspawnRuntime struct {
 }
 
 // NewNspawnRuntime creates a new nspawn runtime with the given configuration
-func NewNspawnRuntime(extraContainerPath, containerPrefix, sandboxesDir, nixpkgsPath string) *NspawnRuntime {
+func NewNspawnRuntime(containerPrefix, sandboxesDir, nixpkgsPath string) *NspawnRuntime {
 	return &NspawnRuntime{
-		ExtraContainerPath: extraContainerPath,
-		ContainerPrefix:    containerPrefix,
-		SandboxesDir:       sandboxesDir,
-		NixpkgsPath:        nixpkgsPath,
+		ContainerPrefix: containerPrefix,
+		SandboxesDir:    sandboxesDir,
+		NixpkgsPath:     nixpkgsPath,
 		GeneratedFileMounter: GeneratedFileMounter{
 			StagingDir: sandboxesDir,
 		},
@@ -74,42 +71,37 @@ func (r *NspawnRuntime) Name() string {
 	return "nspawn"
 }
 
-// Create creates a new container using extra-container
+// Create creates a new container by building the Nix config and installing
+// the resulting systemd units directly via symlinks into /etc/systemd-mutable/system.
 func (r *NspawnRuntime) Create(ctx context.Context, opts CreateOptions) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.create")
 	defer span.End()
 
 	logging.Debug("creating container", "name", opts.Name, "config", opts.ConfigPath)
 
-	args := []string{r.ExtraContainerPath, "create"}
-	if r.NixpkgsPath != "" {
-		args = append(args, "--nixpkgs-path", r.NixpkgsPath)
+	// If the config path is a nix store path (pre-built /etc), install directly
+	if strings.HasPrefix(opts.ConfigPath, "/nix/store/") {
+		return r.CreateFromEtc(ctx, opts.ConfigPath, opts.Start)
 	}
-	if opts.Start {
-		args = append(args, "--start")
+
+	// Otherwise, build the config first using our eval-config.nix
+	evalConfigPath := filepath.Join(r.SandboxesDir, opts.Name+".eval-config.nix")
+	if err := os.WriteFile(evalConfigPath, []byte(generator.EvalConfigNix), 0644); err != nil {
+		return fmt.Errorf("failed to write eval-config.nix: %w", err)
 	}
-	args = append(args, opts.ConfigPath)
 
-	cmd := exec.CommandContext(ctx, "sudo", args...)
-	cmd.Stdout = os.Stdout
-	tracer := newNixOutputTracer(span)
-	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
-
-	span.AddEvent("subprocess.start")
-	err := cmd.Run()
-	tracer.Flush()
+	etcPath, err := r.BuildOuterEtc(ctx, opts.ConfigPath, evalConfigPath)
 	if err != nil {
-		return fmt.Errorf("extra-container create failed: %w", err)
+		return fmt.Errorf("nix-build container config failed: %w", err)
 	}
 
-	// SSH port is persisted in sandbox metadata by the caller
-	return nil
+	return installContainer(ctx, etcPath, opts.Start)
 }
 
 // Start starts an existing container. Uses the fastest available path:
 // 1. Cached etc path from metadata → CreateFromEtc (~1s, no eval at all)
 // 2. Outer .nix + our eval-config → BuildOuterEtc + CreateFromEtc (~2s)
-// 3. Full .nix through extra-container (fallback, ~17s)
+// 3. Full .nix through nix-build + install (fallback, ~17s)
 func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.start")
 	defer span.End()
@@ -144,14 +136,14 @@ func (r *NspawnRuntime) Start(ctx context.Context, name string) error {
 		}
 	}
 
-	// Slow path: rebuild from full .nix config through extra-container
+	// Slow path: rebuild from full .nix config through nix-build + install
 	return r.startFallback(ctx, name)
 }
 
-// startFallback starts a container via the full .nix config through extra-container.
+// startFallback starts a container via the full .nix config through nix-build + install.
 func (r *NspawnRuntime) startFallback(ctx context.Context, name string) error {
 	configPath := r.SandboxesDir + "/" + name + ".nix"
-	logging.Debug("starting container via extra-container", "name", name, "config", configPath)
+	logging.Debug("starting container via nix-build", "name", name, "config", configPath)
 	return r.Create(ctx, CreateOptions{
 		Name:       name,
 		ConfigPath: configPath,
@@ -230,7 +222,7 @@ func (r *NspawnRuntime) BuildInnerSystem(ctx context.Context, configPath string)
 }
 
 // BuildOuterEtc builds the outer container /etc from an outer config file using
-// our stripped eval-config.nix (without extra-container's extraModule). This
+// our stripped eval-config.nix (minimal module set). This
 // evaluates in ~0.5s instead of ~13s because no inner NixOS system is evaluated.
 // Returns the /nix/store path of the built etc derivation.
 func (r *NspawnRuntime) BuildOuterEtc(ctx context.Context, outerConfigPath, evalConfigPath string) (string, error) {
@@ -286,33 +278,15 @@ in (import %s {
 }
 
 // CreateFromEtc creates a container directly from a pre-built /etc store path.
-// This bypasses all Nix evaluation in extra-container (~1s instead of ~16s).
+// This installs systemd units and starts the container without any Nix evaluation.
 func (r *NspawnRuntime) CreateFromEtc(ctx context.Context, etcPath string, start bool) error {
 	ctx, span := telemetry.Start(ctx, "nspawn.create-from-etc")
 	defer span.End()
 
 	logging.Debug("creating container from pre-built etc", "etcPath", etcPath)
+	span.AddEvent("install.start")
 
-	args := []string{r.ExtraContainerPath, "create"}
-	if start {
-		args = append(args, "--start")
-	}
-	// Pass the store path directly — extra-container reads $path/etc without evaluation
-	args = append(args, etcPath)
-
-	cmd := exec.CommandContext(ctx, "sudo", args...)
-	cmd.Stdout = os.Stdout
-	tracer := newNixOutputTracer(span)
-	cmd.Stderr = io.MultiWriter(os.Stderr, tracer)
-
-	span.AddEvent("subprocess.start")
-	err := cmd.Run()
-	tracer.Flush()
-	if err != nil {
-		return fmt.Errorf("extra-container create from etc failed: %w", err)
-	}
-
-	return nil
+	return installContainer(ctx, etcPath, start)
 }
 
 // Stop stops a running container
@@ -339,16 +313,7 @@ func (r *NspawnRuntime) Destroy(ctx context.Context, name string) error {
 	containerName := r.containerName(name)
 	logging.Debug("destroying container", "container", containerName)
 
-	cmd := exec.CommandContext(ctx, "sudo", r.ExtraContainerPath, "destroy", containerName)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("extra-container destroy %s: %w (stderr: %s)",
-			containerName, err, strings.TrimSpace(stderr.String()))
-	}
-
-	return nil
+	return destroyContainer(ctx, containerName)
 }
 
 // IsRunning checks if a container is currently running

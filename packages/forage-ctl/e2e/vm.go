@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/firefly-engineering/firefly-forage/packages/forage-ctl/internal/telemetry"
 )
@@ -341,23 +342,32 @@ func (vm *VMSystem) boot(ctx context.Context) error {
 
 // waitSSH waits for the VM to become reachable via SSH.
 func (vm *VMSystem) waitSSH(ctx context.Context) error {
+	ctx, span := telemetry.Start(ctx, "vm.wait-ssh",
+		telemetry.WithAttr(attribute.Int("ssh.port", vm.sshPort)),
+		telemetry.WithAttr(attribute.String("timeout", vm.cfg.BootTimeout.String())))
+	defer span.End()
+
 	deadline := time.Now().Add(vm.cfg.BootTimeout)
 	addr := fmt.Sprintf("localhost:%d", vm.sshPort)
 
 	log.Printf("waiting for SSH on %s (timeout: %v)...", addr, vm.cfg.BootTimeout)
 
+	attempts := 0
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
+		attempts++
 		client, err := ssh.Dial("tcp", addr, vm.sshConfig)
 		if err == nil {
 			vm.sshClient = client
+			span.SetAttributes(attribute.Int("attempts", attempts))
 			log.Printf("SSH ready")
 			return nil
 		}
 
+		span.AddEvent("ssh.dial.failed", trace.WithAttributes(attribute.String("error", err.Error())))
 		time.Sleep(2 * time.Second)
 	}
 
@@ -371,5 +381,5 @@ func (vm *VMSystem) waitSSH(ctx context.Context) error {
 		log.Printf("VM console log (last 50 lines):\n%s", strings.Join(lines[start:], "\n"))
 	}
 
-	return fmt.Errorf("SSH timeout after %v", vm.cfg.BootTimeout)
+	return fmt.Errorf("SSH timeout after %v (%d attempts)", vm.cfg.BootTimeout, attempts)
 }

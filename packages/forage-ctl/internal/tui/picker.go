@@ -383,10 +383,10 @@ func SimplePicker(ctx context.Context, sandboxes []*config.SandboxMetadata, path
 			location = sandbox.SourceRepo
 		}
 
-		sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n",
-			i+1, statusIcon, sandbox.Name, sandbox.Template))
-		sb.WriteString(fmt.Sprintf("   IP: %s | %s\n\n",
-			sandbox.ContainerIP(), truncatePath(location, 40)))
+		fmt.Fprintf(&sb, "%d. %s %s (%s)\n",
+			i+1, statusIcon, sandbox.Name, sandbox.Template)
+		fmt.Fprintf(&sb, "   IP: %s | %s\n\n",
+			sandbox.ContainerIP(), truncatePath(location, 40))
 	}
 
 	return sb.String()

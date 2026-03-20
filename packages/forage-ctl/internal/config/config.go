@@ -193,20 +193,19 @@ func readGitIdentity(repoDir string) *AgentIdentity {
 
 // HostConfig represents the host configuration from config.json
 type HostConfig struct {
-	User               string            `json:"user"`
-	UID                int               `json:"uid"` // Host user's UID
-	GID                int               `json:"gid"` // Host user's GID
-	AuthorizedKeys     []string          `json:"authorizedKeys"`
-	Secrets            map[string]string `json:"secrets"` // Secret name -> file path containing the secret
-	StateDir           string            `json:"stateDir"`
-	ExtraContainerPath string            `json:"extraContainerPath"`
-	NixpkgsPath        string            `json:"nixpkgsPath"`
-	NixpkgsRev         string            `json:"nixpkgsRev"`
-	ProxyURL           string            `json:"proxyUrl,omitempty"`          // URL of the forage-proxy server
-	AgentIdentity      *AgentIdentity    `json:"agentIdentity,omitempty"`     // Host-level default agent identity
-	ContainerUsername  string            `json:"containerUsername,omitempty"` // Container username (default: "agent")
-	WorkspacePath      string            `json:"workspacePath,omitempty"`     // Container workspace path (default: "/workspace")
-	StateVersion       string            `json:"stateVersion,omitempty"`      // NixOS state version (default: "24.11")
+	User              string            `json:"user"`
+	UID               int               `json:"uid"` // Host user's UID
+	GID               int               `json:"gid"` // Host user's GID
+	AuthorizedKeys    []string          `json:"authorizedKeys"`
+	Secrets           map[string]string `json:"secrets"` // Secret name -> file path containing the secret
+	StateDir          string            `json:"stateDir"`
+	NixpkgsPath       string            `json:"nixpkgsPath"`
+	NixpkgsRev        string            `json:"nixpkgsRev"`
+	ProxyURL          string            `json:"proxyUrl,omitempty"`          // URL of the forage-proxy server
+	AgentIdentity     *AgentIdentity    `json:"agentIdentity,omitempty"`     // Host-level default agent identity
+	ContainerUsername string            `json:"containerUsername,omitempty"` // Container username (default: "agent")
+	WorkspacePath     string            `json:"workspacePath,omitempty"`     // Container workspace path (default: "/workspace")
+	StateVersion      string            `json:"stateVersion,omitempty"`      // NixOS state version (default: "24.11")
 }
 
 // ResolvedContainerUsername returns the container username, defaulting to "agent".

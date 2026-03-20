@@ -9,7 +9,7 @@ import (
 )
 
 func TestNspawnRuntime_Name(t *testing.T) {
-	rt := NewNspawnRuntime("/nix/store/.../extra-container", "forage-", "", "")
+	rt := NewNspawnRuntime("forage-", "", "")
 
 	if rt.Name() != "nspawn" {
 		t.Errorf("Name() = %q, want %q", rt.Name(), "nspawn")
@@ -18,7 +18,7 @@ func TestNspawnRuntime_Name(t *testing.T) {
 
 func TestNspawnRuntime_containerName_Fallback(t *testing.T) {
 	// Without SandboxesDir, falls back to prefix + name
-	rt := NewNspawnRuntime("/nix/store/.../extra-container", "forage-", "", "")
+	rt := NewNspawnRuntime("forage-", "", "")
 
 	tests := []struct {
 		sandboxName string
@@ -53,7 +53,7 @@ func TestNspawnRuntime_containerName_FromMetadata(t *testing.T) {
 		t.Fatalf("Failed to save metadata: %v", err)
 	}
 
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+	rt := NewNspawnRuntime("forage-", tmpDir, "")
 
 	got := rt.containerName("review")
 	if got != "f5" {
@@ -74,7 +74,7 @@ func TestNspawnRuntime_containerName_LegacyMetadata(t *testing.T) {
 		t.Fatalf("Failed to save metadata: %v", err)
 	}
 
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+	rt := NewNspawnRuntime("forage-", tmpDir, "")
 
 	got := rt.containerName("old-sandbox")
 	if got != "forage-old-sandbox" {
@@ -83,7 +83,7 @@ func TestNspawnRuntime_containerName_LegacyMetadata(t *testing.T) {
 }
 
 func TestNspawnRuntime_containerName_CustomPrefix(t *testing.T) {
-	rt := NewNspawnRuntime("/path/to/extra-container", "custom-prefix-", "", "")
+	rt := NewNspawnRuntime("custom-prefix-", "", "")
 
 	got := rt.containerName("sandbox")
 	want := "custom-prefix-sandbox"
@@ -93,15 +93,10 @@ func TestNspawnRuntime_containerName_CustomPrefix(t *testing.T) {
 }
 
 func TestNewNspawnRuntime(t *testing.T) {
-	rt := NewNspawnRuntime("/nix/store/abc/extra-container", "test-", "/var/lib/forage/sandboxes", "")
+	rt := NewNspawnRuntime("test-", "/var/lib/forage/sandboxes", "")
 
 	if rt == nil {
 		t.Fatal("NewNspawnRuntime returned nil")
-	}
-
-	if rt.ExtraContainerPath != "/nix/store/abc/extra-container" {
-		t.Errorf("ExtraContainerPath = %q, want %q",
-			rt.ExtraContainerPath, "/nix/store/abc/extra-container")
 	}
 
 	if rt.ContainerPrefix != "test-" {
@@ -141,7 +136,7 @@ func TestNspawnRuntime_SSHHost_FromMetadata(t *testing.T) {
 		t.Fatalf("Failed to save sandbox metadata: %v", err)
 	}
 
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+	rt := NewNspawnRuntime("forage-", tmpDir, "")
 	ctx := context.Background()
 
 	// Verify SSHHost loads from metadata and returns container IP
@@ -160,7 +155,7 @@ func TestNspawnRuntime_SSHHost_NotFound(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+	rt := NewNspawnRuntime("forage-", tmpDir, "")
 	ctx := context.Background()
 
 	// Verify SSHHost returns error for unknown sandbox
@@ -170,7 +165,7 @@ func TestNspawnRuntime_SSHHost_NotFound(t *testing.T) {
 }
 
 func TestNspawnRuntime_SSHHost_NoSandboxesDir(t *testing.T) {
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", "", "")
+	rt := NewNspawnRuntime("forage-", "", "")
 	ctx := context.Background()
 
 	// Verify SSHHost returns error when sandboxes dir not configured
@@ -198,7 +193,7 @@ func TestNspawnRuntime_SSHExec(t *testing.T) {
 		t.Fatalf("Failed to save sandbox metadata: %v", err)
 	}
 
-	rt := NewNspawnRuntime("/path/to/extra-container", "forage-", tmpDir, "")
+	rt := NewNspawnRuntime("forage-", tmpDir, "")
 	ctx := context.Background()
 
 	// SSHExec will fail because SSH isn't actually running,

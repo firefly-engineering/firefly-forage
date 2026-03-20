@@ -28,11 +28,8 @@ type Config struct {
 	// ContainerPrefix is prepended to sandbox names
 	ContainerPrefix string
 
-	// ExtraContainerPath is the path to extra-container binary (nspawn only)
-	ExtraContainerPath string
-
 	// NixpkgsPath is the Nix store path to nixpkgs source (nspawn only)
-	// Passed as --nixpkgs-path to extra-container create
+	// Used for nix-build of container configurations
 	NixpkgsPath string
 
 	// SandboxesDir is the directory containing sandbox metadata files
@@ -43,9 +40,8 @@ type Config struct {
 // DefaultConfig returns the default runtime configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Type:               RuntimeAuto,
-		ContainerPrefix:    "forage-",
-		ExtraContainerPath: "/run/current-system/sw/bin/extra-container",
+		Type:            RuntimeAuto,
+		ContainerPrefix: "forage-",
 	}
 }
 
@@ -66,23 +62,10 @@ func Detect() (RuntimeType, error) {
 
 // detectLinux detects the best runtime for Linux systems
 func detectLinux() (RuntimeType, error) {
-	// On NixOS, prefer nspawn if extra-container is available
-	if isNixOS() {
-		if _, err := exec.LookPath("extra-container"); err == nil {
-			logging.Debug("detected NixOS with extra-container")
-			return RuntimeNspawn, nil
-		}
-		// Check common NixOS paths
-		paths := []string{
-			"/run/current-system/sw/bin/extra-container",
-			"/etc/profiles/per-user/root/bin/extra-container",
-		}
-		for _, path := range paths {
-			if _, err := os.Stat(path); err == nil {
-				logging.Debug("detected NixOS with extra-container", "path", path)
-				return RuntimeNspawn, nil
-			}
-		}
+	// On NixOS with systemd, prefer nspawn
+	if isNixOS() && hasSystemd() {
+		logging.Debug("detected NixOS with systemd, using nspawn")
+		return RuntimeNspawn, nil
 	}
 
 	// Try podman (preferred for rootless)
@@ -97,7 +80,7 @@ func detectLinux() (RuntimeType, error) {
 		return RuntimeDocker, nil
 	}
 
-	return "", fmt.Errorf("no supported container runtime found (tried: extra-container, podman, docker)")
+	return "", fmt.Errorf("no supported container runtime found (tried: nspawn, podman, docker)")
 }
 
 // detectDarwin detects the best runtime for macOS
@@ -158,16 +141,7 @@ func New(cfg *Config) (Runtime, error) {
 
 	switch runtimeType {
 	case RuntimeNspawn:
-		path := cfg.ExtraContainerPath
-		if path == "" {
-			// Try to find extra-container
-			if p, err := exec.LookPath("extra-container"); err == nil {
-				path = p
-			} else {
-				path = "/run/current-system/sw/bin/extra-container"
-			}
-		}
-		return NewNspawnRuntime(path, cfg.ContainerPrefix, cfg.SandboxesDir, cfg.NixpkgsPath), nil
+		return NewNspawnRuntime(cfg.ContainerPrefix, cfg.SandboxesDir, cfg.NixpkgsPath), nil
 
 	case RuntimeDocker, RuntimePodman:
 		return NewDockerRuntime(cfg.ContainerPrefix, cfg.SandboxesDir)
@@ -190,34 +164,19 @@ func MustNew(cfg *Config) Runtime {
 	return rt
 }
 
+// hasSystemd checks if systemd is running.
+// https://www.freedesktop.org/software/systemd/man/sd_booted.html
+func hasSystemd() bool {
+	_, err := os.Stat("/run/systemd/system")
+	return err == nil
+}
+
 // Available returns a list of available runtimes on this system
 func Available() []RuntimeType {
 	var available []RuntimeType
 
-	if goruntime.GOOS == "linux" && isNixOS() {
-		paths := []string{
-			"/run/current-system/sw/bin/extra-container",
-			"/etc/profiles/per-user/root/bin/extra-container",
-		}
-		for _, path := range paths {
-			if _, err := os.Stat(path); err == nil {
-				available = append(available, RuntimeNspawn)
-				break
-			}
-		}
-		if _, err := exec.LookPath("extra-container"); err == nil {
-			// Check if already added
-			found := false
-			for _, rt := range available {
-				if rt == RuntimeNspawn {
-					found = true
-					break
-				}
-			}
-			if !found {
-				available = append(available, RuntimeNspawn)
-			}
-		}
+	if goruntime.GOOS == "linux" && isNixOS() && hasSystemd() {
+		available = append(available, RuntimeNspawn)
 	}
 
 	// Check for Apple Container on macOS
