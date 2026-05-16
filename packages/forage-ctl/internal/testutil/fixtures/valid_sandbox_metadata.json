@@ -1,0 +1,11 @@
+{
+  "name": "test-sandbox",
+  "template": "claude",
+  "workspace": "/var/lib/firefly-forage/workspaces/test-sandbox",
+  "networkSlot": 1,
+  "createdAt": "2025-01-15T10:30:00Z",
+  "workspaceMode": "jj",
+  "sourceRepo": "/home/user/projects/myrepo",
+  "jjWorkspaceName": "test-sandbox",
+  "gitBranch": ""
+}

@@ -1,0 +1,15 @@
+result
+result-*
+.direnv/
+docs/book/
+
+# Go vendor directories (dependencies managed by Nix)
+**/vendor/
+
+.claude/
+
+# E2E test VM disk images
+*.qcow2
+
+# local environment files
+.*.local

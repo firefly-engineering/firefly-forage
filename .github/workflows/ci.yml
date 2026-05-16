@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+
+jobs:
+  format:
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Check Nix formatting
+        run: nix fmt -- --ci .
+
+  lint:
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run linter
+        run: nix develop .#ci --command bash -c "cd packages/forage-ctl && golangci-lint run"
+
+  build:
+    if: github.event_name != 'merge_group'
+    needs: [format, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Build forage-ctl
+        run: nix build .#forage-ctl
+
+      - name: Build docs
+        run: nix build .#docs
+
+  test:
+    if: github.event_name != 'merge_group'
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run tests
+        run: nix develop .#ci --command bash -c "cd packages/forage-ctl && go test ./..."
+
+  e2e:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: Run E2E tests
+        run: nix run .#e2e-driver -- 2>&1

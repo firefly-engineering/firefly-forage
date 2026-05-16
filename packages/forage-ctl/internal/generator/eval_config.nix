@@ -1,0 +1,114 @@
+# Minimal NixOS module evaluator for container configurations.
+# Imports only ~7 base modules (instead of 700+) to evaluate
+# container configs in ~0.5s instead of ~13s.
+{
+  nixosPath,
+  systemConfig,
+  system ? builtins.currentSystem,
+}:
+
+let
+  # A minimal module set for evaluating container configs.
+  # This significantly reduces evaluation time compared to a full NixOS eval
+  # Compatible with nixpkgs >= 16.09
+  baseModules = [
+    (nixosPath + "/modules/misc/assertions.nix")
+    (nixosPath + "/modules/misc/nixpkgs.nix")
+    (nixosPath + "/modules/misc/extra-arguments.nix")
+    (nixosPath + "/modules/system/activation/top-level.nix")
+    (nixosPath + "/modules/system/etc/etc.nix")
+    (nixosPath + "/modules/system/boot/systemd.nix")
+    nixosContainerModule
+    dummyOptions
+  ];
+
+  nixosContainerModule =
+    let
+      new = nixosPath + "/modules/virtualisation/nixos-containers.nix";
+      old = nixosPath + "/modules/virtualisation/containers.nix"; # For nixpkgs < 20.09)
+    in
+    if builtins.pathExists new then new else old;
+
+  dummyOptions =
+    {
+      pkgs,
+      lib,
+      options,
+      ...
+    }:
+    let
+      optionValue = default: lib.mkOption { inherit default; };
+      dummy = optionValue [ ];
+    in
+    {
+      options = {
+        boot.kernel.sysctl = dummy;
+        boot.kernelModules = dummy;
+        boot.kernelPackages.kernel.version = optionValue "";
+        boot.kernelParams = dummy;
+        boot.loader.systemd-boot.bootCounting.enable = optionValue false;
+        environment.systemPackages = dummy;
+        networking.dhcpcd.denyInterfaces = dummy;
+        networking.hosts = dummy;
+        networking.extraHosts = dummy;
+        networking.proxy.envVars = optionValue { };
+        nix.package = optionValue pkgs.nix;
+        security = dummy;
+        services = {
+          dbus = dummy;
+          logrotate = dummy;
+          udev = dummy;
+          rsyslogd.enable = optionValue false;
+          syslog-ng.enable = optionValue false;
+        };
+        system.activationScripts = dummy;
+        system.fsPackages = dummy;
+        system.nssDatabases = dummy;
+        system.nssModules = dummy;
+        system.path = optionValue "";
+        system.nixos-init.package = optionValue pkgs.hello;
+        system.requiredKernelConfig = dummy;
+        system.stateVersion = optionValue "22.05";
+        time.timeZone = optionValue null;
+        systemd.oomd = dummy;
+        systemd.user.generators = optionValue { };
+        ids.gids.keys = dummy;
+        ids.uids.systemd-coredump = dummy;
+        ids.gids.systemd-journal = dummy;
+        ids.gids.systemd-journal-gateway = dummy;
+        ids.uids.systemd-journal-gateway = dummy;
+        ids.gids.systemd-network = dummy;
+        ids.uids.systemd-network = dummy;
+        ids.uids.systemd-resolve = dummy;
+        ids.gids.systemd-resolve = dummy;
+        users.users.systemd-coredump = dummy;
+        users.users.systemd-network.group = dummy;
+        users.users.systemd-network.uid = dummy;
+        users.users.systemd-resolve.group = dummy;
+        users.users.systemd-resolve.uid = dummy;
+        users.users.systemd-journal-gateway.group = dummy;
+        users.users.systemd-journal-gateway.uid = dummy;
+        users.groups.systemd-coredump = dummy;
+        users.groups.systemd-network.gid = dummy;
+        users.groups.systemd-resolve.gid = dummy;
+        users.groups.keys.gid = dummy;
+        users.groups.systemd-journal.gid = dummy;
+        users.groups.systemd-journal-gateway.gid = dummy;
+      };
+
+      config = {
+        systemd.timers = lib.mkForce { };
+        systemd.targets = lib.mkForce { };
+      }
+      // lib.optionalAttrs (options.systemd ? managerEnvironment) {
+        systemd.managerEnvironment = lib.mkForce { };
+      };
+    };
+
+in
+# Only include the user's systemConfig — no extra convenience modules
+# that would trigger full NixOS module evaluation.
+import (nixosPath + "/lib/eval-config.nix") {
+  inherit baseModules system;
+  modules = [ systemConfig ];
+}

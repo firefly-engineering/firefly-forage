@@ -1,0 +1,14 @@
+{
+  "name": "claude",
+  "description": "Claude AI coding agent sandbox",
+  "network": "full",
+  "useProxy": false,
+  "agents": {
+    "claude": {
+      "packagePath": "pkgs.claude-code",
+      "secretName": "anthropic-api-key",
+      "authEnvVar": "ANTHROPIC_API_KEY"
+    }
+  },
+  "allowedHosts": []
+}

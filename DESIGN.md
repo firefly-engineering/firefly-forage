@@ -96,17 +96,49 @@ The nix store is bind-mounted read-only. All nix operations go through the host'
 
 **Verified:** Tested with `unshare --mount` and confirmed nix builds work.
 
-### Instance Tracking: Stateless
+### Nix Registry Pinning
 
-Instead of maintaining state files, we derive instance information from:
-- Running systemd-nspawn containers (machinectl list)
-- Container naming convention: `forage-{name}`
-- Introspection of bind mounts for workspace info
+Sandboxes automatically have a pinned nix registry that matches the host's nixpkgs version:
+
+```nix
+# Generated in container config
+environment.etc."nix/registry.json".text = builtins.toJSON {
+  version = 2;
+  flakes = [
+    {
+      from = { type = "indirect"; id = "nixpkgs"; };
+      to = {
+        type = "github";
+        owner = "NixOS";
+        repo = "nixpkgs";
+        rev = "...";  # Automatically set to host's nixpkgs revision
+      };
+    }
+  ];
+};
+```
+
+**Benefits:**
+- All agents use the same nixpkgs version
+- Reproducible tool installations across sandboxes
+- No accumulation of different nixpkgs versions in store
+- Pinned to the same nixpkgs used to build the sandbox
+
+**Implementation:** The host module exposes its nixpkgs input revision via `config.json`, and the container config generator injects this into each sandbox's registry.
+
+### Instance Tracking: Metadata-Driven
+
+Sandbox state is tracked via metadata files in `/var/lib/firefly-forage/sandboxes/`:
+- Each sandbox has a `{name}.json` metadata file and a `{name}.nix` config
+- Runtime state (running/stopped) is derived from the container runtime (machinectl)
+- Container naming convention: configurable, defaults to `forage-{name}`
+- Generated files (skills, permissions) are staged in `{name}.generated/` directories
+- The `gc` command reconciles metadata with actual container state
 
 Benefits:
-- No state to corrupt or get out of sync
-- System is the source of truth
-- Simpler implementation
+- Metadata enables rich operations (workspace mode, template, network slot)
+- Runtime state is always from the source of truth (container runtime)
+- gc provides eventual consistency if metadata drifts
 
 ### User Identity: Same UID as Host
 
@@ -141,6 +173,249 @@ The wrapper:
 - Agent cannot easily discover where auth came from
 - Provides minimal protection against credential exfiltration
 
+### JJ Workspace Integration
+
+Each sandbox uses a separate jj workspace, enabling parallel agent work on the same repository without conflicts.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Host                                                                │
+│                                                                     │
+│  ~/projects/myrepo/                                                 │
+│  ├── .jj/              ◄─────────────────────────┐                  │
+│  ├── src/                                        │ shared           │
+│  └── ...                                         │ (read-only)      │
+│                                                  │                  │
+│  /var/lib/forage/workspaces/                     │                  │
+│  ├── sandbox-a/        ◄── jj workspace ─────────┤                  │
+│  │   ├── src/          (separate working copy)   │                  │
+│  │   └── ...                                     │                  │
+│  └── sandbox-b/        ◄── jj workspace ─────────┘                  │
+│      ├── src/          (separate working copy)                      │
+│      └── ...                                                        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**How it works:**
+1. `forage-ctl up` creates a jj workspace at a persistent location
+2. The workspace shares the repo's `.jj` directory (operation log, etc.)
+3. Each sandbox gets its own working copy of the files
+4. Changes in one sandbox don't affect others until committed
+5. Agents can work in parallel on different changes
+
+**CLI integration:**
+```bash
+# Create sandbox with jj workspace
+forage-ctl up agent-a --template claude --repo ~/projects/myrepo
+
+# This internally runs:
+# jj workspace add /var/lib/forage/workspaces/agent-a --name agent-a
+
+# Multiple agents on same repo
+forage-ctl up agent-b --template claude --repo ~/projects/myrepo
+forage-ctl up agent-c --template opencode --repo ~/projects/myrepo
+```
+
+**Cleanup:**
+```bash
+# Remove sandbox and its workspace
+forage-ctl down agent-a
+# Internally: jj workspace forget agent-a && rm -rf workspace
+```
+
+### Skill Injection
+
+Sandboxes automatically include "skills" - configuration that teaches agents about available tools and project conventions.
+
+**Injection location:** `.claude/forage-skills.md` (or similar)
+
+This avoids modifying the project's `CLAUDE.md` which may contain valuable upstream information. Claude Code loads instructions from multiple files in `.claude/`.
+
+```
+workspace/
+├── .claude/
+│   ├── forage-skills.md    ◄── Injected by forage (sandbox-specific)
+│   └── settings.json       ◄── May also inject settings here
+├── CLAUDE.md               ◄── Untouched (from upstream repo)
+└── src/
+```
+
+**Injected content (.claude/forage-skills.md):**
+```markdown
+# Firefly Forage Sandbox Environment
+
+This workspace is running inside a Firefly Forage sandbox.
+
+## Version Control: JJ (Jujutsu)
+
+Use `jj` instead of `git` for all version control operations:
+
+- `jj status` - Show working copy status
+- `jj diff` - Show changes
+- `jj new` - Create new change
+- `jj describe -m "message"` - Set change description
+- `jj bookmark set main` - Update bookmark
+
+This is an isolated jj workspace. Your changes won't affect other
+workspaces until you explicitly share them.
+
+## Available Tools
+
+- `rg` (ripgrep) - Fast recursive search
+- `fd` - Fast file finder
+- `jq` - JSON processing
+- `nix build` - Build nix expressions (uses host daemon)
+
+## Sandbox Constraints
+
+- The nix store is read-only (builds go through host daemon)
+- Network access: [full|restricted|none]
+- This container is ephemeral - only /workspace persists
+```
+
+**Skill sources (in priority order):**
+1. **Project skills**: From repo's existing `CLAUDE.md` (untouched, highest priority)
+2. **Forage skills**: Injected `.claude/forage-skills.md` (sandbox-aware instructions)
+3. **Template skills**: From sandbox template configuration
+4. **User skills**: Custom per-sandbox overrides
+
+**Configuration:**
+```nix
+templates.claude = {
+  skills = {
+    jj = true;           # Include jj skill (default: true)
+    nix = true;          # Include nix skill (default: true)
+
+    # Additional custom instructions
+    custom = ''
+      ## Testing Requirements
+      Always write tests before implementation.
+    '';
+  };
+
+  # Optionally inject into .claude/settings.json
+  claudeSettings = {
+    # Any claude-code settings to inject
+  };
+};
+```
+
+**Cleanup:** The injected `.claude/forage-skills.md` is created at sandbox start and can be removed on sandbox down if desired (though it's harmless to leave).
+
+### Tmux Session Management
+
+Each sandbox runs the agent inside a tmux session for better terminal handling and attach/detach capability.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Sandbox Container                                           │
+│                                                             │
+│  tmux session: "forage"                                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Window 0: agent                                     │    │
+│  │ ┌─────────────────────────────────────────────────┐ │    │
+│  │ │ $ claude                                        │ │    │
+│  │ │ Claude Code ready...                            │ │    │
+│  │ │ >                                               │ │    │
+│  │ └─────────────────────────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+│  sshd                                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- **Attach/detach**: Connect to running agent, disconnect without stopping it
+- **Session persistence**: Agent keeps running if SSH disconnects
+- **Multiple windows**: Agent in one window, shell in another
+- **Scrollback**: Review agent's previous output
+- **Resilience**: Survives network interruptions
+- **Sub-agent support**: Compatible with tools like opencode extensions that spawn sub-agents in tmux panes
+
+**CLI integration:**
+```bash
+# Connect to sandbox (attaches to tmux session)
+forage-ctl ssh myproject
+# → ssh ... -t 'tmux attach -t forage'
+
+# Start agent in sandbox (creates tmux session)
+forage-ctl start myproject
+# → Creates tmux session, starts claude in it
+
+# Detach: Ctrl-b d (standard tmux)
+# Reattach: forage-ctl ssh myproject
+
+# Run shell alongside agent
+forage-ctl shell myproject
+# → Attaches to tmux, creates new window with shell
+```
+
+**Tmux configuration:**
+```bash
+# /etc/tmux.conf in sandbox
+set -g prefix C-b
+set -g mouse on
+set -g history-limit 50000
+set -g status-style 'bg=colour235 fg=colour136'
+set -g status-left '[forage] '
+```
+
+### Gateway Access (Future)
+
+Instead of exposing one SSH port per sandbox, a single gateway service provides access to all sandboxes through a selection interface.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Host Machine                                                    │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ forage-gateway (port 2200)                              │    │
+│  │                                                         │    │
+│  │  ┌─────────────────────────────────────────────────┐    │    │
+│  │  │  Firefly Forage - Select Sandbox                │    │    │
+│  │  │                                                 │    │    │
+│  │  │  > myproject     claude    running  2h ago      │    │    │
+│  │  │    agent-a       claude    running  30m ago     │    │    │
+│  │  │    agent-b       multi     running  5m ago      │    │    │
+│  │  │                                                 │    │    │
+│  │  │  [Enter] Attach  [n] New  [d] Down  [q] Quit    │    │    │
+│  │  └─────────────────────────────────────────────────┘    │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ sandbox-myproj  │  │ sandbox-agent-a │  │ sandbox-agent-b │  │
+│  │ tmux: forage    │  │ tmux: forage    │  │ tmux: forage    │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- **Single port**: Only one port to expose/forward for remote access
+- **Discoverability**: See all sandboxes at a glance
+- **Simpler firewall**: No dynamic port range needed
+- **Better UX**: Interactive selection instead of remembering names
+
+**Implementation options:**
+1. **TUI selector**: fzf/gum-based picker that runs `machinectl shell` or SSH to selected sandbox
+2. **Custom shell**: Login shell that presents the picker, then `exec`s into chosen sandbox
+3. **SSH ForceCommand**: SSH config that runs the selector before allowing access
+
+**Access patterns:**
+```bash
+# Interactive: land in selector
+ssh -p 2200 forage@hostname
+
+# Direct: skip selector, go straight to sandbox
+ssh -p 2200 forage@hostname myproject
+
+# From selector, attach to sandbox's tmux session
+# → machinectl shell forage-myproject /bin/bash -c 'tmux attach -t forage'
+```
+
 ### Network Isolation Modes
 
 | Mode | Description | Use Case |
@@ -163,18 +438,30 @@ firefly-forage/
 ├── README.md                     # User documentation
 │
 ├── modules/
-│   ├── host.nix                  # NixOS module for host machine
-│   └── sandbox.nix               # Container configuration generator
+│   └── host.nix                  # NixOS module for host machine
 │
 ├── lib/
-│   ├── mkSandbox.nix             # Sandbox template builder
-│   ├── mkAgentWrapper.nix        # Auth wrapper generator
-│   └── types.nix                 # Custom types for options
+│   ├── default.nix               # Library entry point (mkSandboxConfig, mkAgentWrapper, etc.)
+│   ├── mkSandboxConfig.nix       # Container NixOS configuration generator
+│   └── skills.nix                # Skill content generation
+│
+├── docs/                         # Documentation (mdBook)
 │
 └── packages/
-    └── forage-ctl/               # CLI management tool
+    └── forage-ctl/               # CLI management tool (Go)
         ├── default.nix
-        └── forage-ctl.sh
+        ├── main.go
+        ├── cmd/                   # CLI commands
+        └── internal/              # Business logic
+            ├── config/            # Configuration loading
+            ├── generator/         # Nix config generation
+            ├── injection/         # Contribution/injection system
+            ├── network/           # Network isolation
+            ├── proxy/             # API proxy
+            ├── runtime/           # Container runtimes
+            ├── sandbox/           # Sandbox lifecycle
+            ├── skills/            # Project analysis for skills
+            └── workspace/         # VCS workspace backends
 ```
 
 ## Configuration Interface
@@ -273,32 +560,44 @@ claude      claude          full       Claude Code agent sandbox
 multi       claude,opencode full       Multi-agent sandbox
 isolated    claude          none       Network-isolated sandbox
 
-# Create and start a sandbox
+# Create and start a sandbox (with workspace directory)
 forage-ctl up <name> --template <template> --workspace <path>
 forage-ctl up myproject --template claude --workspace ~/projects/myproject
 
+# Create and start a sandbox (with jj repo - creates workspace automatically)
+forage-ctl up <name> --template <template> --repo <path>
+forage-ctl up agent-a --template claude --repo ~/projects/myrepo
+forage-ctl up agent-b --template claude --repo ~/projects/myrepo  # parallel work!
+
 # List running sandboxes
 forage-ctl ps
-NAME        TEMPLATE    PORT    WORKSPACE                      STATUS
-myproject   claude      2200    /home/user/projects/myproject  running
-other       multi       2201    /home/user/projects/other      running
+NAME        TEMPLATE    PORT    WORKSPACE                      STATUS    TMUX
+myproject   claude      2200    /home/user/projects/myproject  running   attached
+agent-a     claude      2201    /var/lib/forage/ws/agent-a     running   detached
+agent-b     claude      2202    /var/lib/forage/ws/agent-b     running   detached
 
-# Connect to sandbox via SSH
+# Connect to sandbox (attaches to tmux session)
 forage-ctl ssh <name>
 forage-ctl ssh myproject
 
 # Get SSH command (for use from remote machines)
 forage-ctl ssh-cmd <name>
-# Output: ssh -p 2200 -o StrictHostKeyChecking=no agent@hostname
+# Output: ssh -p 2200 -t agent@hostname 'tmux attach -t forage'
+
+# Start the agent in sandbox (if not already running)
+forage-ctl start <name>
+
+# Open a shell window alongside the agent
+forage-ctl shell <name>
 
 # Execute command in sandbox
 forage-ctl exec <name> -- <command>
 forage-ctl exec myproject -- claude --version
 
-# Reset sandbox (restart with fresh ephemeral state)
+# Reset sandbox (restart with fresh ephemeral state, keeps workspace)
 forage-ctl reset <name>
 
-# Stop and remove sandbox
+# Stop and remove sandbox (and jj workspace if created)
 forage-ctl down <name>
 
 # Stop and remove all sandboxes
@@ -320,45 +619,182 @@ forage-ctl down --all
 
 ### Phase 1: Basic Sandbox
 
-- [ ] Flake structure and module skeleton
-- [ ] Basic host module with template definitions
-- [ ] Container configuration generator
-- [ ] Agent wrapper generator
-- [ ] forage-ctl: up, down, ps, ssh
-- [ ] Port allocation (simple sequential)
-- [ ] Documentation
+- [x] Flake structure and module skeleton
+- [x] Basic host module with template definitions
+- [x] Container configuration generator
+- [x] Agent wrapper generator
+- [x] forage-ctl: up, down, ps, ssh
+- [x] Port allocation (find free ports)
+- [x] Tmux session management
+- [x] Basic skill injection (.claude/forage-skills.md)
+- [x] Documentation (mdbook)
 
-### Phase 2: Robustness
+### Phase 2: JJ Workspace Integration
 
-- [ ] Better port allocation (find free ports)
-- [ ] Health checks
-- [ ] Logging integration
-- [ ] forage-ctl: exec, reset, logs
-- [ ] Error handling improvements
+- [x] Workspace creation on sandbox up
+- [x] Workspace cleanup on sandbox down
+- [x] Mount configuration for shared .jj
+- [x] Handle workspace conflicts
+- [x] forage-ctl: --repo flag for jj integration
 
-### Phase 3: Network Isolation
+### Phase 3: Robustness & UX
 
-- [ ] nftables rules for restricted mode
-- [ ] DNS filtering
-- [ ] Network mode switching
+- [x] Better port allocation (find free ports)
+- [x] Health checks
+- [x] Logging integration (slog with --verbose and --json flags)
+- [x] forage-ctl: exec, reset
+- [x] forage-ctl: logs, start, shell
+- [x] Error handling improvements (typed errors with exit codes)
+- [x] Nix registry pinning (pin nixpkgs to host version)
 
-### Phase 4: API Bridge (Future)
+### Phase 4: Rewrite forage-ctl in Go
 
-- [ ] Proxy service running on host
-- [ ] Auth injection at proxy level
-- [ ] Rate limiting
-- [ ] Audit logging
-- [ ] Secrets never enter sandbox
+The bash implementation is reaching its limits (~1500 lines). Rewrite in Go for:
+- Better error handling and testing
+- Type safety and maintainability
+- Foundation for gateway service (HTTP server)
+- Easier contributor onboarding
+
+- [x] Project structure with cobra CLI framework
+- [x] Port existing commands (up, down, ps, status, ssh, logs, start, shell, templates)
+- [x] exec and reset commands
+- [x] Structured logging with slog
+- [x] Container runtime abstraction (prep for Phase 9)
+- [x] Unit tests for core logic
+- [x] Integration tests
+
+```
+forage-ctl/
+├── cmd/
+│   ├── root.go
+│   ├── up.go
+│   ├── down.go
+│   ├── ps.go
+│   └── ...
+├── internal/
+│   ├── runtime/      # container runtime abstraction
+│   ├── ssh/          # SSH connection utilities
+│   ├── workspace/    # jj/git workspace management
+│   ├── config/       # host config, templates
+│   └── health/       # health checks
+├── go.mod
+└── main.go
+```
+
+### Phase 5: Gateway & Advanced UX
+
+Features deferred from Phase 3 that benefit from Go rewrite:
+
+- [x] Gateway service with sandbox selector (single port access)
+- [x] TUI picker for sandbox selection (bubbletea)
+- [x] Advanced skill injection (project analysis)
+
+### Phase 6: Network Isolation
+
+- [x] nftables rules for restricted mode
+- [x] DNS filtering
+- [x] Network mode switching
+
+### Phase 7: API Proxy
+
+HTTP proxy for API key injection, rate limiting, and audit logging.
+
+- [x] Proxy service running on host (forage-proxy)
+- [x] Auth injection for API keys (reads from /run/secrets)
+- [x] Per-sandbox rate limiting
+- [x] Request/response audit logging
+- [x] Sandbox configuration for proxy mode
+- [x] Documentation of limitations
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Sandbox         │     │ API Bridge       │     │ External APIs   │
+│ Sandbox         │     │ forage-proxy     │     │ External APIs   │
 │                 │     │ (on host)        │     │                 │
-│ claude-wrapper ─┼────►│ - Auth injection │────►│ api.anthropic.  │
-│  (no secrets)   │     │ - Rate limiting  │     │                 │
-│                 │     │ - Audit logs     │     │                 │
+│ ANTHROPIC_BASE  │     │ - Read API key   │     │                 │
+│ _URL=proxy:8080─┼────►│ - Inject header  │────►│ api.anthropic.  │
+│                 │     │ - Rate limit     │     │                 │
+│ (no API key)    │     │ - Audit log      │     │                 │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
+
+**Limitations:**
+
+This approach only works for **API key authentication**. For Claude Max/Pro plans
+(OAuth-based), the "secrets never enter sandbox" goal is not achievable without
+significant complexity. Max plan users should:
+
+1. Run `claude login` inside the sandbox (token stored in keychain, not env var)
+2. Use the proxy for rate limiting and audit logging only (auth passes through)
+
+The proxy still provides value for Max plans (rate limiting, logging) but cannot
+inject authentication. See [LLM Gateway docs](https://code.claude.com/docs/en/llm-gateway)
+for official gateway configuration options.
+
+### Phase 8: Git Worktree Backend
+
+Alternative to JJ workspaces for projects using plain git.
+
+- [x] `--git-worktree` flag as alternative to `--repo`
+- [x] `git worktree add` on sandbox creation
+- [x] `git worktree remove` on sandbox cleanup
+- [x] Skill injection with git-specific instructions
+- [x] Handle worktree conflicts and naming
+
+```bash
+# Usage
+forage-ctl up agent-a --template claude --git-worktree ~/projects/myrepo
+forage-ctl up agent-b --template claude --git-worktree ~/projects/myrepo
+
+# Internally creates:
+# - Branch: forage-agent-a
+# - Worktree at: /var/lib/forage/workspaces/agent-a
+# git worktree add /var/lib/forage/workspaces/agent-a -b forage-agent-a HEAD
+```
+
+### Phase 9: Container Runtime Abstraction
+
+Abstract the container backend to support multiple platforms.
+
+- [x] Define container runtime interface (create, destroy, exec, status)
+- [x] systemd-nspawn backend (NixOS, current implementation)
+- [x] Docker/Podman backend (universal fallback)
+- [x] Runtime auto-detection based on platform
+- [x] Migrate commands to use runtime interface
+- [x] Extract SSH functions to dedicated package (runtime-agnostic)
+- [x] Remove legacy container package
+- [x] Apple Container backend (macOS via github.com/apple/containerization)
+- [x] Consistent bind mount semantics across runtimes (mounts.go)
+- [x] Platform-specific nix store sharing strategies (DetectNixStoreStrategy)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ forage-ctl                                                      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ Container Runtime Interface                              │    │
+│  │  - create(name, config) -> Container                     │    │
+│  │  - destroy(name)                                         │    │
+│  │  - exec(name, command) -> Output                         │    │
+│  │  - status(name) -> Status                                │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│         │                    │                    │              │
+│         ▼                    ▼                    ▼              │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
+│  │ nspawn      │     │ apple/      │     │ docker/     │        │
+│  │ (NixOS)     │     │ container   │     │ podman      │        │
+│  │             │     │ (macOS)     │     │ (fallback)  │        │
+│  └─────────────┘     └─────────────┘     └─────────────┘        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Platform considerations:**
+
+| Platform | Runtime | Nix Store Strategy |
+|----------|---------|-------------------|
+| NixOS | systemd-nspawn | Direct bind mount (current) |
+| macOS | apple/container | nix-darwin store or Determinate Nix |
+| Linux (other) | Docker/Podman | Volume mount or bind mount |
 
 ## Security Considerations
 
@@ -376,7 +812,7 @@ forage-ctl down --all
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent exfiltrates API keys | Auth obfuscation via wrappers |
+| Agent exfiltrates API keys | API proxy (keeps secrets on host); auth wrappers provide UX convenience only |
 | Agent accesses host filesystem | Container isolation, bind mounts only |
 | Agent makes unwanted network calls | Network isolation modes |
 | Agent corrupts sandbox | Ephemeral root, easy reset |
