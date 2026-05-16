@@ -105,9 +105,6 @@
                 # Nix tooling
                 nixfmt-tree
                 nil
-
-                # Testing dependencies
-                git
               ]
               ++ (with toolbox.packages.${system}; [
                 beadwork
