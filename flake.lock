@@ -319,11 +319,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1773844693,
-        "narHash": "sha256-AtBZh2guf2ZCXAObaFvIuDuWZGiZmj//OkFN3ECWaDw=",
+        "lastModified": 1775072265,
+        "narHash": "sha256-FD2OAoSGeID9u0gmUWJyD3yKi9csAmAdu3ZfhHA/RRg=",
         "owner": "firefly-engineering",
         "repo": "nix-pins",
-        "rev": "59da26be0b6854cf39f5ca2679b8a80bffdecb77",
+        "rev": "839753fbbcecbfd6ee138e1557caf3af6068d8fc",
         "type": "github"
       },
       "original": {
@@ -405,11 +405,11 @@
     },
     "nixpkgs-master": {
       "locked": {
-        "lastModified": 1773843647,
-        "narHash": "sha256-wDDgb/5vsDu4boVF9JOkDLR0Yh38VjE/mX8voR+v5yY=",
+        "lastModified": 1775071896,
+        "narHash": "sha256-6IcI1CK3aDgiyNwuH04oaGZQvdWP/XI3+wlYarpsAeM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "95bf4ea089b3e3af92d1f7d9a3a00d3bc5384afc",
+        "rev": "3007dd34874c7ada14f8d90b3f0ba040648d09d7",
         "type": "github"
       },
       "original": {
@@ -566,11 +566,11 @@
         "teller": "teller"
       },
       "locked": {
-        "lastModified": 1773864293,
-        "narHash": "sha256-OTxZVAuHwRavonP1JFzHVdkJLiwJd0h2+X9r0g5T4pg=",
+        "lastModified": 1778830376,
+        "narHash": "sha256-hw4rY1nCeMhWcejbFkqQZUMHT0YVmh+T9cPeLIqDAFE=",
         "owner": "firefly-engineering",
         "repo": "toolbox",
-        "rev": "27b7d92b31bca19d54b2cc71016667e3f0c49e0a",
+        "rev": "9b190de95aa36df3215cfc239c44668f5ec47109",
         "type": "github"
       },
       "original": {

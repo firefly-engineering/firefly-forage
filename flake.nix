@@ -123,8 +123,8 @@
                 just
               ]
               ++ (with toolbox.packages.${system}; [
-                beadwork-default
-                jj-default
+                beadwork
+                vcs-toolchain
               ]);
           };
 
