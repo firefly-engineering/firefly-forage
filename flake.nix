@@ -102,28 +102,18 @@
             packages =
               with pkgs;
               [
-                # Go toolchain
-                go
-                gopls
-                gotools
-                go-tools # staticcheck
-                golangci-lint
-
                 # Nix tooling
                 nixfmt-tree
                 nil
 
-                # Documentation
-                mdbook
-
                 # Testing dependencies
                 git
-
-                # Task runner
-                just
               ]
               ++ (with toolbox.packages.${system}; [
                 beadwork
+                go-toolchain
+                just
+                mdbook-toolchain
                 vcs-toolchain
               ]);
           };
